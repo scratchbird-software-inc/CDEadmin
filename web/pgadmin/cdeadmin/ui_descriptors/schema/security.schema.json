@@ -153,6 +153,48 @@
         },
         "set_option": {
           "type": "boolean"
+        },
+        "listing": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "native_field",
+            "columns"
+          ],
+          "description": "where the listed resource carries its memberships and how to show them",
+          "properties": {
+            "native_field": {
+              "type": "string",
+              "description": "key in the resource's native block holding one row per membership"
+            },
+            "columns": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "field",
+                  "label"
+                ],
+                "properties": {
+                  "field": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "equals": {
+                    "description": "show Yes when the field equals this value, otherwise No"
+                  },
+                  "boolean": {
+                    "type": "boolean",
+                    "description": "show Yes or No"
+                  }
+                }
+              }
+            }
+          }
         }
       }
     },

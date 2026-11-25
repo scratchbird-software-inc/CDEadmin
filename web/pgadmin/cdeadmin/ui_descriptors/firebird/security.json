@@ -34,7 +34,30 @@
   "membership": {
     "kind": "role",
     "admin_option": true,
-    "default_role": true
+    "default_role": true,
+    "listing": {
+      "native_field": "memberships",
+      "columns": [
+        {
+          "field": "grantee",
+          "label": "Member"
+        },
+        {
+          "field": "default_role",
+          "label": "Default role",
+          "boolean": true
+        },
+        {
+          "field": "grant_option",
+          "label": "Admin option",
+          "equals": 2
+        },
+        {
+          "field": "grantor",
+          "label": "Granted by"
+        }
+      ]
+    }
   },
   "grants": {
     "grant_kind": "privilege",

@@ -321,10 +321,24 @@ export function openSecurityManagerSurface(endpoint, itemData = null, args = {},
       ? gettext('Database Roles & Authorization — %s', endpointLabel || normalizedEngine)
       : gettext('Server Users & Roles — %s', endpointLabel || normalizedEngine));
 
+  // The descriptor-driven manager talks to the provider workspace directly.
+  let endpointUrl;
+  try {
+    const serverNode = pgAdmin.Browser?.Nodes?.server;
+    if (serverNode && endpoint?.item) {
+      endpointUrl = providerEndpointUrl(serverNode, endpoint.item, endpoint.data, databaseTargetId);
+    }
+  } catch {
+    endpointUrl = undefined;
+  }
+
   if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
     window.dispatchEvent(
       new CustomEvent('scratchrobin:open-security-manager', {
         detail: {
+          api: getApiInstance(),
+          endpointUrl,
+          version: itemData?.verified_runtime_version || endpoint?.data?.verified_runtime_version,
           sid,
           databaseTargetId,
           engine: normalizedEngine,

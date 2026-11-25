@@ -86,7 +86,7 @@ import ObjectDashboardSurface from './cdeadmin_ui/surfaces/ObjectDashboardSurfac
 import ObjectPropertiesInspector, {
   isObjectPermissionsSupported,
 } from './cdeadmin_ui/surfaces/ObjectPropertiesInspector';
-import PrincipalSecurityManager from './cdeadmin_ui/security/PrincipalSecurityManager';
+import SecurityManagerSurface from './cdeadmin_ui/security/SecurityManagerSurface';
 import {
   DesignStoreClient,
   ERDDesignerSurface,
@@ -3608,8 +3608,11 @@ function Layouts({browser: _browser, platform, topBarMode = 'menu'}) {
           : gettext('Users & Roles — %s', endpointLabel || engine));
       const panelId = `security-manager:${engine}:${sid}:${scope}:${databaseTargetId || 'srv'}`;
       const renderSurface = () => (
-        <PrincipalSecurityManager
+        <SecurityManagerSurface
           key={`${panelId}:${initialKind}:${initialPrincipalId}`}
+          api={detail.api}
+          endpointUrl={detail.endpointUrl}
+          version={detail.version}
           instanceId={panelId}
           sid={sid}
           databaseTargetId={databaseTargetId}
