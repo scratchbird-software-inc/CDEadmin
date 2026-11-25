@@ -51,8 +51,44 @@
       "label": "Password",
       "tab": "General",
       "control": "password",
-      "required": true,
-      "help": "The value is redacted from validation and plans.",
+      "required": false,
+      "help": "Required when creating a password-authenticated user; leave blank in alter mode to preserve the current password. The value is redacted from validation and plans.",
+      "group": "User account",
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      }
+    },
+    {
+      "field_id": "first_name",
+      "label": "First name",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "group": "User account",
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      }
+    },
+    {
+      "field_id": "middle_name",
+      "label": "Middle name",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "group": "User account",
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      }
+    },
+    {
+      "field_id": "last_name",
+      "label": "Last name",
+      "tab": "General",
+      "control": "text",
+      "required": false,
       "group": "User account",
       "visible_when": {
         "field": "variant",
@@ -92,10 +128,12 @@
       "control": "text",
       "required": false,
       "help": "Firebird stores an empty comment as no comment.",
-      "group": "Role",
       "visible_when": {
         "field": "variant",
-        "equals": "role"
+        "in": [
+          "user",
+          "role"
+        ]
       }
     },
     {
@@ -120,7 +158,12 @@
       "tab": "Privileges",
       "control": "boolean",
       "required": false,
-      "default": false
+      "default": false,
+      "group": "User account",
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      }
     },
     {
       "field_id": "system_privileges",
@@ -260,6 +303,43 @@
         "field": "variant",
         "equals": "role"
       }
+    },
+    {
+      "field_id": "tags",
+      "label": "User attributes (tags)",
+      "tab": "Engine",
+      "control": "grid",
+      "required": false,
+      "default": [],
+      "help": "SEC$USER_ATTRIBUTES key-value tags stored on the security-database user record.",
+      "visible_when": {
+        "field": "variant",
+        "equals": "user"
+      },
+      "columns": [
+        {
+          "field_id": "name",
+          "label": "Attribute name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "value",
+          "label": "Value",
+          "control": "text",
+          "required": false
+        },
+        {
+          "field_id": "drop",
+          "label": "Drop",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "modes": [
+            "alter"
+          ]
+        }
+      ]
     }
   ],
   "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. privilege: provider exposes no create form (grant, inspect, revoke) Round-tripped against Firebird 5.0.3 by tools/tests/test_ui_descriptor_roundtrip_firebird.py (create, re-inspect pre-fill, alter)."

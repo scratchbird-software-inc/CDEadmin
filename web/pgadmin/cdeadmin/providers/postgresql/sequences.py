@@ -11,6 +11,7 @@ Several statements may be needed (CREATE, OWNER TO, COMMENT, GRANT ...);
 they travel as one text that the provider runs inside its own transaction
 on a private attachment, so the change commits or rolls back whole.
 """
+import re
 from collections.abc import Mapping
 
 from .native_admin import (
@@ -20,6 +21,8 @@ from .native_admin import (
 )
 
 PRIVILEGE_CODES = {'r': 'SELECT', 'w': 'UPDATE', 'U': 'USAGE'}
+_SEQ_TYPES = {21: 'smallint', 23: 'integer', 20: 'bigint'}
+_VALID_SEQ_TYPES = ('smallint', 'integer', 'bigint')
 _COUNTERS = (('increment', 'INCREMENT BY'), ('start', 'START WITH'),
              ('minimum', 'MINVALUE'), ('maximum', 'MAXVALUE'),
              ('cache', 'CACHE'))
@@ -34,7 +37,9 @@ def _blank(value):
 
 
 def _integer(value, label, *, minimum=None):
-    if isinstance(value, float) and value.is_integer():
+    if isinstance(value, str) and re.fullmatch(r'[+-]?[0-9]+', value.strip()):
+        value = int(value.strip())
+    elif isinstance(value, float) and value.is_integer():
         value = int(value)
     if isinstance(value, bool) or not isinstance(value, int):
         raise PostgreSQLNativeAdminError(f'{label} must be a whole number')
@@ -45,7 +50,7 @@ def _integer(value, label, *, minimum=None):
     return value
 
 
-def facts(native):
+def facts(native, relations=None, attributes=None):
     """The target's current values, as the dialog and the compiler see
     them: schema, name, counters, cycle, persistence, comment, owner acl."""
     row = native.get('catalog_row') or {}
@@ -59,11 +64,49 @@ def facts(native):
         # words too).
         'relpersistence': row.get('relpersistence') == 'u',
         'relacl': list(row.get('relacl') or []),
-        'seqowner': native.get('owner'),
+        'seqowner': native.get('owner') or row.get('owner_name'),
     }
     for key, column in _NATIVE_COUNTERS.items():
         result[key] = sequence.get(column)
+    if 'seqtypid' in sequence and sequence.get('seqtypid') is not None:
+        try:
+            result['data_type'] = _SEQ_TYPES.get(int(sequence['seqtypid']), 'bigint')
+        except (TypeError, ValueError):
+            result['data_type'] = 'bigint'
+    if native.get('security_labels'):
+        result['securities'] = [
+            {'provider': item.get('provider'), 'label': item.get('label')}
+            for item in native['security_labels']
+            if isinstance(item, Mapping)
+        ]
+    if relations:
+        dep_rows = native.get('dependency_rows') or native.get('dependencies') or []
+        for dep in dep_rows:
+            if not isinstance(dep, Mapping) or dep.get('deptype') not in ('a', 'i'):
+                continue
+            try:
+                ref_oid = int(dep.get('refobjid') or 0)
+                sub_id = int(dep.get('refobjsubid') or 0)
+            except (TypeError, ValueError):
+                continue
+            rel_pair = relations.get(ref_oid)
+            if rel_pair and sub_id > 0:
+                rel_schema, rel_name = rel_pair
+                result['owned_table'] = f'{rel_schema}.{rel_name}' if rel_schema else rel_name
+                for attr in (attributes or {}).get(ref_oid, ()):
+                    if int(attr.get('attnum') or 0) == sub_id and not attr.get('attisdropped'):
+                        result['owned_column'] = attr.get('attname')
+                        break
+                break
     return result
+
+
+def privileges(native):
+    """Normalized sequence ACL grants from aclexplode or relacl."""
+    from .cluster import parse_acl_items
+    row = native.get('catalog_row') or native
+    source = native.get('explicit_grants') or row.get('explicit_grants') or row.get('relacl')
+    return parse_acl_items(source, PRIVILEGE_CODES)
 
 
 def _grantee(value):
@@ -172,13 +215,26 @@ def _counter_clauses(draft, current):
     return clauses
 
 
+def _data_type_clause(draft, current=None):
+    raw = draft.get('data_type')
+    if _blank(raw):
+        return []
+    text = str(raw).strip().lower()
+    if text not in _VALID_SEQ_TYPES:
+        raise PostgreSQLNativeAdminError(
+            'sequence data type must be smallint, integer or bigint')
+    if current is not None and text == (current.get('data_type') or 'bigint'):
+        return []
+    return [f'AS {text}']
+
+
 def _create(draft):
     schema = _name(draft.get('schema'), 'schema')
     qualified = _qualified(schema, draft.get('name'))
     persistence = _persistence(draft)
     head = 'CREATE UNLOGGED SEQUENCE' if persistence == 'unlogged' else \
         'CREATE SEQUENCE'
-    clauses = _counter_clauses(draft, None)
+    clauses = [*_data_type_clause(draft), *_counter_clauses(draft, None)]
     statements = [' '.join([head, qualified, *clauses])]
     if not _blank(draft.get('seqowner')):
         statements.append(f'ALTER SEQUENCE {qualified} OWNER TO '
@@ -195,7 +251,7 @@ def _create(draft):
 
 
 def _alter(native, draft):
-    current = facts(native)
+    current = native.get('sequence_facts') or facts(native)
     schema = _name(current['schema'], 'schema')
     name = _name(current['name'], 'name')
     qualified = _qualified(schema, name)
@@ -206,18 +262,25 @@ def _alter(native, draft):
                           + _identifier(new_name, 'name'))
         name = new_name
         qualified = _qualified(schema, name)
-    if not _blank(draft.get('seqowner')):
+    if not _blank(draft.get('seqowner')) and draft['seqowner'] != current.get('seqowner'):
         statements.append(f'ALTER SEQUENCE {qualified} OWNER TO '
                           f'{_identifier(draft["seqowner"], "owner")}')
     statements.extend(_owned_by(draft, schema, qualified))
-    if not _blank(draft.get('current_value')):
+    restart_initial = _flag(draft, 'restart_initial')
+    if restart_initial and not _blank(draft.get('current_value')):
+        raise PostgreSQLNativeAdminError(
+            'choose either current value or restart at start value, not both')
+    if not _blank(draft.get('current_value')) and (
+            draft['current_value'] != current.get('current_value')):
         value = _integer(draft['current_value'], 'current value')
         # As the inherited dialog: the next nextval returns this value. The
         # regclass literal carries the quoted identifiers (live check).
         statements.append(
             f'SELECT pg_catalog.setval({_literal(qualified, "name")}'
             f'::regclass, {value}, false)')
-    clauses = _counter_clauses(draft, current)
+    clauses = [*_data_type_clause(draft, current), *_counter_clauses(draft, current)]
+    if restart_initial:
+        clauses.append('RESTART')
     if clauses:
         statements.append(f'ALTER SEQUENCE {qualified} ' + ' '.join(clauses))
     persistence = _persistence(draft)
@@ -272,19 +335,20 @@ def compile_operation(operation, native, draft):
 # The family form's field ids (sequence.form.json) by operation, plus the
 # provider's own flags and grids: the validator admits exactly these.
 _FAMILY_FIELDS = {
-    'create': ('name', 'seqowner', 'schema', 'comment', 'increment', 'start',
-               'minimum', 'no_minimum', 'maximum', 'no_maximum', 'cache',
-               'cycled', 'relpersistence', 'owned_table', 'owned_column',
-               'relacl', 'securities'),
-    'alter': ('name', 'oid', 'seqowner', 'schema', 'is_sys_obj', 'comment',
-              'current_value', 'increment', 'start', 'minimum', 'no_minimum',
-              'maximum', 'no_maximum', 'cache', 'cycled', 'relpersistence',
-              'owned_table', 'owned_column', 'owned_by_none', 'acl', 'relacl',
+    'create': ('name', 'seqowner', 'schema', 'data_type', 'comment',
+               'increment', 'start', 'minimum', 'no_minimum', 'maximum',
+               'no_maximum', 'cache', 'cycled', 'relpersistence',
+               'owned_table', 'owned_column', 'relacl', 'securities'),
+    'alter': ('name', 'oid', 'seqowner', 'schema', 'data_type', 'is_sys_obj',
+              'comment', 'current_value', 'restart_initial', 'increment',
+              'start', 'minimum', 'no_minimum', 'maximum', 'no_maximum',
+              'cache', 'cycled', 'relpersistence', 'owned_table',
+              'owned_column', 'owned_by_none', 'acl', 'relacl',
               'securities', 'revoke'),
 }
 _GRIDS = ('relacl', 'securities', 'revoke')
 _BOOLEANS = ('no_minimum', 'no_maximum', 'cycled', 'relpersistence',
-             'owned_by_none', 'is_sys_obj')
+             'owned_by_none', 'is_sys_obj', 'restart_initial')
 _NUMBERS = ('increment', 'start', 'minimum', 'maximum', 'cache',
             'current_value')
 

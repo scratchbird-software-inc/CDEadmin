@@ -768,16 +768,39 @@ class MariaDBAdministration(RelationalAdministration):
         draft = request['draft']
         options = deepcopy(draft.get('options') or {})
         parent = options.pop('parent', None)
+        or_replace = bool(options.pop('or_replace', False))
+        temporary = bool(options.pop('temporary', False))
+        if_not_exists = bool(options.pop('if_not_exists', False))
+        if or_replace and if_not_exists:
+            raise RelationalClientError('OR REPLACE and IF NOT EXISTS cannot be combined in MariaDB CREATE SEQUENCE')
         name = self._new_object_name(self._identifier(draft['name']), {'parent': parent} if parent else {})
-        return [{'source': 'CREATE SEQUENCE ' + name + ' ' + clauses(options), 'parameters': ()}]
+        head_parts = ['CREATE']
+        if or_replace:
+            head_parts.append('OR REPLACE')
+        if temporary:
+            head_parts.append('TEMPORARY')
+        head_parts.append('SEQUENCE')
+        if if_not_exists:
+            head_parts.append('IF NOT EXISTS')
+        head_parts.append(name)
+        tail = clauses(options)
+        if tail:
+            head_parts.append(tail)
+        return [{'source': ' '.join(head_parts), 'parameters': ()}]
 
     def _compile_alter(self, request):
         if request['resource_kind'] != 'sequence':
             return super()._compile_alter(request)
-        from .mariadb_sequence_options import clauses
+        from .mariadb_sequence_options import _sql_literal, clauses
         path = self._target_path(request['target_resource'])
-        return [{
-            'source': 'ALTER SEQUENCE ' + self._qualified(path) + ' ' +
-            clauses(request['draft'].get('changes'), True, path[-1]),
-            'parameters': (),
-        }]
+        qualified = self._qualified(path)
+        changes = deepcopy(request['draft'].get('changes') or {})
+        has_comment = 'comment' in changes and changes['comment'] is not None
+        comment_val = changes.pop('comment', None) if has_comment else None
+        seq_tail = clauses(changes, True, path[-1], allow_empty_for_comment=has_comment)
+        stmts = []
+        if seq_tail:
+            stmts.append({'source': f'ALTER SEQUENCE {qualified} {seq_tail}', 'parameters': ()})
+        if has_comment:
+            stmts.append({'source': f'ALTER TABLE {qualified} COMMENT = {_sql_literal(str(comment_val))}', 'parameters': ()})
+        return stmts

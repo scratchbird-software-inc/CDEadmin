@@ -483,10 +483,123 @@ class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
                 return result
             raise
 
+    def _resolve_server_security_database_candidates(self, route):
+        """Return ordered database targets for server-scope SEC$ queries/DDL."""
+        candidates = []
+        if isinstance(route, Mapping):
+            for key in ('database', 'security_database', 'service_expected_database'):
+                val = route.get(key)
+                if isinstance(val, str) and val.strip():
+                    candidates.append(val.strip())
+        try:
+            from flask import has_app_context
+            if has_app_context():
+                from pgadmin.model import EndpointProfile
+                ep_id = self.context.endpoint_id
+                ep = EndpointProfile.query.filter_by(id=str(ep_id)).first()
+                if ep is None and str(ep_id).isdigit():
+                    ep = EndpointProfile.query.filter_by(server_id=int(ep_id)).first()
+                if ep is not None:
+                    targets = sorted(
+                        list(getattr(ep, 'database_targets', ()) or ()),
+                        key=lambda t: (not bool(getattr(t, 'active', False)), str(getattr(t, 'id', ''))),
+                    )
+                    for target in targets:
+                        db_val = getattr(target, 'database', None)
+                        if isinstance(db_val, str) and db_val.strip():
+                            candidates.append(db_val.strip())
+                    for route_model in getattr(ep, 'routes', ()) or ():
+                        try:
+                            cfg = json.loads(route_model.configuration or '{}')
+                            db_val = cfg.get('database')
+                            if isinstance(db_val, str) and db_val.strip():
+                                candidates.append(db_val.strip())
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+        if self.attachment_mode == 'embedded':
+            candidates.append('security.db')
+        deduped = []
+        for item in candidates:
+            if item not in deduped:
+                deduped.append(item)
+        return deduped
+
+    def _with_server_security_route(self, request):
+        """Attach a security/active database route for server-scope user/mapping tasks."""
+        if not isinstance(request, Mapping) or self.attachment_mode == 'embedded':
+            return request
+        kind = request.get('resource_kind')
+        if kind not in {'user', 'global-authentication-mapping'}:
+            return request
+        for route_key in ('_provider_route', 'route'):
+            route = request.get(route_key)
+            if isinstance(route, Mapping) and not (route.get('database') or '').strip():
+                cands = self._resolve_server_security_database_candidates(route)
+                if cands:
+                    updated = dict(request)
+                    updated[route_key] = {**route, 'database': cands[0]}
+                    return updated
+        return request
+
     def list_resources(self, request):
-        return self._run_with_pooled_catalog(request, super().list_resources)
+        rows = self._run_with_pooled_catalog(request, super().list_resources)
+        if (
+            isinstance(request, Mapping)
+            and self.attachment_mode != 'embedded'
+            and self.client._uses_server_scope(request)
+            and not any(r.get('resource_kind') == 'user' for r in rows)
+        ):
+            route = request.get('route') or {}
+            generation = str(request.get('capability_generation') or 'current')
+            for candidate_db in self._resolve_server_security_database_candidates(route):
+                conn = None
+                try:
+                    conn = self.client._connect({
+                        'route': {**route, 'database': candidate_db},
+                    })
+                    extra = _read_server_security_sql_resources(conn, generation)
+                    rows.extend(extra)
+                    break
+                except Exception:
+                    continue
+                finally:
+                    if conn is not None:
+                        try:
+                            tx = getattr(conn, 'main_transaction', None)
+                            if tx is not None and tx.is_active() is True:
+                                conn.rollback()
+                        except Exception:
+                            pass
+                        try:
+                            self.client._forget_and_close(conn)
+                        except Exception:
+                            try:
+                                conn.close()
+                            except Exception:
+                                pass
+            if not any(r.get('resource_kind') == 'user' for r in rows):
+                svc_conn = None
+                try:
+                    svc_route = {k: v for k, v in dict(route).items() if k != 'database'}
+                    svc_conn = self.client._connect({'route': svc_route})
+                    rows.extend(_read_server_service_user_resources(svc_conn, generation))
+                except Exception:
+                    pass
+                finally:
+                    if svc_conn is not None:
+                        try:
+                            self.client._forget_and_close(svc_conn)
+                        except Exception:
+                            try:
+                                svc_conn.close()
+                            except Exception:
+                                pass
+        return rows
 
     def inspect_resource(self, request):
+        request = self._with_server_security_route(request)
         return self._run_with_pooled_catalog(request, super().inspect_resource)
 
     def _identity(self):
@@ -627,16 +740,83 @@ class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
                     raise
                 raise
 
+    def validate_visual_admin(self, request):
+        request = self._with_server_security_route(_mapping(request))
+        if (
+            request.get('resource_kind') == 'user'
+            and request.get('operation_id') in {'create', 'alter'}
+        ):
+            draft = request.get('draft') or {}
+            if set(draft) & {'first_name', 'middle_name', 'last_name', 'description', 'tags'}:
+                try:
+                    users.compile_lifecycle_operation(
+                        request['operation_id'], draft, request.get('target_resource')
+                    )
+                    return {'errors': []}
+                except RelationalClientError as exc:
+                    return {'errors': [{'field_id': None, 'code': 'invalid_user', 'message': str(exc)}]}
+        return super().validate_visual_admin(request)
+
     def plan_visual_admin(self, request):
+        request = self._with_server_security_route(_mapping(request))
         with self._grid_session_guard(request):
+            if (
+                request.get('resource_kind') == 'user'
+                and request.get('operation_id') in {'create', 'alter'}
+            ):
+                draft = request.get('draft') or {}
+                if set(draft) & {'first_name', 'middle_name', 'last_name', 'description', 'tags'}:
+                    compiled = users.compile_lifecycle_operation(
+                        request['operation_id'], draft, request.get('target_resource')
+                    )
+                    plan_id = str(uuid.uuid4())
+                    planned = {
+                        'plan_id': plan_id,
+                        'command_preview': {
+                            'language': 'firebird-sql',
+                            'statements': [
+                                {'source': st['preview_source']}
+                                for st in compiled['statements']
+                            ],
+                            'statement': ';\n'.join(
+                                st['preview_source'] for st in compiled['statements']
+                            ),
+                        },
+                        'provider_payload': {
+                            'custom_firebird_user_lifecycle': True,
+                            'route': copy.deepcopy(request.get('_provider_route') or {}),
+                            'statements': compiled['statements'],
+                        },
+                        'warnings': [],
+                    }
+                    self._custom_user_plans = getattr(self, '_custom_user_plans', {})
+                    self._custom_user_plans[plan_id] = planned
+                    return {k: v for k, v in planned.items() if k != 'provider_payload'}
             return super().plan_visual_admin(request)
 
     def apply_visual_admin(self, request):
-        request = _mapping(request)
+        request = self._with_server_security_route(_mapping(request))
         with self._grid_session_guard(request):
             if request.get('session_id') is not None:
                 self._invalidate_grid_session(
                     request['session_id'], keep_plan_id=request.get('plan_id'))
+            custom_plans = getattr(self, '_custom_user_plans', {})
+            plan_id = request.get('plan_id')
+            if plan_id and plan_id in custom_plans:
+                planned = custom_plans.pop(plan_id)
+                payload = planned['provider_payload']
+                conn = self.client._connect({'route': payload['route']})
+                try:
+                    cur = conn.cursor()
+                    try:
+                        for st in payload['statements']:
+                            cur.execute(st['source'], st.get('parameters') or ())
+                        conn.commit()
+                    finally:
+                        cur.close()
+                finally:
+                    self.client._forget_and_close(conn)
+                return {'accepted': True, 'plan_id': plan_id}
             return super().apply_visual_admin(request)
 
     def _invalidate_grid_session(self, session_id, *, keep_plan_id=None):
@@ -1106,6 +1286,105 @@ def _server_identity(server, _request, module):
     }
 
 
+def _read_sec_user_attributes_map(cursor):
+    """Read SEC$USER_ATTRIBUTES keyed by (user_name, plugin)."""
+    attr_map = {}
+    try:
+        cursor.execute(
+            'SELECT TRIM(TRAILING FROM SEC$USER_NAME), '
+            'TRIM(TRAILING FROM SEC$PLUGIN), '
+            'TRIM(TRAILING FROM SEC$KEY), SEC$VALUE '
+            'FROM SEC$USER_ATTRIBUTES ORDER BY 1, 2, 3'
+        )
+        for u_raw, p_raw, k_raw, v_raw in cursor.fetchall():
+            uname = _materialize_catalog_value(u_raw)
+            plugin = _materialize_catalog_value(p_raw)
+            key = _materialize_catalog_value(k_raw)
+            val = _materialize_catalog_value(v_raw)
+            if uname is None or key is None:
+                continue
+            uname_s = str(uname).rstrip(' ')
+            plugin_s = '' if plugin is None else str(plugin).rstrip(' ')
+            key_s = str(key).rstrip(' ')
+            val_s = '' if val is None else str(val)
+            attr_map.setdefault((uname_s, plugin_s), []).append(
+                {'name': key_s, 'value': val_s}
+            )
+    except Exception:
+        pass
+    return attr_map
+
+
+def _read_server_security_sql_resources(connection, generation):
+    """Query SEC$USERS, SEC$USER_ATTRIBUTES and SEC$GLOBAL_AUTH_MAPPING."""
+    cursor = connection.cursor()
+    discovered = []
+    try:
+        attr_map = _read_sec_user_attributes_map(cursor)
+        try:
+            cursor.execute(
+                'SELECT TRIM(TRAILING FROM SEC$USER_NAME), '
+                'TRIM(TRAILING FROM SEC$PLUGIN), SEC$FIRST_NAME, '
+                'SEC$MIDDLE_NAME, SEC$LAST_NAME, SEC$ACTIVE, SEC$ADMIN, '
+                'SEC$DESCRIPTION FROM SEC$USERS ORDER BY 1, 2'
+            )
+            user_rows = list(cursor.fetchall())
+        except Exception:
+            user_rows = []
+        for row in user_rows:
+            uname = str(_materialize_catalog_value(row[0]) or '').rstrip(' ')
+            if not uname:
+                continue
+            plugin = _catalog_detail('plugin', _materialize_catalog_value(row[1]))
+            plugin_key = '' if plugin is None else str(plugin).rstrip(' ')
+            tags = list(attr_map.get((uname, plugin_key), ()))
+            native = {
+                'plugin': plugin,
+                'first_name': _catalog_detail('first_name', _materialize_catalog_value(row[2])),
+                'middle_name': _catalog_detail('middle_name', _materialize_catalog_value(row[3])),
+                'last_name': _catalog_detail('last_name', _materialize_catalog_value(row[4])),
+                'active': None if row[5] is None else bool(_materialize_catalog_value(row[5])),
+                'administrator': None if row[6] is None else bool(_materialize_catalog_value(row[6])),
+                'description': _catalog_detail('description', _materialize_catalog_value(row[7])),
+                'tags': tags,
+                'attributes': {t['name']: t['value'] for t in tags},
+                'system_object': False,
+                'scope': 'server',
+                'navigator_scope': 'server',
+            }
+            resource_id = _catalog_resource_id(
+                'user', [], json.dumps([uname, plugin], ensure_ascii=False, separators=(',', ':'))
+            )
+            discovered.append({
+                'resource_id': resource_id,
+                'resource_kind': 'user',
+                'display_name': uname,
+                'display_path': [uname],
+                'authority_path': ['user', uname],
+                'generation': generation,
+                'native': native,
+            })
+        try:
+            for mrow in mappings.catalog_rows(cursor, global_scope=True):
+                mname = str(mrow[0]).rstrip(' ')
+                mnative = mappings.metadata('global-authentication-mapping', mrow)
+                mnative['navigator_scope'] = 'server'
+                discovered.append({
+                    'resource_id': _catalog_resource_id('global-authentication-mapping', [], mname),
+                    'resource_kind': 'global-authentication-mapping',
+                    'display_name': mname,
+                    'display_path': [mname],
+                    'authority_path': ['global-authentication-mapping', mname],
+                    'generation': generation,
+                    'native': mnative,
+                })
+        except Exception:
+            pass
+    finally:
+        cursor.close()
+    return discovered
+
+
 def _server_resources(server, request):
     generation = str(request.get('capability_generation') or 'current')
     info = server.info
@@ -1156,6 +1435,52 @@ def _server_resources(server, request):
                 'observation_error': observation_error,
             },
         })
+    security_conn = getattr(server, 'security_connection', None)
+    if security_conn is None and callable(getattr(server, 'cursor', None)):
+        security_conn = server
+    if security_conn is not None:
+        resources.extend(
+            _read_server_security_sql_resources(security_conn, generation)
+        )
+    return resources
+
+
+def _read_server_service_user_resources(server, generation):
+    """Fallback user inventory via Firebird Services Manager when no SQL `.fdb` target exists yet."""
+    resources = []
+    if hasattr(getattr(server, 'user', None), 'get_all'):
+        try:
+            for uinfo in server.user.get_all() or ():
+                uname = str(getattr(uinfo, 'user_name', '') or '').strip()
+                if not uname:
+                    continue
+                resource_id = _catalog_resource_id(
+                    'user', [], json.dumps([uname, None], ensure_ascii=False, separators=(',', ':'))
+                )
+                resources.append({
+                    'resource_id': resource_id,
+                    'resource_kind': 'user',
+                    'display_name': uname,
+                    'display_path': [uname],
+                    'authority_path': ['user', uname],
+                    'generation': generation,
+                    'native': {
+                        'plugin': None,
+                        'first_name': getattr(uinfo, 'first_name', None) or None,
+                        'middle_name': getattr(uinfo, 'middle_name', None) or None,
+                        'last_name': getattr(uinfo, 'last_name', None) or None,
+                        'active': True,
+                        'administrator': bool(getattr(uinfo, 'admin', False)),
+                        'description': None,
+                        'tags': [],
+                        'attributes': {},
+                        'system_object': False,
+                        'scope': 'server',
+                        'navigator_scope': 'server',
+                    },
+                })
+        except Exception:
+            pass
     return resources
 
 
@@ -2293,6 +2618,7 @@ def _resources(connection, request):
         def detail_value(field, detail):
             return _catalog_detail(field, detail)
 
+        user_attr_map = _read_sec_user_attributes_map(cursor)
         for kind, source in simple_queries:
             for row in catalog_rows(source, kind + ' objects',
                                     required=kind != 'user'):
@@ -2313,6 +2639,11 @@ def _resources(connection, request):
                 if kind == 'user':
                     for field, value in zip(('active', 'administrator'), row[5:7]):
                         native[field] = None if value is None else bool(value)
+                    uname_key = str(row[0] or '').rstrip(' ')
+                    plugin_key = '' if native.get('plugin') is None else str(native.get('plugin')).rstrip(' ')
+                    tags = list(user_attr_map.get((uname_key, plugin_key), ()))
+                    native['tags'] = tags
+                    native['attributes'] = {t['name']: t['value'] for t in tags}
                 if kind == 'blob-filter':
                     try:
                         statements = blob_filters.compile_operation('create', {
@@ -2949,10 +3280,11 @@ def _resources(connection, request):
                 'upper_bound': upper,
             })
 
-        def data_type(field, include_domain=True):
+        def data_type(field, include_domain=True, include_charset=True,
+                      include_dimensions=True, fallback_domain_name=''):
             """Render an exact Firebird field type or fail closed."""
-            domain = str(field.get('domain') or '').rstrip(' ')
-            if include_domain and domain and not domain.startswith(
+            domain = str(field.get('domain') or fallback_domain_name or '').rstrip(' ')
+            if include_domain and field.get('domain') and domain and not domain.startswith(
                     'RDB$'):
                 return identifier(domain)
             field_type = numeric(field.get('field_type'))
@@ -3013,15 +3345,15 @@ def _resources(connection, request):
 
             charset = str(field.get('character_set') or '').rstrip(' ')
             dimensions = field_dimensions.get(domain, [])
-            if dimensions and not (
-                    include_domain and domain and
+            if include_dimensions and dimensions and not (
+                    include_domain and field.get('domain') and
                     not domain.startswith('RDB$')):
                 value += '[' + ', '.join(
                     f'{dimension["lower_bound"]}:'
                     f'{dimension["upper_bound"]}'
                     for dimension in dimensions
                 ) + ']'
-            if (charset and field_type in {14, 37, 40, 261} and
+            if (include_charset and charset and field_type in {14, 37, 40, 261} and
                     not (field_type in {14, 37} and subtype == 1)):
                 value += f' CHARACTER SET {identifier(charset)}'
             return value
@@ -3160,8 +3492,29 @@ def _resources(connection, request):
         for item in resources.values():
             native = item.setdefault('native', {})
             if item['resource_kind'] == 'domain':
-                # One rendered type expression for editors.
-                native['type_sql'] = data_type(native, include_domain=False)
+                dom_name = str(item.get('display_name') or '').rstrip(' ')
+                # Full SQL type expression and decomposed facets for editors.
+                native['type_sql'] = data_type(
+                    native, include_domain=False, fallback_domain_name=dom_name)
+                native['base_type_sql'] = data_type(
+                    native, include_domain=False, include_charset=False,
+                    include_dimensions=False, fallback_domain_name=dom_name)
+                dims = field_dimensions.get(dom_name, [])
+                native['dimensions'] = [
+                    {'lower': d['lower_bound'], 'upper': d['upper_bound']}
+                    for d in dims
+                ]
+                native['array_bounds'] = (
+                    '[' + ', '.join(
+                        f'{d["lower_bound"]}:{d["upper_bound"]}' for d in dims
+                    ) + ']' if dims else None
+                )
+                if numeric(native.get('field_type')) == 261:
+                    sub = numeric(native.get('field_sub_type'), 0)
+                    native['blob_sub_type'] = {0: 'BINARY', 1: 'TEXT'}.get(sub, str(sub))
+                    seg = numeric(native.get('segment_length'))
+                    if seg:
+                        native['segment_size'] = seg
             if item['resource_kind'] not in {'procedure', 'function'}:
                 continue
             # Rendered parameter types for editors (the grid shows one

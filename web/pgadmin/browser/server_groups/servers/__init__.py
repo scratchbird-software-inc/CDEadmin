@@ -245,17 +245,55 @@ def _server_children_url(gid, sid):
     return url_for('NODE-server.children_id', gid=gid, sid=sid)
 
 
-def _native_create_kinds(visual_admin):
+_SERVER_SCOPED_ROLE_ENGINES = frozenset({
+    'postgresql', 'cockroachdb', 'yugabytedb', 'yugabytedb-ycql',
+    'mysql', 'mariadb', 'tidb', 'dolt',
+})
+
+
+def _server_scope_security_specs(profile):
+    """Engine-native server-scope security collections below <Server>."""
+    if not isinstance(profile, dict):
+        return ()
+    engine_id = profile.get('engine_id')
+    route_kind = profile.get('route_kind')
+    profile_id = profile.get('profile_id')
+    if route_kind == 'embedded_file' or engine_id in {'sqlite', 'duckdb'}:
+        return ()
+    if engine_id == 'firebird':
+        return (
+            ('user', 'Users'),
+            ('global-authentication-mapping', 'Global authentication mappings'),
+        )
+    if engine_id in {'mysql', 'mariadb', 'tidb', 'dolt'}:
+        return (
+            ('user', 'Users'),
+            ('role', 'Roles'),
+        )
+    if engine_id == 'cockroachdb' or (
+        engine_id == 'yugabytedb' and profile_id != 'yugabytedb-ycql'
+    ):
+        return (('role', 'Roles'),)
+    return ()
+
+
+def _native_create_kinds(visual_admin, engine_id=None):
     """Database-scoped kinds whose create the provider edits natively
     (owner decision 2026-11-11, option 1), for the database node's Create
     submenu; server-scope kinds create from their own groups."""
     kinds = []
+    effective_engine = engine_id or (visual_admin or {}).get('engine_id')
     # Server-scope kinds create from their own groups; relation-owned kinds
     # create from the Columns, Constraints, Indexes, ... group of a table.
-    skipped = {'server', 'database', 'role', 'tablespace', 'pgagent-job',
+    # On Firebird, SQL ROLEs live per-database in RDB$ROLES and must stay
+    # creatable on <Database>.
+    skipped = {'server', 'database', 'user', 'global-authentication-mapping',
+               'tablespace', 'pgagent-job',
                'replica-node', 'column', 'constraint', 'index',
                'partitioned-index', 'trigger', 'rule', 'row-policy',
                'partition'}
+    if effective_engine is None or effective_engine in _SERVER_SCOPED_ROLE_ENGINES:
+        skipped.add('role')
     for item in (visual_admin or {}).get('objects', []):
         kind = item.get('resource_kind')
         if kind in skipped:
@@ -356,7 +394,9 @@ def _runtime_node_fields(server):
             catalog = endpoint_service_for_app(current_app).database_catalog(
                 server
             )
-            has_children = bool(database_entries(catalog))
+            has_children = bool(database_entries(catalog)) or bool(
+                _server_scope_security_specs(profile)
+            )
     except Exception:
         has_children = True
     return {
@@ -495,13 +535,62 @@ def _provider_tree_server_groups(gid, sid, profile, server, manager=None):
             '_pid': sid,
             'module': 'pgadmin.node.server',
             'children_url': _cde_navigator_url(gid, sid, state),
+            'cde_database_target_id': _CDE_SERVER_SCOPE_TARGET,
             'cde_endpoint': True,
             'cde_engine_id': profile['engine_id'],
             'cde_profile_id': profile['profile_id'],
             'cde_resource_kind': resource_kind,
             'cde_native_editor': _native_editor_operations(
                 visual_admin, resource_kind),
-            'cde_context_actions': [],
+            'cde_context_actions': resource_group_context_actions(
+                profile, resource_kind, visual_admin,
+                database_target_id=_CDE_SERVER_SCOPE_TARGET,
+            ),
+        })
+    return nodes
+
+
+def _endpoint_server_security_groups(gid, sid, profile, server, visual_admin=None):
+    """Server-level security group nodes for verified provider endpoints."""
+    specs = _server_scope_security_specs(profile)
+    if not specs:
+        return []
+    nodes = []
+    for resource_kind, label in specs:
+        state = {
+            'scope': 'kind',
+            'target_id': _CDE_SERVER_SCOPE_TARGET,
+            'display_name': server.name,
+            'parent_path': [],
+            'resource_kind': resource_kind,
+        }
+        token = encode_navigator_state(state)
+        node_id = hashlib.sha256(token.encode('ascii')).hexdigest()[:24]
+        nodes.append({
+            'id': f'cde_resource_group_{node_id}',
+            'label': gettext(label),
+            'icon': 'icon-coll-object',
+            'icon_key': f'object.{resource_kind}',
+            'inode': True,
+            'expandable': True,
+            'has_children': True,
+            'node_kind': 'container',
+            '_type': 'cde_resource_group',
+            '_id': node_id,
+            '_pid': sid,
+            'module': 'pgadmin.node.server',
+            'children_url': _cde_navigator_url(gid, sid, state),
+            'cde_database_target_id': _CDE_SERVER_SCOPE_TARGET,
+            'cde_endpoint': True,
+            'cde_engine_id': profile['engine_id'],
+            'cde_profile_id': profile['profile_id'],
+            'cde_resource_kind': resource_kind,
+            'cde_native_editor': _native_editor_operations(
+                visual_admin, resource_kind),
+            'cde_context_actions': resource_group_context_actions(
+                profile, resource_kind, visual_admin,
+                database_target_id=_CDE_SERVER_SCOPE_TARGET,
+            ),
         })
     return nodes
 
@@ -561,6 +650,7 @@ def _cde_resource_nodes(gid, sid, profile, state, snapshot):
                 'children_url': _cde_navigator_url(
                     gid, sid, child_state
                 ),
+                'cde_database_target_id': base_state.get('target_id'),
                 'cde_endpoint': True,
                 'cde_engine_id': profile['engine_id'],
                 'cde_profile_id': profile['profile_id'],
@@ -1245,12 +1335,47 @@ class ServerNode(PGChildNodeView):
                     endpoint_service.effective_verification_state(server) ==
                     'verified'
                 )
-                return make_json_response(data=_cde_database_nodes(
+                visual_admin = None
+                if is_verified:
+                    try:
+                        context, _endpoint, _root = endpoint_service.workspace(
+                            server, database_target_id=None
+                        )
+                    except Exception:
+                        try:
+                            context, _endpoint, _root = endpoint_service.workspace(
+                                server
+                            )
+                        except Exception:
+                            context = None
+                    if context is not None:
+                        try:
+                            binding = endpoint_service.provider_registry.resolve(
+                                context
+                            )
+                            describe_admin = getattr(
+                                binding.instance, 'visual_admin_descriptor', None
+                            )
+                            visual_admin = (
+                                describe_admin()
+                                if callable(describe_admin) else None
+                            )
+                        except Exception:
+                            visual_admin = None
+                nodes = _cde_database_nodes(
                     gid, sid, profile, catalog,
                     runtime_version=_runtime_node_fields(server)[
                         'verified_runtime_version'],
+                    native_create_kinds=_native_create_kinds(
+                        visual_admin, engine_id=profile['engine_id']
+                    ),
                     server_verified=is_verified,
-                ))
+                )
+                if is_verified:
+                    nodes.extend(_endpoint_server_security_groups(
+                        gid, sid, profile, server, visual_admin
+                    ))
+                return make_json_response(data=nodes)
             except (SecretAccessError, RelationalCredentialError):
                 return make_json_response(
                     status=401,

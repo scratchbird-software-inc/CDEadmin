@@ -2188,6 +2188,7 @@ class ObjectDashboardHost:
         sections: list[dict[str, Any]] = []
         dependencies: list[dict[str, Any]] = []
         dependents: list[dict[str, Any]] = []
+        permissions: list[dict[str, Any]] = []
         ddl_sql = ''
         ddl_source = ''
         comment_text = ''
@@ -2264,7 +2265,7 @@ class ObjectDashboardHost:
                     ddl_source = 'provider_catalog'
 
                 for nk, nv in nat.items():
-                    if nk in {'columns', 'indexes', 'constraints', 'triggers', 'partitions', 'dependencies', 'dependents', 'property_sections', 'sql', 'ddl', 'create_sql'}:
+                    if nk in {'columns', 'indexes', 'constraints', 'triggers', 'partitions', 'privileges', 'dependencies', 'dependents', 'property_sections', 'sql', 'ddl', 'create_sql'}:
                         continue
                     if isinstance(nv, (str, int, float, bool)) or nv is None:
                         add_attr(
@@ -2281,6 +2282,7 @@ class ObjectDashboardHost:
                     ('constraints', 'Constraints'),
                     ('triggers', 'Triggers'),
                     ('partitions', 'Partitions'),
+                    ('privileges', 'Permissions'),
                 ):
                     arr = nat.get(sec_key)
                     if isinstance(arr, list) and arr and isinstance(arr[0], dict):
@@ -2291,6 +2293,30 @@ class ObjectDashboardHost:
                             'columns': cols,
                             'rows': arr,
                         })
+
+                if isinstance(nat.get('privileges'), list):
+                    for p_item in nat['privileges']:
+                        if isinstance(p_item, dict):
+                            permissions.append({
+                                'grantee': str(p_item.get('grantee') or ''),
+                                'grantee_kind': str(
+                                    p_item.get('grantee_kind')
+                                    or p_item.get('grantee_type')
+                                    or 'role'
+                                ),
+                                'grantor': str(p_item.get('grantor') or ''),
+                                'privilege': str(
+                                    p_item.get('privilege')
+                                    or p_item.get('privileges')
+                                    or ''
+                                ),
+                                'with_grant': bool(
+                                    p_item.get('with_grant')
+                                    or p_item.get('grant_option')
+                                    or p_item.get('is_grantable')
+                                ),
+                                'column_name': p_item.get('column_name'),
+                            })
 
                 if isinstance(nat.get('dependencies'), list):
                     dependencies.extend(nat['dependencies'])
@@ -2415,6 +2441,7 @@ class ObjectDashboardHost:
             },
             'dependencies': dependencies,
             'dependents': dependents,
+            'permissions': permissions,
             'customization': customization,
         }
 

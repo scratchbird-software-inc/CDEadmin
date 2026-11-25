@@ -51,6 +51,14 @@ def _render(node):
     return RawStream()(node)
 
 
+def privileges(native):
+    """Normalized routine ACL grants from aclexplode or proacl."""
+    from .cluster import parse_acl_items
+    row = native.get('catalog_row') or native
+    source = native.get('explicit_grants') or row.get('explicit_grants') or row.get('proacl')
+    return parse_acl_items(source, {'X': 'EXECUTE'})
+
+
 def facts(native):
     """Current values from pg_get_functiondef; never raises."""
     row = native.get('catalog_row') or {}

@@ -135,7 +135,7 @@ ADMINISTRATION = DuckDBAdministration(RelationalAdminDialect(
         'column': frozenset({'inspect', 'create', 'rename', 'drop'}),
         'constraint': frozenset({'inspect'}),
         'index': frozenset({'inspect', 'create', 'drop'}),
-        'sequence': frozenset({'inspect', 'create', 'drop'}),
+        'sequence': frozenset({'inspect', 'create', 'alter', 'drop'}),
         'type': frozenset({'inspect', 'create', 'drop'}),
         'macro': frozenset({'inspect', 'create', 'alter', 'drop'}),
         'function': frozenset({'inspect'}),
@@ -699,6 +699,45 @@ def _resources(connection, request):
         for sequence in sequence_oids.get(oid, []):
             sequence['native']['catalog_metadata']['automatic_dependency_observed'] = True
 
+    def _split_duckdb_members(resolved_sql):
+        open_idx = resolved_sql.find('(')
+        if open_idx < 0 or not resolved_sql.endswith(')'):
+            return []
+        inner = resolved_sql[open_idx + 1:-1]
+        parts, buf, depth, in_quote = [], [], 0, False
+        for ch in inner:
+            if ch in ('"', "'"):
+                in_quote = not in_quote
+                buf.append(ch)
+            elif not in_quote and ch in ('(', '['):
+                depth += 1
+                buf.append(ch)
+            elif not in_quote and ch in (')', ']'):
+                depth = max(0, depth - 1)
+                buf.append(ch)
+            elif not in_quote and depth == 0 and ch == ',':
+                parts.append(''.join(buf).strip())
+                buf = []
+            else:
+                buf.append(ch)
+        if buf:
+            parts.append(''.join(buf).strip())
+        out = []
+        for entry in parts:
+            if not entry:
+                continue
+            if entry.startswith('"'):
+                end_q = entry.find('"', 1)
+                if end_q > 0:
+                    m_name = entry[1:end_q].replace('""', '"')
+                    m_type = entry[end_q + 1:].strip()
+                    out.append({'name': m_name, 'type': m_type})
+                    continue
+            pieces = entry.split(None, 1)
+            if len(pieces) == 2:
+                out.append({'name': pieces[0], 'type': pieces[1]})
+        return out
+
     cursor.execute(
         'SELECT database_name, schema_name, type_name, type_oid, '
         'type_size, logical_type, type_category, comment, tags, labels '
@@ -708,12 +747,64 @@ def _resources(connection, request):
         database, schema, name, *values = row
         cursor.execute('SELECT typeof(NULL::' + qualified((database, schema, name)) + ')')
         resolved_type = cursor.fetchone()[0]
-        add('type', [database, schema], name, {
-            'catalog_metadata': dict(zip((
-                'oid', 'size_bytes', 'logical_type', 'category',
-                'comment', 'tags', 'labels',
-            ), values)) | {'resolved_type': resolved_type},
-        })
+        meta = dict(zip((
+            'oid', 'size_bytes', 'logical_type', 'category',
+            'comment', 'tags', 'labels',
+        ), values)) | {'resolved_type': resolved_type}
+        logical_upper = str(meta.get('logical_type') or '').upper()
+        resolved_str = str(resolved_type or '')
+        if logical_upper == 'ENUM':
+            type_kind = 'ENUM'
+        elif logical_upper in {'STRUCT', 'UNION'}:
+            type_kind = logical_upper
+        elif logical_upper == 'ARRAY' and '[' in resolved_str and resolved_str.endswith(']'):
+            type_kind = 'ARRAY'
+        elif logical_upper == 'MAP' and resolved_str.upper().startswith('MAP(') and resolved_str.endswith(')'):
+            type_kind = 'MAP'
+        else:
+            type_kind = 'ALIAS'
+        type_native = {
+            'parent': schema,
+            'schema': schema,
+            'type_kind': type_kind,
+            'comment': meta.get('comment'),
+            'resolved_type': resolved_type,
+            'catalog_metadata': meta,
+        }
+        if type_kind == 'ENUM':
+            type_native['enum_values'] = [
+                {'value': str(lbl)} for lbl in (meta.get('labels') or [])
+            ]
+        elif type_kind in {'STRUCT', 'UNION'}:
+            type_native['fields'] = _split_duckdb_members(resolved_str)
+        elif type_kind == 'ARRAY':
+            b_idx = resolved_str.rfind('[')
+            type_native['element_type'] = resolved_str[:b_idx].strip()
+            try:
+                type_native['array_length'] = int(resolved_str[b_idx + 1:-1].strip())
+            except ValueError:
+                type_native['array_length'] = None
+            type_native['base_type'] = resolved_str
+        elif type_kind == 'MAP':
+            inner_kv = resolved_str[4:-1]
+            depth_m, split_at, in_q = 0, -1, False
+            for idx_c, ch_c in enumerate(inner_kv):
+                if ch_c in ('"', "'"):
+                    in_q = not in_q
+                elif not in_q and ch_c in ('(', '['):
+                    depth_m += 1
+                elif not in_q and ch_c in (')', ']'):
+                    depth_m = max(0, depth_m - 1)
+                elif not in_q and depth_m == 0 and ch_c == ',':
+                    split_at = idx_c
+                    break
+            if split_at > 0:
+                type_native['key_type'] = inner_kv[:split_at].strip()
+                type_native['value_type'] = inner_kv[split_at + 1:].strip()
+            type_native['base_type'] = resolved_str
+        else:
+            type_native['base_type'] = resolved_type
+        add('type', [database, schema], name, type_native)
     cursor.execute(
         'SELECT database_name, schema_name, function_name, '
         'function_type, alias_of, description, comment, tags, '

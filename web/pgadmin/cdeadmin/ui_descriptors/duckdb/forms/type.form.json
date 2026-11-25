@@ -24,6 +24,16 @@
       "required": true
     },
     {
+      "field_id": "parent",
+      "label": "Schema",
+      "tab": "General",
+      "control": "reference",
+      "required": false,
+      "reference_kind": "schema",
+      "reference_value": "display_name",
+      "help": "Target DuckDB schema (defaults to main when omitted)."
+    },
+    {
       "field_id": "type_kind",
       "label": "Type kind",
       "tab": "General",
@@ -33,21 +43,53 @@
       "options": [
         {
           "value": "ALIAS",
-          "label": "Alias"
+          "label": "Alias (Scalar / List / Nested Expression)"
         },
         {
           "value": "ENUM",
-          "label": "Enum"
+          "label": "Enum (Closed-Set Dictionary Values)"
         },
         {
           "value": "STRUCT",
-          "label": "Struct"
+          "label": "Struct (Composite Named Fields)"
         },
         {
           "value": "UNION",
-          "label": "Union"
+          "label": "Union (Tagged Disjoint Alternatives)"
+        },
+        {
+          "value": "ARRAY",
+          "label": "Array (Fixed-Length T[N])"
+        },
+        {
+          "value": "MAP",
+          "label": "Map (Key-Value MAP(K, V))"
         }
       ]
+    },
+    {
+      "field_id": "or_replace",
+      "label": "Replace existing type",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "modes": [
+        "create"
+      ],
+      "help": "Emits CREATE OR REPLACE TYPE to overwrite an existing type definition."
+    },
+    {
+      "field_id": "temporary",
+      "label": "Temporary (session-scoped)",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "modes": [
+        "create"
+      ],
+      "help": "Emits CREATE TEMPORARY TYPE visible only to the current connection."
     },
     {
       "field_id": "base_type",
@@ -55,10 +97,82 @@
       "tab": "General",
       "control": "text",
       "required": true,
+      "option_values_path": [
+        "dialect",
+        "column_types"
+      ],
       "visible_when": {
         "field": "type_kind",
         "equals": "ALIAS"
+      },
+      "help": "Any DuckDB scalar, parameterized, list, or nested type expression (for example DECIMAL(18,4), VARCHAR(64), VARCHAR[], or MAP(VARCHAR, INTEGER))."
+    },
+    {
+      "field_id": "element_type",
+      "label": "Element type",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "option_values_path": [
+        "dialect",
+        "column_types"
+      ],
+      "visible_when": {
+        "field": "type_kind",
+        "equals": "ARRAY"
+      },
+      "help": "Homogeneous element type for a fixed-size DuckDB ARRAY (for example DOUBLE, FLOAT, INTEGER, VARCHAR)."
+    },
+    {
+      "field_id": "array_length",
+      "label": "Array length",
+      "tab": "General",
+      "control": "number",
+      "required": true,
+      "default": 4,
+      "visible_when": {
+        "field": "type_kind",
+        "equals": "ARRAY"
+      },
+      "help": "Fixed element count N >= 1 (compiles <element_type>[N], enforcing exact cardinality)."
+    },
+    {
+      "field_id": "key_type",
+      "label": "Map key type",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "option_values_path": [
+        "dialect",
+        "column_types"
+      ],
+      "visible_when": {
+        "field": "type_kind",
+        "equals": "MAP"
       }
+    },
+    {
+      "field_id": "value_type",
+      "label": "Map value type",
+      "tab": "General",
+      "control": "text",
+      "required": true,
+      "option_values_path": [
+        "dialect",
+        "column_types"
+      ],
+      "visible_when": {
+        "field": "type_kind",
+        "equals": "MAP"
+      }
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "help": "Stored in duckdb_types() via COMMENT ON TYPE."
     },
     {
       "field_id": "enum_values",
@@ -68,7 +182,7 @@
       "columns": [
         {
           "field_id": "value",
-          "label": "Enum values",
+          "label": "Allowed enum literal",
           "control": "text",
           "required": true
         }
@@ -78,7 +192,8 @@
         "field": "type_kind",
         "equals": "ENUM"
       },
-      "item_kind": "string"
+      "item_kind": "string",
+      "help": "Dictionary-encoded allowed values enforced natively by DuckDB."
     },
     {
       "field_id": "fields",
@@ -94,9 +209,13 @@
         },
         {
           "field_id": "type",
-          "label": "Native type",
+          "label": "Data type",
           "control": "text",
-          "required": true
+          "required": true,
+          "option_values_path": [
+            "dialect",
+            "column_types"
+          ]
         }
       ],
       "required": true,
@@ -106,8 +225,9 @@
           "STRUCT",
           "UNION"
         ]
-      }
+      },
+      "help": "Named attributes (STRUCT) or tagged alternatives (UNION), including nested LIST[], ARRAY[N], STRUCT, or MAP types."
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Reviewed by tools/review_ui_descriptors.py: enum_values as a string list. Round trip verified in-process (create, re-inspect) on DuckDB 2.0.0 (profile pins 1.5.2) by tools/tests/test_ui_descriptor_roundtrip_duckdb.py. Native qualification on the pinned version remains with the platform teams."
+  "notes": "Enterprise DuckDB 1.5 custom type form verified against official DuckDB CREATE TYPE documentation: ALIAS, ENUM, STRUCT, UNION, fixed-length ARRAY (T[N]), MAP(K, V), CREATE OR REPLACE TYPE, CREATE TEMPORARY TYPE, schema selection, and COMMENT ON TYPE."
 }

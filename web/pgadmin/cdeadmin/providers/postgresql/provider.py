@@ -332,6 +332,13 @@ class PostgreSQLCatalogSource:
         inherited node templates."""
         connection = manager.connection()
         if catalog_kind == 'pgagent-job':
+            # pgAgent is an optional extension; return [] cleanly when absent.
+            status, installed_res = connection.execute_dict(
+                "SELECT pg_catalog.to_regclass('pgagent.pga_job') IS NOT NULL AS installed"
+            )
+            installed_rows = self._rows(status, installed_res)
+            if not installed_rows or not installed_rows[0].get('installed'):
+                return []
             # The inherited pgAgent Jobs collection (maintenance database):
             # the job row with its agent, class and last log status.
             sql = self._renderer('pga_job/sql/pre3.4/properties.sql',
@@ -382,7 +389,108 @@ class PostgreSQLCatalogSource:
         if catalog_kind == 'role':
             # The inherited role template names the role rolname.
             rows = [{**row, 'name': row.get('rolname')} for row in rows]
+            self._enrich_role_rows(connection, rows)
         return rows
+
+    def _enrich_role_rows(self, connection, rows):
+        """Enrich role rows with pg_roles attributes, pg_auth_members and rolconfig."""
+        if not rows or not callable(getattr(connection, 'execute_dict', None)):
+            return
+        try:
+            st, res = connection.execute_dict(
+                "SELECT oid, rolname, rolsuper, rolinherit, rolcreaterole, "
+                "rolcreatedb, rolcanlogin, rolreplication, rolbypassrls, "
+                "rolconnlimit, CASE WHEN rolvaliduntil IS NULL THEN NULL "
+                "ELSE rolvaliduntil::text END AS rolvaliduntil, rolconfig "
+                "FROM pg_catalog.pg_roles"
+            )
+            role_by_name = {
+                r['rolname']: r for r in (res.get('rows', []) if st and isinstance(res, Mapping) else ())
+                if isinstance(r, Mapping) and r.get('rolname')
+            }
+        except Exception:
+            role_by_name = {}
+
+        membership_by_member = {}
+        members_by_role = {}
+        try:
+            st, res = connection.execute_dict(
+                "SELECT r.rolname AS role_name, m.rolname AS member_name, "
+                "am.admin_option, am.inherit_option, am.set_option "
+                "FROM pg_catalog.pg_auth_members am "
+                "JOIN pg_catalog.pg_roles r ON r.oid = am.roleid "
+                "JOIN pg_catalog.pg_roles m ON m.oid = am.member "
+                "ORDER BY r.rolname, m.rolname"
+            )
+            if not st:
+                st, res = connection.execute_dict(
+                    "SELECT r.rolname AS role_name, m.rolname AS member_name, "
+                    "am.admin_option, true AS inherit_option, true AS set_option "
+                    "FROM pg_catalog.pg_auth_members am "
+                    "JOIN pg_catalog.pg_roles r ON r.oid = am.roleid "
+                    "JOIN pg_catalog.pg_roles m ON m.oid = am.member "
+                    "ORDER BY r.rolname, m.rolname"
+                )
+            for mrow in (res.get('rows', []) if st and isinstance(res, Mapping) else ()):
+                rname = mrow.get('role_name')
+                mname = mrow.get('member_name')
+                if not rname or not mname:
+                    continue
+                adm = bool(mrow.get('admin_option', False))
+                inh = bool(mrow.get('inherit_option', True))
+                set_o = bool(mrow.get('set_option', True))
+                membership_by_member.setdefault(mname, []).append({
+                    'role': rname, 'admin': adm, 'admin_option': adm,
+                    'inherit': inh, 'inherit_option': inh,
+                    'set': set_o, 'set_option': set_o,
+                })
+                members_by_role.setdefault(rname, []).append({
+                    'role': mname, 'admin': adm, 'admin_option': adm,
+                    'inherit': inh, 'inherit_option': inh,
+                    'set': set_o, 'set_option': set_o,
+                })
+        except Exception:
+            pass
+
+        db_settings_by_role = {}
+        try:
+            st, res = connection.execute_dict(
+                "SELECT r.rolname, d.datname AS database, s.setconfig "
+                "FROM pg_catalog.pg_db_role_setting s "
+                "JOIN pg_catalog.pg_roles r ON r.oid = s.setrole "
+                "LEFT JOIN pg_catalog.pg_database d ON d.oid = s.setdatabase "
+                "WHERE s.setrole <> 0 ORDER BY r.rolname, d.datname NULLS FIRST"
+            )
+            for srow in (res.get('rows', []) if st and isinstance(res, Mapping) else ()):
+                rname = srow.get('rolname')
+                dbname = srow.get('database')
+                for cfg in srow.get('setconfig') or ():
+                    if isinstance(cfg, str) and '=' in cfg:
+                        k, v = cfg.split('=', 1)
+                        entry = {'name': k, 'value': v}
+                        if dbname:
+                            entry['database'] = dbname
+                        db_settings_by_role.setdefault(rname, []).append(entry)
+        except Exception:
+            pass
+
+        for row in rows:
+            rname = row.get('rolname') or row.get('name')
+            if not rname:
+                continue
+            extra = role_by_name.get(rname)
+            if extra:
+                for k in (
+                    'rolsuper', 'rolinherit', 'rolcreaterole', 'rolcreatedb',
+                    'rolcanlogin', 'rolreplication', 'rolbypassrls',
+                    'rolconnlimit', 'rolvaliduntil', 'rolconfig',
+                ):
+                    if extra.get(k) is not None or k not in row:
+                        row[k] = extra.get(k)
+            if role_by_name:
+                row['rolmembership'] = membership_by_member.get(rname, [])
+                row['rolmembers'] = members_by_role.get(rname, [])
+                row['db_role_settings'] = db_settings_by_role.get(rname, [])
 
     def _databases(self, manager, object_id):
         connection = manager.connection()
@@ -568,13 +676,14 @@ class PostgreSQLProvider:
 
     def plan_admin_operation(self, request):
         compiled = self._compile_native_admin(request)
+        preview_statement = compiled.get('preview_statement', compiled['statement'])
         payload = {
             'resource_kind': request['resource_kind'],
             'operation_id': request['operation_id'],
             'target_resource': copy.deepcopy(request.get('target_resource')),
             'draft': copy.deepcopy(request.get('draft') or {}),
             'route': self._native_admin_route(request),
-            'statement': compiled['statement'],
+            'statement': preview_statement,
             'read_only': compiled['read_only'],
             **{key: compiled[key] for key in ('returns_rows', 'post_statement', 'expected_sha256', 'server_file_operation', 'autocommit', 'maintenance', 'minimum_server_version', 'observation_statement', 'reload_conf') if key in compiled},
         }
@@ -609,7 +718,7 @@ class PostgreSQLProvider:
         planned = {
             'command_preview': {
                 'language': 'postgresql-sql',
-                'statement': compiled['statement'],
+                'statement': preview_statement,
                 'provider_owned': True,
                 **({'verification_statement': compiled['post_statement']} if 'post_statement' in compiled else {}),
             },
@@ -681,12 +790,19 @@ class PostgreSQLProvider:
         route = payload.get('route') or {}
         statement = _required_text(payload.get('statement'), 'statement')
         compiled = self._compile_native_admin(payload)
-        expected = {'statement': statement, 'read_only': payload.get('read_only')}
+        compiled_check = {k: v for k, v in compiled.items() if k != 'preview_statement'}
+        expected = {
+            'statement': compiled['statement']
+            if compiled.get('preview_statement', compiled['statement']) == statement
+            else statement,
+            'read_only': payload.get('read_only'),
+        }
         for key in ('returns_rows', 'post_statement', 'expected_sha256', 'server_file_operation', 'autocommit', 'maintenance', 'minimum_server_version', 'observation_statement', 'reload_conf'):
-            if key in compiled:
+            if key in compiled_check:
                 expected[key] = payload.get(key)
-        if compiled != expected:
+        if compiled_check != expected:
             raise PostgreSQLProviderError('Retained administrative statement changed')
+        statement = compiled['statement']
         self.permissions.require('data_read' if compiled['read_only'] else 'administer')
         self.permissions.require('execute')
         if payload.get('retained_session_binding'):
@@ -1391,7 +1507,92 @@ class PostgreSQLProvider:
             native['dependencies'] = inspected['dependencies']
             native['dependents'] = inspected['dependents']
         native['inherited_inspection'] = {'states': inspected['states']}
+        self._populate_aclexplode_privileges(resource, connection_for)
+        if resource.get('resource_kind') == 'sequence':
+            try:
+                conn = connection_for(chain.get('did'))
+                seq_schema = native.get('schema')
+                seq_name = native.get('name') or (native.get('catalog_row') or {}).get('relname')
+                if conn and conn.connected() and seq_schema and seq_name:
+                    status, rows = conn.execute_dict(
+                        'SELECT last_value FROM pg_catalog.pg_sequences '
+                        'WHERE schemaname = %(s)s AND sequencename = %(n)s',
+                        {'s': seq_schema, 'n': seq_name},
+                    )
+                    if status and isinstance(rows, dict) and rows.get('rows'):
+                        lv = rows['rows'][0].get('last_value')
+                        if lv is not None:
+                            native.setdefault('sequence_facts', {})['current_value'] = int(lv)
+            except Exception:
+                pass
         return resource
+
+    @staticmethod
+    def _populate_aclexplode_privileges(resource, connection_for):
+        """Populate native['privileges'] via pg_catalog.aclexplode on live inspection."""
+        extension = (resource.get('extensions') or {}).get('postgresql') or {}
+        native = extension.get('native')
+        if not isinstance(native, dict):
+            return
+        kind = resource.get('resource_kind')
+        oid = native.get('oid') if native.get('oid') is not None else extension.get('object_id')
+        if isinstance(oid, str) and oid.isdigit():
+            oid = int(oid)
+        if not isinstance(oid, int) or oid <= 0:
+            return
+        spec_map = {
+            'table': ('pg_class', 'relacl', True),
+            'partitioned-table': ('pg_class', 'relacl', True),
+            'foreign-table': ('pg_class', 'relacl', True),
+            'view': ('pg_class', 'relacl', True),
+            'materialized-view': ('pg_class', 'relacl', True),
+            'sequence': ('pg_class', 'relacl', True),
+            'function': ('pg_proc', 'proacl', True),
+            'procedure': ('pg_proc', 'proacl', True),
+            'schema': ('pg_namespace', 'nspacl', True),
+            'type': ('pg_type', 'typacl', True),
+            'domain': ('pg_type', 'typacl', True),
+            'database': ('pg_database', 'datacl', False),
+        }
+        spec = spec_map.get(kind)
+        if spec is None:
+            return
+        catalog_table, acl_col, uses_db = spec
+        did = extension.get('database_id') if uses_db else None
+        try:
+            conn = connection_for(did)
+            if not conn or not conn.connected():
+                return
+            sql = (
+                "SELECT pg_catalog.pg_get_userbyid(a.grantor) AS grantor, "
+                "CASE WHEN a.grantee = 0 THEN 'PUBLIC' "
+                "ELSE pg_catalog.pg_get_userbyid(a.grantee) END AS grantee, "
+                "CASE WHEN a.grantee = 0 THEN 'special' "
+                "WHEN EXISTS(SELECT 1 FROM pg_catalog.pg_roles r "
+                "WHERE r.oid = a.grantee AND r.rolcanlogin) THEN 'user' "
+                "ELSE 'role' END AS grantee_kind, "
+                "a.privilege_type AS privilege, "
+                "a.is_grantable AS grant_option "
+                f"FROM pg_catalog.{catalog_table} c, "
+                f"LATERAL pg_catalog.aclexplode(c.{acl_col}) a "
+                "WHERE c.oid = %s "
+                "ORDER BY 2, 4"
+            )
+            status, res = conn.execute_dict(sql, [oid])
+            if status and isinstance(res, Mapping):
+                native['privileges'] = [
+                    {
+                        'grantee': str(r.get('grantee') or 'PUBLIC'),
+                        'grantee_kind': str(r.get('grantee_kind') or 'role'),
+                        'grantor': str(r.get('grantor') or ''),
+                        'privilege': str(r.get('privilege') or '').upper(),
+                        'grant_option': bool(r.get('grant_option', False)),
+                    }
+                    for r in res.get('rows', [])
+                    if isinstance(r, Mapping) and r.get('privilege')
+                ]
+        except Exception:
+            pass
 
     def _native_object_exists(self, route, native, attnum=None):
         """Confirm one captured object on a private attachment."""
@@ -1447,20 +1648,32 @@ class PostgreSQLProvider:
                                               r['display_name'])
                      for r in capture['resources']
                      if (r.get('native') or {}).get('catalog') == 'pg_class'}
-        # Domain constraints and composite attributes for the type editors.
+        # Domain constraints, composite attributes and OID lookup maps for the type editors.
         domain_constraints, attributes = {}, {}
+        types_by_oid, collations_by_oid, opclasses_by_oid, procs_by_oid = {}, {}, {}, {}
         for r in capture['resources']:
             n = r.get('native') or {}
-            if n.get('catalog') == 'pg_constraint':
+            cat = n.get('catalog')
+            oid_val = n.get('oid')
+            if cat == 'pg_constraint':
                 owner = (n.get('catalog_row') or {}).get('contypid')
                 if owner not in (None, '0', 0):
                     domain_constraints.setdefault(int(owner), []).append(
                         {'name': r['display_name'],
                          'definition': n.get('definition'),
                          'catalog_row': n.get('catalog_row')})
-            if n.get('catalog') == 'pg_class':
-                attributes[int(n['oid'])] = (
+            elif cat == 'pg_class':
+                attributes[int(oid_val)] = (
                     n.get('children') or {}).get('pg_attribute') or []
+            elif cat == 'pg_type' and oid_val is not None:
+                types_by_oid[int(oid_val)] = (
+                    n.get('definition') or r['display_name'])
+            elif cat == 'pg_collation' and oid_val is not None:
+                collations_by_oid[int(oid_val)] = r['display_name']
+            elif cat == 'pg_opclass' and oid_val is not None:
+                opclasses_by_oid[int(oid_val)] = r['display_name']
+            elif cat == 'pg_proc' and oid_val is not None:
+                procs_by_oid[int(oid_val)] = r['display_name']
         # A partitioned table's partitions, from each child's pg_inherits
         # row, for the Partitions grid (owner direction 2026-11-11).
         partitions_of: dict[int, list] = {}
@@ -1507,8 +1720,9 @@ class PostgreSQLProvider:
                               name=raw['data_type_identity'] + ' / ' + raw['language_name'])
             if item['resource_kind'] == 'sequence':
                 # The alter dialog's initial values (M4, 2026-11-11).
-                from .sequences import facts as sequence_facts
-                native['sequence_facts'] = sequence_facts(native)
+                from .sequences import facts as sequence_facts, privileges as sequence_privileges
+                native['sequence_facts'] = sequence_facts(native, relations, attributes)
+                native['privileges'] = sequence_privileges(native)
             if item['resource_kind'] == 'extension':
                 from .extensions import facts as extension_facts
                 native['extension_facts'] = extension_facts(native)
@@ -1519,11 +1733,12 @@ class PostgreSQLProvider:
                 # The table editor's initial values and the partition side
                 # (parent, bound) for the detach operation (M7).
                 from .partitions import partition_facts
-                from .tables import facts as table_facts
+                from .tables import facts as table_facts, privileges as table_privileges
                 native['partitions'] = partitions_of.get(
                     int(native['oid']) if str(native.get('oid')).isdigit()
                     else native.get('oid'), [])
                 native['table_facts'] = table_facts(native)
+                native['privileges'] = table_privileges(native)
                 native['partition_facts'] = partition_facts(native, relations)
                 # Not ``parent``: that is this listing's parent resource.
                 owner_table = native['partition_facts'].get('parent') or {}
@@ -1531,8 +1746,10 @@ class PostgreSQLProvider:
                     native['parent_table'] = owner_table
             if item['resource_kind'] == 'foreign-table':
                 from .foreign_tables import facts as foreign_table_facts
+                from .tables import privileges as table_privileges
                 native['table_facts'] = foreign_table_facts(
                     native, server_names)
+                native['privileges'] = table_privileges(native)
                 native['foreign_server'] = native['table_facts']['ftsrvname']
             if item['resource_kind'] == 'constraint':
                 # The owning relation and the editor's initial values (M7).
@@ -1545,18 +1762,26 @@ class PostgreSQLProvider:
                 native['constraint_facts'] = constraint_facts(
                     native, relations)
             if item['resource_kind'] == 'domain':
+                from .cluster import parse_acl_items
                 from .types import domain_facts
                 native['domain_facts'] = domain_facts(
-                    native, domain_constraints)
+                    native, domain_constraints, types_by_oid, collations_by_oid)
+                native['privileges'] = parse_acl_items(raw.get('typacl'), {'U': 'USAGE'})
             if item['resource_kind'] == 'type':
+                from .cluster import parse_acl_items
                 from .types import type_facts
-                native['type_facts'] = type_facts(native, attributes)
+                native['type_facts'] = type_facts(
+                    native, attributes, types_by_oid, collations_by_oid,
+                    opclasses_by_oid, procs_by_oid)
+                native['privileges'] = parse_acl_items(raw.get('typacl'), {'U': 'USAGE'})
             if item['resource_kind'] in {'view', 'materialized-view'}:
-                from .views import facts as view_facts
+                from .views import facts as view_facts, privileges as view_privileges
                 native['view_facts'] = view_facts(native)
+                native['privileges'] = view_privileges(native)
             if item['resource_kind'] in {'function', 'procedure'}:
-                from .routines import facts as routine_facts
+                from .routines import facts as routine_facts, privileges as routine_privileges
                 native['routine_facts'] = routine_facts(native)
+                native['privileges'] = routine_privileges(native)
             if item['resource_kind'] == 'index':
                 from .indexes import facts as index_facts
                 native['index_facts'] = index_facts(native)
@@ -1594,10 +1819,15 @@ class PostgreSQLProvider:
                 }[item['resource_kind']]
                 native[key] = reader(native)
             if item['resource_kind'] == 'schema':
-                from .schemas import facts as schema_facts
+                from .schemas import facts as schema_facts, privileges as schema_privileges
                 native['schema_facts'] = schema_facts(native)
+                native['privileges'] = schema_privileges(native)
                 native['relations'] = schema_relations.get(
                     item['display_name'], [])
+            if item['resource_kind'] == 'database':
+                from .cluster import parse_acl_items
+                from .databases import PRIVILEGE_CODES as DATABASE_PRIV_CODES
+                native['privileges'] = parse_acl_items(raw.get('datacl'), DATABASE_PRIV_CODES)
             _surface_facts(native)
             resource = {
                 'identity': self._identity(), 'endpoint_id': self.context.endpoint_id,

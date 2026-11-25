@@ -20,8 +20,8 @@ Type names are admitted by PostgreSQL's own parser (``_type_reference``),
 expressions as the policy editor admits them.
 """
 from .native_admin import (
-    PostgreSQLNativeAdminError, _flag, _identifier, _literal, _name,
-    _qualified, _type_reference, privilege_words,
+    PostgreSQLNativeAdminError, _collation_reference, _flag, _identifier,
+    _literal, _name, _qualified, _type_reference, privilege_words,
 )
 from .policies import expression
 
@@ -63,7 +63,16 @@ def _reference(value, label):
 
 # -- facts --------------------------------------------------------------------
 
-def domain_facts(native, constraints=None):
+def _oid_int(value):
+    try:
+        parsed = int(value or 0)
+        return parsed if parsed > 0 else 0
+    except (TypeError, ValueError):
+        return 0
+
+
+def domain_facts(native, constraints=None, types_by_oid=None,
+                 collations_by_oid=None):
     """Current values of a domain. ``constraints`` lists the captured
     pg_constraint resources (same capture) keyed by the domain OID."""
     row = native.get('catalog_row') or {}
@@ -81,16 +90,29 @@ def domain_facts(native, constraints=None):
                        'convalidated': bool(
                            (item.get('catalog_row') or {}).get(
                                'convalidated', True))})
-    return {'name': native.get('name') or row.get('typname'),
-            'basensp': native.get('schema'),
-            'owner': native.get('owner'),
-            'typnotnull': bool(row.get('typnotnull', False)),
-            'typdefault': row.get('typdefault'),
-            'description': native.get('comment'),
-            'constraints': checks}
+    base_oid = _oid_int(row.get('typbasetype'))
+    basetype = (types_by_oid or {}).get(base_oid) or row.get('basetype')
+    coll_oid = _oid_int(row.get('typcollation'))
+    collname = (collations_by_oid or {}).get(coll_oid)
+    if collname == 'default':
+        collname = None
+    out = {'name': native.get('name') or row.get('typname'),
+           'basensp': native.get('schema'),
+           'owner': native.get('owner'),
+           'typnotnull': bool(row.get('typnotnull', False)),
+           'typdefault': row.get('typdefault'),
+           'description': native.get('comment'),
+           'constraints': checks}
+    if basetype:
+        out['basetype'] = basetype
+    if collname:
+        out['collname'] = collname
+    return out
 
 
-def type_facts(native, attributes=None):
+def type_facts(native, attributes=None, types_by_oid=None,
+               collations_by_oid=None, opclasses_by_oid=None,
+               procs_by_oid=None):
     """Current values of a type. ``attributes`` maps relation OID to the
     captured pg_attribute rows of a composite type's relation."""
     row = native.get('catalog_row') or {}
@@ -105,15 +127,41 @@ def type_facts(native, attributes=None):
                   'type': item.get('formatted_type')}
                  for item in (attributes or {}).get(relation, [])
                  if not item.get('attisdropped')]
-    return {'name': native.get('name') or row.get('typname'),
-            'schema': native.get('schema'),
-            'typeowner': native.get('owner'),
-            'typtype': kind,
-            'kind': TYPE_KINDS.get(kind, 'other'),
-            'enum': [{'label': item.get('enumlabel')} for item in enum],
-            'composite': composite,
-            'typacl': list(row.get('typacl') or []),
-            'description': native.get('comment')}
+    out = {'name': native.get('name') or row.get('typname'),
+           'schema': native.get('schema'),
+           'typeowner': native.get('owner'),
+           'typtype': kind,
+           'kind': TYPE_KINDS.get(kind, 'other'),
+           'enum': [{'label': item.get('enumlabel')} for item in enum],
+           'composite': composite,
+           'typacl': list(row.get('typacl') or []),
+           'description': native.get('comment')}
+    ranges = (native.get('children') or {}).get('pg_range') or []
+    if kind == 'r' and ranges:
+        r0 = ranges[0]
+        subtype = (types_by_oid or {}).get(_oid_int(r0.get('rngsubtype')))
+        opcname = (opclasses_by_oid or {}).get(_oid_int(r0.get('rngsubopc')))
+        collname = (collations_by_oid or {}).get(
+            _oid_int(r0.get('rngcollation')))
+        if collname == 'default':
+            collname = None
+        canon = (procs_by_oid or {}).get(_oid_int(r0.get('rngcanonical')))
+        subdiff = (procs_by_oid or {}).get(_oid_int(r0.get('rngsubdiff')))
+        multirange = (types_by_oid or {}).get(
+            _oid_int(r0.get('rngmultitypid')))
+        if subtype:
+            out['typname'] = subtype
+        if opcname:
+            out['opcname'] = opcname
+        if collname:
+            out['collname'] = collname
+        if canon:
+            out['rngcanonical'] = canon
+        if subdiff:
+            out['rngsubdiff'] = subdiff
+        if multirange:
+            out['rngmultirangetype'] = multirange
+    return out
 
 
 def _grantee(value):
@@ -183,8 +231,8 @@ def _create_domain(draft):
                  + _type_reference(_with_modifiers(draft.get('basetype'),
                                                    draft), 'base type'))
     if not _blank(draft.get('collname')):
-        statement += ' COLLATE ' + _reference(draft['collname'],
-                                              'collation')
+        statement += ' COLLATE ' + _collation_reference(draft['collname'],
+                                                        'collation')
     if not _blank(draft.get('typdefault')):
         statement += ' DEFAULT ' + expression(draft['typdefault'],
                                               'default')
@@ -306,7 +354,7 @@ def _attribute(row):
             + _type_reference(_with_modifiers(row.get('type'), row),
                               'member type')
             + ('' if _blank(row.get('collation')) else
-               ' COLLATE ' + _reference(row['collation'], 'collation')))
+               ' COLLATE ' + _collation_reference(row['collation'], 'collation')))
 
 
 def _labels(rows):
@@ -341,8 +389,10 @@ def _create_type(draft):
                    + _type_reference(draft.get('typname'), 'subtype')]
         for key, keyword in _RANGE_OPTIONS:
             if not _blank(draft.get(key)):
-                options.append(f'{keyword} = ' + _reference(draft[key],
-                                                            keyword))
+                ref = (_collation_reference(draft[key], keyword)
+                       if key == 'collname'
+                       else _reference(draft[key], keyword))
+                options.append(f'{keyword} = ' + ref)
         statement = f'CREATE TYPE {qualified} AS RANGE (' + ', '.join(
             options) + ')'
     elif kind == 'p':
@@ -533,8 +583,13 @@ def _alter_type(native, draft):
                 members.discard(member)
                 members.add(row.get('to'))
             elif key == 'alter_attributes':
+                col_clause = (
+                    '' if _blank(row.get('collation'))
+                    else ' COLLATE ' + _collation_reference(row['collation'], 'collation')
+                )
                 values['type'] = _type_reference(
-                    _with_modifiers(row.get('type'), row), 'member type')
+                    _with_modifiers(row.get('type'), row), 'member type'
+                ) + col_clause
             elif key == 'add_attributes':
                 values['definition'] = _attribute(row)
                 members.add(member)
@@ -614,12 +669,15 @@ _FAMILY_FIELDS = (
     'typispreferred', 'element', 'typdelim', 'typalign', 'typstorage',
     'typbyval', 'is_collatable', 'type_acl', 'typacl', 'seclabels')
 _OWN_GRIDS = {
-    'domain': ('add_constraints', 'drop_constraints', 'validate_constraints',
-               'rename_constraints'),
-    'type': ('add_values', 'rename_values', 'add_attributes',
-             'alter_attributes', 'rename_attributes', 'drop_attributes'),
+    'domain': ('add_constraints', 'drop_constraints', 'validate_constraints'),
+    'type': ('add_values', 'add_attributes',
+             'alter_attributes', 'drop_attributes'),
 }
-_GRIDS = ('composite', 'enum', 'constraints', 'typacl', 'seclabels', 'revoke')
+_ALTER_SHARED_GRIDS = ('rename_values', 'rename_attributes',
+                       'rename_constraints', 'revoke')
+_GRIDS = ('composite', 'enum', 'constraints', 'typacl', 'seclabels',
+          'rename_values', 'rename_attributes', 'rename_constraints',
+          'revoke')
 _BOOLEANS = ('sysdomain', 'is_sys_type', 'typnotnull', 'typispreferred',
              'typbyval', 'is_collatable')
 _NUMBERS = ('typlen', 'precision')
@@ -652,7 +710,8 @@ def _family_form(kind, operation, field):
         return {'initial_value_path': [facts_key, key]} if alter else {}
     fields = []
     own = _OWN_GRIDS[kind] if alter else ()
-    for field_id in _FAMILY_FIELDS + own + (('revoke',) if alter else ()):
+    shared_alter = _ALTER_SHARED_GRIDS if alter else ()
+    for field_id in _FAMILY_FIELDS + own + shared_alter:
         title = field_id.replace('_', ' ').capitalize()
         if field_id in _GRIDS or field_id in own:
             fields.append(field(field_id, title, 'grid', columns=[],

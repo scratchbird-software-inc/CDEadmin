@@ -13,7 +13,8 @@
       "status": "draft",
       "confirmation": "none",
       "fields": [],
-      "notes": "Untested (draft)."
+      "notes": "Untested (draft).",
+      "form_reference": "SR-F-030793"
     },
     {
       "operation_id": "load_database",
@@ -34,7 +35,8 @@
           "help": "For a database the navigator cannot show: the metrics endpoint names only databases seen since the server started."
         }
       ],
-      "notes": "Loads a database by its name. Read back: /db/use on the database succeeds. Passed a live round trip on 1.11.0 (2026-10-31, tools/tests/test_ui_descriptor_roundtrip_immudb.py)."
+      "notes": "Loads a database by its name. Read back: /db/use on the database succeeds. Passed a live round trip on 1.11.0 (2026-10-31, tools/tests/test_ui_descriptor_roundtrip_immudb.py).",
+      "form_reference": "SR-F-030794"
     },
     {
       "operation_id": "update_settings",
@@ -348,7 +350,8 @@
           "required": false
         }
       ],
-      "notes": "Verified live on immudb 1.11.0 by tools/tests/test_ui_descriptor_roundtrip_immudb.py (2026-10-31). Permanent settings are not offered and are refused (pkg/server/db_options.go overwriteWith)."
+      "notes": "Verified live on immudb 1.11.0 by tools/tests/test_ui_descriptor_roundtrip_immudb.py (2026-10-31). Permanent settings are not offered and are refused (pkg/server/db_options.go overwriteWith).",
+      "form_reference": "SR-F-030795"
     },
     {
       "operation_id": "load",
@@ -361,7 +364,8 @@
       "status": "complete",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Loads an unloaded database. While any database is unloaded, immudb 1.11.0 cannot list databases (\"already closed\" from /db/list, /db/list/v2 and DATABASES(), pkg/server/server.go DatabaseListV2); the navigator then lists the databases the metrics endpoint names, each checked with /db/use, so an unloaded one is shown and can be loaded here. Read back: /db/use on the database succeeds. Passed a live round trip on 1.11.0 (2026-10-31, tools/tests/test_ui_descriptor_roundtrip_immudb.py)."
+      "notes": "Loads an unloaded database. While any database is unloaded, immudb 1.11.0 cannot list databases (\"already closed\" from /db/list, /db/list/v2 and DATABASES(), pkg/server/server.go DatabaseListV2); the navigator then lists the databases the metrics endpoint names, each checked with /db/use, so an unloaded one is shown and can be loaded here. Read back: /db/use on the database succeeds. Passed a live round trip on 1.11.0 (2026-10-31, tools/tests/test_ui_descriptor_roundtrip_immudb.py).",
+      "form_reference": "SR-F-030796"
     },
     {
       "operation_id": "unload",
@@ -374,7 +378,8 @@
       "status": "complete",
       "confirmation": "typed_name",
       "fields": [],
-      "notes": "Closes the database. Warns first: while any database is unloaded, immudb 1.11.0 cannot list databases or report server information, whichever client unloaded it; ScratchRobin then lists the databases the metrics endpoint names, without their settings. Read back: /db/use on the database fails \"already closed\". Passed a live round trip on 1.11.0 (2026-10-31, tools/tests/test_ui_descriptor_roundtrip_immudb.py)."
+      "notes": "Closes the database. Warns first: while any database is unloaded, immudb 1.11.0 cannot list databases or report server information, whichever client unloaded it; ScratchRobin then lists the databases the metrics endpoint names, without their settings. Read back: /db/use on the database fails \"already closed\". Passed a live round trip on 1.11.0 (2026-10-31, tools/tests/test_ui_descriptor_roundtrip_immudb.py).",
+      "form_reference": "SR-F-030797"
     },
     {
       "operation_id": "flush_index",
@@ -402,7 +407,8 @@
           "default": true
         }
       ],
-      "notes": "Untested (draft)."
+      "notes": "Untested (draft).",
+      "form_reference": "SR-F-030798"
     },
     {
       "operation_id": "compact_index",
@@ -415,7 +421,8 @@
       "status": "draft",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Untested (draft)."
+      "notes": "Untested (draft).",
+      "form_reference": "SR-F-030799"
     },
     {
       "operation_id": "truncate_history",
@@ -435,7 +442,8 @@
           "required": true
         }
       ],
-      "notes": "Untested (draft)."
+      "notes": "Untested (draft).",
+      "form_reference": "SR-F-030800"
     },
     {
       "operation_id": "change_password",
@@ -461,7 +469,8 @@
           "required": true
         }
       ],
-      "notes": "Verified live on immudb 1.11.0 by tools/tests/test_ui_descriptor_roundtrip_immudb.py (2026-10-31)."
+      "notes": "Verified live on immudb 1.11.0 by tools/tests/test_ui_descriptor_roundtrip_immudb.py (2026-10-31).",
+      "form_reference": "SR-F-030801"
     },
     {
       "operation_id": "set_active",
@@ -482,7 +491,8 @@
           "default": true
         }
       ],
-      "notes": "Verified live on immudb 1.11.0 by tools/tests/test_ui_descriptor_roundtrip_immudb.py (2026-10-31)."
+      "notes": "Verified live on immudb 1.11.0 by tools/tests/test_ui_descriptor_roundtrip_immudb.py (2026-10-31).",
+      "form_reference": "SR-F-030802"
     },
     {
       "operation_id": "grant_sql",
@@ -544,7 +554,8 @@
           ]
         }
       ],
-      "notes": "Verified live on immudb 1.11.0 by tools/tests/test_ui_descriptor_roundtrip_immudb.py (2026-10-31)."
+      "notes": "Verified live on immudb 1.11.0 by tools/tests/test_ui_descriptor_roundtrip_immudb.py (2026-10-31).",
+      "form_reference": "SR-F-030803"
     },
     {
       "operation_id": "revoke_sql",
@@ -606,7 +617,8 @@
           ]
         }
       ],
-      "notes": "Verified live on immudb 1.11.0 by tools/tests/test_ui_descriptor_roundtrip_immudb.py (2026-10-31)."
+      "notes": "Verified live on immudb 1.11.0 by tools/tests/test_ui_descriptor_roundtrip_immudb.py (2026-10-31).",
+      "form_reference": "SR-F-030804"
     }
   ]
 }

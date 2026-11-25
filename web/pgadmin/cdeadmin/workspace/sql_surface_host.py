@@ -2230,6 +2230,35 @@ def resolve_visual_catalog_object(
             n += 1
         return f'{prefix}{n}'
 
+    # --- 0. Upstream CTE or Recursive CTE Self-Reference ---
+    if rkind in ('cte', 'cte-self'):
+        alias_prefix = 'r' if rkind == 'cte-self' else 'c'
+        cte_alias = _next_alias(alias_prefix)
+        raw_cols = list(target_resource.get('columns') or merged.get('columns') or [])
+        norm_cols = [
+            {
+                'name': str(c.get('name') if isinstance(c, Mapping) else c),
+                'type': str(c.get('type') or c.get('native_type') or 'ANY') if isinstance(c, Mapping) else 'ANY',
+                'native_type': str(c.get('native_type') or c.get('type') or 'ANY') if isinstance(c, Mapping) else 'ANY',
+                'nullable': True,
+                'key': False,
+            }
+            for c in raw_cols
+            if (c.get('name') if isinstance(c, Mapping) else c)
+        ]
+        return {
+            'object_node': {
+                'id': cte_alias,
+                'resource_id': rid or f'{rkind}:{obj_name}',
+                'resource_kind': rkind,
+                'name': obj_name,
+                'schema_name': '',
+                'alias': cte_alias,
+                'columns': norm_cols,
+            },
+            'suggested_joins': [],
+        }
+
     # --- A. Selectable Stored Procedure / Table-Returning Function ---
     if rkind in _VISUAL_ROUTINE_KINDS:
         raw_params = list(
@@ -2603,8 +2632,308 @@ _CARD_PALETTE_BY_ROLE: dict[str, dict[str, str]] = {
         'border': '#7c3aed',
         'badge_bg': '#ddd6fe',
     },
+    'CTE': {
+        'header_bg': '#e0e7ff',
+        'header_fg': '#312e81',
+        'border': '#4f46e5',
+        'badge_bg': '#c7d2fe',
+    },
+    'CTE_SELF': {
+        'header_bg': '#fef3c7',
+        'header_fg': '#78350f',
+        'border': '#d97706',
+        'badge_bg': '#fde68a',
+    },
+    'WINDOW': {
+        'header_bg': '#ecfeff',
+        'header_fg': '#164e63',
+        'border': '#0891b2',
+        'badge_bg': '#cffafe',
+    },
 }
 
+_NO_ARG_WINDOW_FUNCTIONS = frozenset({
+    'ROW_NUMBER',
+    'RANK',
+    'DENSE_RANK',
+    'PERCENT_RANK',
+    'CUME_DIST',
+})
+_AGG_WINDOW_FUNCTIONS = frozenset({'COUNT', 'SUM', 'AVG', 'MIN', 'MAX'})
+_ALLOWED_FRAME_MODES = frozenset({'ROWS', 'RANGE', 'GROUPS'})
+
+
+def _compile_window_over_clauses(win_spec: Mapping[str, Any]) -> list[str]:
+    """Compile PARTITION BY, ORDER BY, and ROWS/RANGE/GROUPS frame inside OVER (...)."""
+    over_parts: list[str] = []
+    raw_part = win_spec.get('partition_by')
+    if isinstance(raw_part, str):
+        part_items = [s.strip() for s in raw_part.split(',') if s.strip()]
+    elif isinstance(raw_part, Sequence):
+        part_items = [str(s).strip() for s in raw_part if str(s).strip()]
+    else:
+        part_items = []
+    if part_items:
+        over_parts.append('PARTITION BY ' + ', '.join(part_items))
+
+    raw_ord = win_spec.get('order_by')
+    ord_items: list[str] = []
+    if isinstance(raw_ord, str):
+        ord_items = [s.strip() for s in raw_ord.split(',') if s.strip()]
+    elif isinstance(raw_ord, Sequence):
+        for o in raw_ord:
+            if isinstance(o, str) and o.strip():
+                ord_items.append(o.strip())
+            elif isinstance(o, Mapping) and (o.get('column') or o.get('expr')):
+                col_e = str(o.get('column') or o.get('expr')).strip()
+                dir_s = 'DESC' if str(o.get('direction') or o.get('dir') or 'asc').lower() == 'desc' else 'ASC'
+                nulls_s = str(o.get('nulls') or '').strip().upper()
+                item_s = f'{col_e} {dir_s}'
+                if nulls_s in ('FIRST', 'LAST', 'NULLS FIRST', 'NULLS LAST'):
+                    item_s += f" {nulls_s if nulls_s.startswith('NULLS ') else f'NULLS {nulls_s}'}"
+                ord_items.append(item_s)
+    if ord_items:
+        over_parts.append('ORDER BY ' + ', '.join(ord_items))
+
+    frame_mode = str(win_spec.get('frame_mode') or '').strip().upper()
+    if frame_mode in _ALLOWED_FRAME_MODES:
+        f_start = str(win_spec.get('frame_start') or 'UNBOUNDED PRECEDING').strip().upper()
+        f_end = str(win_spec.get('frame_end') or 'CURRENT ROW').strip().upper()
+        if f_start and f_end:
+            over_parts.append(f'{frame_mode} BETWEEN {f_start} AND {f_end}')
+        elif f_start:
+            over_parts.append(f'{frame_mode} {f_start}')
+    return over_parts
+
+
+def _compile_window_projection_expr(
+    proj: Mapping[str, Any],
+    base_expr: str,
+    eng: str,
+) -> tuple[str, str]:
+    """Return `(full_sql_expr, compact_display_summary)` for a windowed projection."""
+    w = proj.get('window')
+    win_spec = dict(w) if isinstance(w, Mapping) else {}
+    fn = str(win_spec.get('function') or 'ROW_NUMBER').strip().upper()
+    arg_expr = str(win_spec.get('argument') or base_expr or '*').strip()
+
+    if fn in _NO_ARG_WINDOW_FUNCTIONS:
+        call_sql = f'{fn}()'
+    elif fn == 'NTILE':
+        try:
+            buckets = max(1, int(win_spec.get('buckets') or 4))
+        except (TypeError, ValueError):
+            buckets = 4
+        call_sql = f'NTILE({buckets})'
+    elif fn in ('LAG', 'LEAD'):
+        args = [arg_expr or '*']
+        off_raw = win_spec.get('offset')
+        def_raw = str(win_spec.get('default_expr') if win_spec.get('default_expr') is not None else '').strip()
+        if off_raw not in (None, ''):
+            try:
+                args.append(str(max(1, int(off_raw))))
+            except (TypeError, ValueError):
+                pass
+            if def_raw:
+                args.append(def_raw)
+        call_sql = f"{fn}({', '.join(args)})"
+    elif fn == 'NTH_VALUE':
+        try:
+            nth = max(1, int(win_spec.get('offset') or 2))
+        except (TypeError, ValueError):
+            nth = 2
+        call_sql = f'NTH_VALUE({arg_expr or "*"}, {nth})'
+    else:
+        dist = 'DISTINCT ' if (win_spec.get('distinct') and fn in _AGG_WINDOW_FUNCTIONS and arg_expr != '*') else ''
+        call_sql = f'{fn}({dist}{arg_expr or "*"})'
+
+    win_ref = str(win_spec.get('window_ref') or '').strip()
+    if win_ref:
+        over_sql = f'OVER {_quote_ident(win_ref, eng)}'
+        summary = f'{call_sql} OVER {win_ref}'
+    else:
+        over_clauses = _compile_window_over_clauses(win_spec)
+        over_inner = ' '.join(over_clauses)
+        over_sql = f'OVER ({over_inner})'
+        summary = f'{call_sql} {over_sql}'
+    return f'{call_sql} {over_sql}', summary
+
+
+def _infer_visual_stage_columns(
+    stage_obj: Mapping[str, Any],
+    catalog_tables: Mapping[str, list[dict[str, Any]]],
+    explicit_columns: Sequence[str] | str | None = None,
+) -> list[dict[str, Any]]:
+    """Infer output column metadata of a CTE stage so recursive self-refs and downstream CTEs expose ports."""
+    if isinstance(explicit_columns, str) and explicit_columns.strip():
+        names = [c.strip() for c in explicit_columns.split(',') if c.strip()]
+        if names:
+            return [{'name': n, 'type': 'ANY', 'native_type': 'ANY'} for n in names]
+    elif isinstance(explicit_columns, Sequence) and not isinstance(explicit_columns, (str, bytes)):
+        names = [str(c).strip() for c in explicit_columns if str(c).strip()]
+        if names:
+            return [{'name': n, 'type': 'ANY', 'native_type': 'ANY'} for n in names]
+
+    projs = [p for p in (stage_obj.get('projections') or ()) if isinstance(p, Mapping)]
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    if projs:
+        for idx, p in enumerate(projs):
+            alias = str(p.get('alias') or '').strip()
+            col = str(p.get('column') or '').strip()
+            expr = str(p.get('expression') or p.get('expr') or '').strip()
+            name = alias
+            if not name and col and col != '*':
+                name = col
+            if not name and expr:
+                # Extract trailing identifier if simple `t1.col`
+                simple_m = re.match(r'^[A-Za-z0-9_."`]+\.([A-Za-z_][A-Za-z0-9_$]*)$', expr)
+                if simple_m:
+                    name = simple_m.group(1)
+            if not name:
+                name = f'col_{idx + 1}'
+            if name not in seen:
+                seen.add(name)
+                is_win = isinstance(p.get('window'), Mapping) or str(p.get('aggregate') or '').upper() == 'WINDOW'
+                out.append({
+                    'name': name,
+                    'type': 'WINDOW' if is_win else 'ANY',
+                    'native_type': 'WINDOW' if is_win else 'ANY',
+                })
+        return out
+
+    for tbl in stage_obj.get('tables') or ():
+        if not isinstance(tbl, Mapping):
+            continue
+        tname = str(tbl.get('name') or '').strip()
+        for c in list(tbl.get('columns') or catalog_tables.get(tname) or ()):
+            cname = str(c.get('name') if isinstance(c, Mapping) else c).strip()
+            ctype = _format_catalog_field_type(c) if isinstance(c, Mapping) else 'ANY'
+            if cname and cname not in seen:
+                seen.add(cname)
+                out.append({'name': cname, 'type': ctype or 'ANY', 'native_type': ctype or 'ANY'})
+    return out
+
+
+def _compile_visual_select_sql(
+    stage_obj: Mapping[str, Any],
+    eng: str,
+    indent: int = 0,
+    include_limit: bool = True,
+) -> tuple[str, list[str]]:
+    """Compile a single visual SELECT stage (tables, joins, projections/windows, named WINDOW, clauses)."""
+    pad = ' ' * indent
+    tables: list[dict[str, Any]] = list(stage_obj.get('tables') or [])
+    joins: list[dict[str, Any]] = list(stage_obj.get('joins') or [])
+    join_plan = VisualJoinPlan(tables, joins)
+    tables, joins = join_plan.tables, join_plan.joins
+    if not tables:
+        return '', []
+
+    projections: list[dict[str, Any]] = list(stage_obj.get('projections') or [])
+    filters: list[dict[str, Any]] = list(stage_obj.get('filters') or [])
+    group_by: list[str] = list(stage_obj.get('group_by') or [])
+    order_by: list[Any] = list(stage_obj.get('order_by') or [])
+    named_windows: list[dict[str, Any]] = [
+        w for w in (stage_obj.get('windows') or ()) if isinstance(w, Mapping) and str(w.get('name') or '').strip()
+    ]
+    limit_val = stage_obj.get('limit') if include_limit else None
+    distinct = bool(stage_obj.get('distinct'))
+
+    warnings: list[str] = []
+    one_to_many_pairs = set()
+    for jn in joins:
+        card = str(jn.get('cardinality') or '1:N')
+        if card in ('1:N', 'N:M'):
+            one_to_many_pairs.add(tuple(sorted((str(jn.get('left_table') or ''), str(jn.get('right_table') or '')))))
+    if len(one_to_many_pairs) >= 2:
+        warnings.append(
+            'Multiple 1:N / N:M joins detected — aggregate measures may fan out without pre-aggregation.'
+        )
+
+    if projections:
+        proj_parts: list[str] = []
+        for p in projections:
+            if not isinstance(p, Mapping):
+                continue
+            expr = str(p.get('expression') or p.get('expr') or '').strip()
+            agg = str(p.get('aggregate') or '').strip().upper()
+            is_win = isinstance(p.get('window'), Mapping) or agg == 'WINDOW'
+            reference = str(p.get('table') or '')
+            column = str(p.get('column') or '')
+            if reference and column and expr == f'{reference}.{column}':
+                expr = ''
+            if not expr and (reference or column):
+                t_ref = (
+                    join_plan.qualifier(join_plan.resolve(reference), lambda value: _quote_ident(value, eng))
+                    if reference
+                    else ''
+                )
+                c_ref = _quote_ident(str(column or '*'), eng) if column != '*' else '*'
+                expr = f'{t_ref}.{c_ref}' if t_ref else c_ref
+            if is_win:
+                expr, _ = _compile_window_projection_expr(p, expr, eng)
+            elif agg in ('COUNT', 'SUM', 'AVG', 'MIN', 'MAX') and not expr.upper().startswith(f'{agg}('):
+                expr = f'{agg}({expr or "*"})'
+            elif not expr:
+                expr = '*'
+            alias_out = str(p.get('alias') or '').strip()
+            proj_parts.append(
+                f'{pad}  {expr} AS {_quote_ident(alias_out, eng)}' if alias_out else f'{pad}  {expr}'
+            )
+        select_head = (f'{pad}SELECT DISTINCT\n' if distinct else f'{pad}SELECT\n') + ',\n'.join(proj_parts)
+    else:
+        select_head = f'{pad}SELECT DISTINCT\n{pad}  *' if distinct else f'{pad}SELECT\n{pad}  *'
+
+    raw_from_sql, cycle_conditions = join_plan.render(
+        lambda value: _quote_ident(value, eng),
+        lambda table: _format_visual_relation_sql(table, eng),
+    )
+    from_sql = '\n'.join(f'{pad}{ln}' if ln else ln for ln in raw_from_sql.splitlines())
+
+    clauses = [select_head, from_sql]
+    where_items = [
+        str(f.get('expression') or '').strip()
+        for f in filters
+        if isinstance(f, dict) and f.get('clause', 'where') == 'where' and str(f.get('expression') or '').strip()
+    ] + [str(w).strip() for w in (stage_obj.get('where') or []) if str(w).strip()]
+    where_items = [f'({condition})' for condition in cycle_conditions] + where_items
+    if where_items:
+        clauses.append(f'{pad}WHERE ' + f'\n{pad}  AND '.join(f'({item})' for item in where_items))
+    if group_by:
+        clauses.append(f'{pad}GROUP BY ' + ', '.join(str(g) for g in group_by if str(g).strip()))
+    having_items = [
+        str(f.get('expression') or '').strip()
+        for f in filters
+        if isinstance(f, dict) and f.get('clause') == 'having' and str(f.get('expression') or '').strip()
+    ] + [str(h).strip() for h in (stage_obj.get('having') or []) if str(h).strip()]
+    if having_items:
+        clauses.append(f'{pad}HAVING ' + f'\n{pad}   AND '.join(f'({item})' for item in having_items))
+    if named_windows:
+        win_defs: list[str] = []
+        for nw in named_windows:
+            wname = _quote_ident(str(nw.get('name')).strip(), eng)
+            over_bits = _compile_window_over_clauses(nw)
+            win_defs.append(f"{wname} AS ({' '.join(over_bits)})")
+        if win_defs:
+            clauses.append(f'{pad}WINDOW ' + f',\n{pad}       '.join(win_defs))
+    if order_by:
+        ord_parts = []
+        for o in order_by:
+            if isinstance(o, str) and o.strip():
+                ord_parts.append(o.strip())
+            elif isinstance(o, dict) and (o.get('column') or o.get('expr')):
+                col_expr = o.get('column') or o.get('expr')
+                direction = 'DESC' if str(o.get('direction') or o.get('dir') or 'asc').lower() == 'desc' else 'ASC'
+                ord_parts.append(f'{col_expr} {direction}')
+        if ord_parts:
+            clauses.append(f'{pad}ORDER BY ' + ', '.join(ord_parts))
+    if limit_val and int(limit_val) > 0:
+        if eng == 'firebird':
+            clauses.append(f'{pad}FETCH FIRST {int(limit_val)} ROWS ONLY')
+        else:
+            clauses.append(f'{pad}LIMIT {int(limit_val)}')
+    return '\n'.join(clauses), warnings
 
 
 def build_visual_query_ddn_scene(
@@ -2614,24 +2943,154 @@ def build_visual_query_ddn_scene(
 ) -> tuple[dict[str, Any], str, list[str]]:
     """Build BOTH:
     1. A `RobinTiledCanvas`-compatible DDN diagram scene (`loaded_tiles`, `nodes`, `edges`, `canvas_bounds`)
-       for `100% Area 3e` visual rendering, and
-    2. Synchronized dialect SQL (including selectable stored procedures & table functions) + fan-out warnings!
+       for `100% Area 3e` visual rendering (for the active CTE/Anchor/Recursive/Final stage), and
+    2. Synchronized dialect SQL (including WITH / WITH RECURSIVE CTEs, Window OVER specs, named WINDOWs,
+       selectable stored procedures & table functions) + fan-out/recursion warnings!
     """
     eng = str(engine_id or 'relational').split('-')[0].lower()
-    tables: list[dict[str, Any]] = list(visual_model.get('tables') or [])
-    joins: list[dict[str, Any]] = list(visual_model.get('joins') or [])
+    raw_ctes = [c for c in (visual_model.get('ctes') or ()) if isinstance(c, Mapping)]
+    active_stage_key = str(visual_model.get('active_stage') or '__final__').strip() or '__final__'
+
+    effective_catalog: dict[str, list[dict[str, Any]]] = dict(catalog_tables or {})
+    fanout_warnings: list[str] = []
+
+    # 1. Validate & compile all CTE stages in topological order
+    compiled_cte_blocks: list[str] = []
+    any_recursive_cte = bool(visual_model.get('recursive'))
+    seen_cte_names: set[str] = set()
+    last_compiled_cte_name = ''
+
+    for c_idx, cte_item in enumerate(raw_ctes):
+        cte_name = str(cte_item.get('name') or f'cte_{c_idx + 1}').strip()
+        if not cte_name:
+            raise ValueError('Every CTE stage requires a non-empty name.')
+        if cte_name.lower() in seen_cte_names:
+            raise ValueError(f'Duplicate CTE name "{cte_name}".')
+        seen_cte_names.add(cte_name.lower())
+
+        is_rec = bool(cte_item.get('recursive'))
+        if is_rec:
+            any_recursive_cte = True
+
+        anchor_stage = dict(cte_item.get('anchor') or {})
+        anchor_sql, anchor_warns = _compile_visual_select_sql(anchor_stage, eng, indent=4, include_limit=True)
+        for w in anchor_warns:
+            fanout_warnings.append(f'CTE {cte_name}: {w}')
+
+        inferred_cols = _infer_visual_stage_columns(
+            anchor_stage, effective_catalog, cte_item.get('columns')
+        )
+        effective_catalog[cte_name] = inferred_cols
+
+        rec_sql = ''
+        if is_rec:
+            rec_stage = dict(cte_item.get('recursive_branch') or {})
+            # Hydrate any self-reference card in the recursive step with the anchor's output columns
+            hydrated_rec_tables = []
+            for rt in rec_stage.get('tables') or ():
+                if isinstance(rt, Mapping):
+                    rt_copy = dict(rt)
+                    if str(rt_copy.get('resource_kind') or '').lower() in ('cte-self', 'cte') and str(rt_copy.get('name') or '') == cte_name:
+                        rt_copy['columns'] = inferred_cols
+                    hydrated_rec_tables.append(rt_copy)
+            rec_stage['tables'] = hydrated_rec_tables
+            rec_sql, rec_warns = _compile_visual_select_sql(rec_stage, eng, indent=4, include_limit=False)
+            for w in rec_warns:
+                fanout_warnings.append(f'CTE {cte_name} (Recursive): {w}')
+
+            has_where_guard = bool(rec_stage.get('where') or rec_stage.get('filters'))
+            cycle_cfg = cte_item.get('cycle') if isinstance(cte_item.get('cycle'), Mapping) else {}
+            has_cycle_guard = bool(cycle_cfg and cycle_cfg.get('enabled'))
+            has_outer_limit = bool(visual_model.get('limit'))
+            if rec_sql and not (has_where_guard or has_cycle_guard or has_outer_limit):
+                fanout_warnings.append(
+                    f'Recursive CTE "{cte_name}" has no WHERE depth guard, CYCLE clause, or outer row limit.'
+                )
+
+        if anchor_sql:
+            col_decl_raw = cte_item.get('columns')
+            if isinstance(col_decl_raw, str) and col_decl_raw.strip():
+                col_list = [_quote_ident(c.strip(), eng) for c in col_decl_raw.split(',') if c.strip()]
+            elif isinstance(col_decl_raw, Sequence) and not isinstance(col_decl_raw, (str, bytes)):
+                col_list = [_quote_ident(str(c).strip(), eng) for c in col_decl_raw if str(c).strip()]
+            else:
+                col_list = []
+            head = f'  {_quote_ident(cte_name, eng)}'
+            if col_list:
+                head += f" ({', '.join(col_list)})"
+            head += ' AS'
+            mat_mode = str(cte_item.get('materialized') or '').strip().upper()
+            if mat_mode in ('MATERIALIZED', 'NOT MATERIALIZED'):
+                head += f' {mat_mode}'
+
+            if is_rec and rec_sql:
+                u_mode = 'UNION' if str(cte_item.get('union_mode') or '').strip().upper() == 'UNION' else 'UNION ALL'
+                body = f'{anchor_sql}\n    {u_mode}\n{rec_sql}'
+            else:
+                body = anchor_sql
+
+            cycle_suffix = ''
+            cycle_cfg = cte_item.get('cycle') if isinstance(cte_item.get('cycle'), Mapping) else {}
+            if is_rec and cycle_cfg and cycle_cfg.get('enabled'):
+                c_cols_raw = str(cycle_cfg.get('columns') or '').strip()
+                c_cols = [_quote_ident(c.strip(), eng) for c in c_cols_raw.split(',') if c.strip()]
+                set_col = str(cycle_cfg.get('set_column') or 'is_cycle').strip()
+                using_col = str(cycle_cfg.get('using_column') or 'traversal_path').strip()
+                if c_cols and set_col and using_col and set_col != using_col:
+                    cycle_suffix = (
+                        f" CYCLE {', '.join(c_cols)} SET {_quote_ident(set_col, eng)} "
+                        f"USING {_quote_ident(using_col, eng)}"
+                    )
+
+            compiled_cte_blocks.append(f'{head} (\n{body}\n  ){cycle_suffix}')
+            last_compiled_cte_name = cte_name
+
+    # 2. Validate & compile Final SELECT stage
+    final_sql, final_warns = _compile_visual_select_sql(visual_model, eng, indent=0, include_limit=True)
+    for w in final_warns:
+        if w not in fanout_warnings:
+            fanout_warnings.append(w)
+
+    if not final_sql and compiled_cte_blocks and last_compiled_cte_name:
+        final_sql = f'SELECT\n  *\nFROM {_quote_ident(last_compiled_cte_name, eng)}'
+        if visual_model.get('limit') and int(visual_model['limit']) > 0:
+            if eng == 'firebird':
+                final_sql += f"\nFETCH FIRST {int(visual_model['limit'])} ROWS ONLY"
+            else:
+                final_sql += f"\nLIMIT {int(visual_model['limit'])}"
+
+    if compiled_cte_blocks and final_sql:
+        with_kw = 'WITH RECURSIVE' if any_recursive_cte else 'WITH'
+        built_sql = f"{with_kw}\n{',\n'.join(compiled_cte_blocks)}\n{final_sql};"
+    elif final_sql:
+        built_sql = f'{final_sql};'
+    else:
+        built_sql = ''
+
+    # 3. Resolve which stage's visual graph to render on RobinTiledCanvas
+    active_stage_obj: Mapping[str, Any] = visual_model
+    if active_stage_key.startswith('cte:'):
+        parts = active_stage_key.split(':')
+        target_cte_id = parts[1] if len(parts) >= 2 else ''
+        branch_kind = parts[2] if len(parts) >= 3 else 'anchor'
+        matched_cte = next(
+            (c for c in raw_ctes if str(c.get('id') or c.get('name') or '') == target_cte_id),
+            None,
+        )
+        if matched_cte is not None:
+            if branch_kind == 'recursive' and matched_cte.get('recursive'):
+                active_stage_obj = dict(matched_cte.get('recursive_branch') or {})
+            else:
+                active_stage_obj = dict(matched_cte.get('anchor') or {})
+
+    tables: list[dict[str, Any]] = list(active_stage_obj.get('tables') or [])
+    joins: list[dict[str, Any]] = list(active_stage_obj.get('joins') or [])
     join_plan = VisualJoinPlan(tables, joins)
     tables, joins = join_plan.tables, join_plan.joins
-    projections: list[dict[str, Any]] = list(visual_model.get('projections') or [])
-    filters: list[dict[str, Any]] = list(visual_model.get('filters') or [])
-    group_by: list[str] = list(visual_model.get('group_by') or [])
-    order_by: list[dict[str, Any]] = list(visual_model.get('order_by') or [])
-    limit_val = visual_model.get('limit')
-    distinct = bool(visual_model.get('distinct'))
+    projections: list[dict[str, Any]] = list(active_stage_obj.get('projections') or [])
 
     nodes: list[dict[str, Any]] = []
     edges: list[dict[str, Any]] = []
-    fanout_warnings: list[str] = []
     node_lookup: dict[str, dict[str, Any]] = {}
 
     card_header_h = 38
@@ -2643,7 +3102,11 @@ def build_visual_query_ddn_scene(
         t_alias = str(tbl.get('alias') or '').strip()
         rkind = str(tbl.get('resource_kind') or 'table').lower()
         role = (
-            'PROC'
+            'CTE_SELF'
+            if rkind == 'cte-self'
+            else 'CTE'
+            if rkind == 'cte'
+            else 'PROC'
             if rkind in _VISUAL_ROUTINE_KINDS
             else 'VIEW'
             if 'view' in rkind
@@ -2652,7 +3115,9 @@ def build_visual_query_ddn_scene(
         palette = _CARD_PALETTE_BY_ROLE[role]
 
         in_params = list(tbl.get('input_parameters') or [])
-        if in_params:
+        if rkind == 'cte-self':
+            card_title = f'↻ {t_name}' + (f' ({t_alias})' if t_alias else '')
+        elif in_params:
             sig = ', '.join(
                 str(p.get('expr') or f":{p.get('name')}")
                 if isinstance(p, Mapping)
@@ -2663,7 +3128,7 @@ def build_visual_query_ddn_scene(
         else:
             card_title = f'{t_name} ({t_alias})' if t_alias else t_name
 
-        cols = list(tbl.get('columns') or catalog_tables.get(t_name) or [])
+        cols = list(tbl.get('columns') or effective_catalog.get(t_name) or [])
         fields_all: list[dict[str, Any]] = []
         legacy_cols: list[dict[str, Any]] = []
 
@@ -2726,6 +3191,7 @@ def build_visual_query_ddn_scene(
             + max(1, len(visible_fields)) * field_row_h
             + (22 if hidden_count > 0 else 10)
         )
+        subtitle_lbl = 'SELF CTE' if role == 'CTE_SELF' else role
         node_obj = {
             'id': t_id,
             'kind': 'entity',
@@ -2734,7 +3200,7 @@ def build_visual_query_ddn_scene(
             'raw_name': t_name,
             'alias': t_alias,
             'role': role,
-            'subtitle': role,
+            'subtitle': subtitle_lbl,
             'resource_kind': rkind,
             'input_parameters': in_params,
             'palette': palette,
@@ -2751,7 +3217,6 @@ def build_visual_query_ddn_scene(
             if key_ref and key_ref not in node_lookup:
                 node_lookup[key_ref] = node_obj
 
-    one_to_many_pairs = set()
     for j_idx, jn in enumerate(joins):
         l_tbl = str(jn.get('left_table') or '')
         r_tbl = str(jn.get('right_table') or '')
@@ -2759,8 +3224,6 @@ def build_visual_query_ddn_scene(
         r_col = str(jn.get('right_column') or 'ID')
         j_type = str(jn.get('join_type') or 'INNER').upper()
         cardinality = str(jn.get('cardinality') or '1:N')
-        if cardinality in ('1:N', 'N:M'):
-            one_to_many_pairs.add(tuple(sorted((l_tbl, r_tbl))))
 
         src = node_lookup.get(l_tbl)
         dst = node_lookup.get(r_tbl)
@@ -2814,10 +3277,90 @@ def build_visual_query_ddn_scene(
             ],
         })
 
-    if len(one_to_many_pairs) >= 2:
-        fanout_warnings.append(
-            'Multiple 1:N / N:M joins detected — aggregate measures may fan out without pre-aggregation.'
-        )
+    # Render an analytical Window (OVER) card on the canvas when window projections exist on the active stage
+    win_projs = [
+        p
+        for p in projections
+        if isinstance(p, Mapping)
+        and (isinstance(p.get('window'), Mapping) or str(p.get('aggregate') or '').upper() == 'WINDOW')
+    ]
+    if win_projs and nodes:
+        rightmost_x = max(float(n['x'] + n['width']) for n in nodes) + 96.0
+        top_y = min(float(n['y']) for n in nodes)
+        win_fields: list[dict[str, Any]] = []
+        win_legacy_cols: list[dict[str, Any]] = []
+        for wi, wp in enumerate(win_projs[:12]):
+            base_e = str(wp.get('expression') or wp.get('expr') or wp.get('column') or '*').strip()
+            _, summary_txt = _compile_window_projection_expr(wp, base_e, eng)
+            w_alias = str(wp.get('alias') or f'win_{wi + 1}').strip()
+            win_fields.append({
+                'id': f'__window_card__.{w_alias}',
+                'name': w_alias,
+                'raw_name': w_alias,
+                'selected': True,
+                'datatype': summary_txt[:34],
+                'is_pk': False,
+                'is_fk': False,
+                'nullable': True,
+                'port_y': card_header_h + wi * field_row_h + field_row_h / 2.0,
+            })
+            win_legacy_cols.append({
+                'name': f'∑ {w_alias}',
+                'raw_name': w_alias,
+                'selected': True,
+                'type': summary_txt[:34],
+                'pk': False,
+            })
+        win_card_w = 310
+        win_card_h = card_header_h + max(1, len(win_fields)) * field_row_h + 10
+        win_node = {
+            'id': '__window_over_card__',
+            'kind': 'entity',
+            'name': 'Window Analytics (OVER)',
+            'label': 'Window Analytics (OVER)',
+            'raw_name': 'OVER',
+            'alias': '',
+            'role': 'WINDOW',
+            'subtitle': 'OVER (...)',
+            'resource_kind': 'window-summary',
+            'input_parameters': [],
+            'palette': _CARD_PALETTE_BY_ROLE['WINDOW'],
+            'x': rightmost_x,
+            'y': top_y,
+            'width': win_card_w,
+            'height': win_card_h,
+            'fields': win_fields,
+            'hidden_field_count': 0,
+            'columns': win_legacy_cols,
+        }
+        anchor_node = nodes[-1]
+        sx = float(anchor_node['x'] + anchor_node['width'])
+        sy = float(anchor_node['y'] + card_header_h / 2.0)
+        dx = float(win_node['x'])
+        dy = float(win_node['y'] + card_header_h / 2.0)
+        mid_x = round((sx + dx) / 2.0, 1)
+        nodes.append(win_node)
+        edges.append({
+            'id': '__window_over_edge__',
+            'join_index': -1,
+            'source': anchor_node['id'],
+            'target': win_node['id'],
+            'left_column': '',
+            'right_column': '',
+            'join_type': 'OVER',
+            'label': 'OVER (...)',
+            'display_label': f'OVER ({len(win_projs)})',
+            'label_pos': {'x': mid_x, 'y': round((sy + dy) / 2.0, 1), 'w': 78},
+            'cardinality': '1:1',
+            'source_mark': 'one',
+            'target_mark': 'arrow',
+            'points': [
+                {'x': round(sx, 1), 'y': round(sy, 1)},
+                {'x': mid_x, 'y': round(sy, 1)},
+                {'x': mid_x, 'y': round(dy, 1)},
+                {'x': round(dx, 1), 'y': round(dy, 1)},
+            ],
+        })
 
     min_x = min((float(n['x']) for n in nodes), default=0.0) - 40.0
     min_y = min((float(n['y']) for n in nodes), default=0.0) - 40.0
@@ -2845,6 +3388,7 @@ def build_visual_query_ddn_scene(
     scene_sig = hashlib.sha256(
         json.dumps(
             {
+                'stage': active_stage_key,
                 'nodes': [(n['id'], n['name'], len(n['fields'])) for n in nodes],
                 'edges': [(e['id'], e['display_label']) for e in edges],
             },
@@ -2855,7 +3399,8 @@ def build_visual_query_ddn_scene(
     scene = {
         'view_id': 'query_canvas',
         'activeViewId': 'query_canvas',
-        'fit_key': 'query_canvas_populated' if nodes else 'query_canvas_empty',
+        'active_stage': active_stage_key,
+        'fit_key': f'{active_stage_key}_populated' if nodes else f'{active_stage_key}_empty',
         'ddn_sha256': scene_sig,
         'views': [{'id': 'query_canvas', 'name': 'Visual Query Canvas', 'profile': 'erd.physical@1'}],
         'canvas_bounds': {
@@ -2892,79 +3437,7 @@ def build_visual_query_ddn_scene(
         'loaded_tiles': {'0:0': tile_payload},
     }
 
-    # Build Dialect SQL from structured visual model
-    if not tables:
-        return scene, '', fanout_warnings
-
-
-    if projections:
-        proj_parts = []
-        for p in projections:
-            expr = str(p.get('expression') or p.get('expr') or '').strip()
-            agg = str(p.get('aggregate') or '').strip().upper()
-            # Catalog-driven projections carry both a structured field and
-            # a display expression. Quote the structured identity, rather
-            # than emitting lower-case aliases as unquoted Firebird SQL.
-            reference = str(p.get('table') or '')
-            column = str(p.get('column') or '')
-            if reference and column and expr == f'{reference}.{column}':
-                expr = ''
-            if not expr:
-                reference = str(p.get('table') or '')
-                t_ref = join_plan.qualifier(join_plan.resolve(reference), lambda value: _quote_ident(value, eng)) if reference else ''
-                c_ref = _quote_ident(str(p.get('column') or '*'), eng) if p.get('column') != '*' else '*'
-                expr = f'{t_ref}.{c_ref}' if t_ref else c_ref
-            if agg in ('COUNT', 'SUM', 'AVG', 'MIN', 'MAX') and not expr.upper().startswith(f'{agg}('):
-                expr = f'{agg}({expr})'
-            alias_out = str(p.get('alias') or '').strip()
-            proj_parts.append(
-                f'  {expr} AS {_quote_ident(alias_out, eng)}' if alias_out else f'  {expr}'
-            )
-        select_head = ('SELECT DISTINCT\n' if distinct else 'SELECT\n') + ',\n'.join(proj_parts)
-    else:
-        select_head = 'SELECT DISTINCT\n  *' if distinct else 'SELECT\n  *'
-
-    from_sql, cycle_conditions = join_plan.render(
-        lambda value: _quote_ident(value, eng),
-        lambda table: _format_visual_relation_sql(table, eng),
-    )
-
-    clauses = [select_head, from_sql]
-    where_items = [
-        str(f.get('expression') or '').strip()
-        for f in filters
-        if isinstance(f, dict) and f.get('clause', 'where') == 'where' and str(f.get('expression') or '').strip()
-    ] + [str(w).strip() for w in (visual_model.get('where') or []) if str(w).strip()]
-    where_items = [f'({condition})' for condition in cycle_conditions] + where_items
-    if where_items:
-        clauses.append('WHERE ' + '\n  AND '.join(f'({item})' for item in where_items))
-    if group_by:
-        clauses.append('GROUP BY ' + ', '.join(str(g) for g in group_by if str(g).strip()))
-    having_items = [
-        str(f.get('expression') or '').strip()
-        for f in filters
-        if isinstance(f, dict) and f.get('clause') == 'having' and str(f.get('expression') or '').strip()
-    ] + [str(h).strip() for h in (visual_model.get('having') or []) if str(h).strip()]
-    if having_items:
-        clauses.append('HAVING ' + '\n   AND '.join(f'({item})' for item in having_items))
-    if order_by:
-        ord_parts = []
-        for o in order_by:
-            if isinstance(o, str) and o.strip():
-                ord_parts.append(o.strip())
-            elif isinstance(o, dict) and (o.get('column') or o.get('expr')):
-                col_expr = o.get('column') or o.get('expr')
-                direction = 'DESC' if str(o.get('direction') or o.get('dir') or 'asc').lower() == 'desc' else 'ASC'
-                ord_parts.append(f'{col_expr} {direction}')
-        if ord_parts:
-            clauses.append('ORDER BY ' + ', '.join(ord_parts))
-    if limit_val and int(limit_val) > 0:
-        if eng == 'firebird':
-            clauses.append(f'FETCH FIRST {int(limit_val)} ROWS ONLY')
-        else:
-            clauses.append(f'LIMIT {int(limit_val)}')
-
-    return scene, '\n'.join(clauses) + ';', fanout_warnings
+    return scene, built_sql, fanout_warnings
 
 
 _SQL_KEYWORDS_NOT_ALIAS = frozenset({
@@ -4726,13 +5199,59 @@ class SqlSurfaceHostService:
         all_items = list(by_key.values())
         surface.full_catalog_items = all_items
 
-        # Index child columns by relation display_path for instant hydration
+        # Index child columns by relation display_path and identify system object paths
         cols_by_parent_path: dict[tuple[str, ...], list[dict[str, Any]]] = collections.defaultdict(list)
+        system_paths: set[tuple[str, ...]] = set()
+        _system_schemas = frozenset({
+            'pg_catalog',
+            'information_schema',
+            'pg_toast',
+            'mysql',
+            'performance_schema',
+            'sys',
+            'crdb_internal',
+        })
+        _system_name_prefixes = (
+            'RDB$',
+            'MON$',
+            'SEC$',
+            'PLG$',
+            'PROFILER$',
+            'SQLITE_',
+            'PG_TOAST_',
+        )
         for item in all_items:
+            dpath = tuple(str(x) for x in (item.get('display_path') or ()))
+            if dpath and (
+                item.get('system_object') is True
+                or _extract_native_dict(item).get('system_object') is True
+            ):
+                system_paths.add(dpath)
             if str(item.get('resource_kind') or '').lower() == 'column':
-                dpath = tuple(str(x) for x in (item.get('display_path') or ()))
                 if len(dpath) >= 2:
                     cols_by_parent_path[dpath[:-1]].append(item)
+
+        def _is_system_catalog_item(
+            raw_item: Mapping[str, Any],
+            item_path: tuple[str, ...],
+            schema_val: str,
+            name_val: str,
+        ) -> bool:
+            if (
+                raw_item.get('system_object') is True
+                or _extract_native_dict(raw_item).get('system_object') is True
+            ):
+                return True
+            if any(item_path[:size] in system_paths for size in range(1, len(item_path) + 1)):
+                return True
+            if schema_val and schema_val.lower() in _system_schemas:
+                return True
+            if any(seg.lower() in _system_schemas for seg in item_path[:-1]):
+                return True
+            upper_name = name_val.upper()
+            if upper_name.startswith(_system_name_prefixes):
+                return True
+            return False
 
         catalog_summary: list[dict[str, Any]] = []
         for item in all_items:
@@ -4757,13 +5276,16 @@ class SqlSurfaceHostService:
                         engine_id=surface.engine_id,
                     )
                     obj_n = resolved['object_node']
+                    s_name = str(obj_n.get('schema_name') or '')
+                    is_sys = _is_system_catalog_item(item, dpath, s_name, rname)
                     surface.catalog_tables_cache[rname] = list(obj_n.get('columns') or [])
                     catalog_summary.append({
                         'resource_id': rid,
                         'resource_kind': obj_n['resource_kind'],
                         'display_name': rname,
-                        'schema_name': obj_n.get('schema_name') or '',
+                        'schema_name': s_name,
                         'selectable': True,
+                        'system_object': is_sys,
                         'input_parameters': obj_n.get('input_parameters') or [],
                         'columns': obj_n.get('columns') or [],
                     })
@@ -4805,12 +5327,15 @@ class SqlSurfaceHostService:
                     ]
                 if rcols:
                     surface.catalog_tables_cache[rname] = rcols
+                s_name = dpath[-2] if len(dpath) >= 2 else ''
+                is_sys = _is_system_catalog_item(item, dpath, s_name, rname)
                 catalog_summary.append({
                     'resource_id': rid,
                     'resource_kind': rkind,
                     'display_name': rname,
-                    'schema_name': dpath[-2] if len(dpath) >= 2 else '',
+                    'schema_name': s_name,
                     'selectable': True,
+                    'system_object': is_sys,
                     'columns': surface.catalog_tables_cache.get(rname, []),
                 })
 
@@ -4824,43 +5349,54 @@ class SqlSurfaceHostService:
         surface: SqlEditorSurfaceState,
         all_items: Sequence[Mapping[str, Any]],
     ) -> None:
-        """Ensure every table/view/procedure card in `surface.visual_model` has columns populated."""
-        for tbl in surface.visual_model.get('tables') or ():
-            if not isinstance(tbl, dict):
-                continue
-            tname = str(tbl.get('name') or '').strip()
-            if not tname:
-                continue
-            if tbl.get('columns'):
-                surface.catalog_tables_cache[tname] = list(tbl['columns'])
-                continue
-            if tname in surface.catalog_tables_cache and surface.catalog_tables_cache[tname]:
-                tbl['columns'] = list(surface.catalog_tables_cache[tname])
-                continue
-            try:
-                resolved = resolve_visual_catalog_object(
-                    workspace_service,
-                    server,
-                    surface.database_target_id,
-                    {
-                        'resource_id': tbl.get('resource_id') or '',
-                        'resource_kind': tbl.get('resource_kind') or '',
-                        'display_name': tname,
-                    },
-                    catalog_resources=all_items,
-                    existing_tables=(),
-                    engine_id=surface.engine_id,
-                )
-                obj_node = resolved['object_node']
-                if obj_node.get('columns'):
-                    tbl['columns'] = obj_node['columns']
-                    surface.catalog_tables_cache[tname] = list(obj_node['columns'])
-                if obj_node.get('resource_kind'):
-                    tbl.setdefault('resource_kind', obj_node['resource_kind'])
-                if obj_node.get('input_parameters') and not tbl.get('input_parameters'):
-                    tbl['input_parameters'] = obj_node['input_parameters']
-            except Exception:
-                pass
+        """Ensure every table/view/procedure card across CTE stages and Final SELECT has columns populated."""
+        stage_table_lists: list[list[Any]] = [list(surface.visual_model.get('tables') or ())]
+        for cte_item in surface.visual_model.get('ctes') or ():
+            if isinstance(cte_item, dict):
+                if isinstance(cte_item.get('anchor'), dict):
+                    stage_table_lists.append(list(cte_item['anchor'].get('tables') or ()))
+                if isinstance(cte_item.get('recursive_branch'), dict):
+                    stage_table_lists.append(list(cte_item['recursive_branch'].get('tables') or ()))
+
+        for tbl_list in stage_table_lists:
+            for tbl in tbl_list:
+                if not isinstance(tbl, dict):
+                    continue
+                if str(tbl.get('resource_kind') or '').lower() in ('cte', 'cte-self'):
+                    continue
+                tname = str(tbl.get('name') or '').strip()
+                if not tname:
+                    continue
+                if tbl.get('columns'):
+                    surface.catalog_tables_cache[tname] = list(tbl['columns'])
+                    continue
+                if tname in surface.catalog_tables_cache and surface.catalog_tables_cache[tname]:
+                    tbl['columns'] = list(surface.catalog_tables_cache[tname])
+                    continue
+                try:
+                    resolved = resolve_visual_catalog_object(
+                        workspace_service,
+                        server,
+                        surface.database_target_id,
+                        {
+                            'resource_id': tbl.get('resource_id') or '',
+                            'resource_kind': tbl.get('resource_kind') or '',
+                            'display_name': tname,
+                        },
+                        catalog_resources=all_items,
+                        existing_tables=(),
+                        engine_id=surface.engine_id,
+                    )
+                    obj_node = resolved['object_node']
+                    if obj_node.get('columns'):
+                        tbl['columns'] = obj_node['columns']
+                        surface.catalog_tables_cache[tname] = list(obj_node['columns'])
+                    if obj_node.get('resource_kind'):
+                        tbl.setdefault('resource_kind', obj_node['resource_kind'])
+                    if obj_node.get('input_parameters') and not tbl.get('input_parameters'):
+                        tbl['input_parameters'] = obj_node['input_parameters']
+                except Exception:
+                    pass
 
     def dispatch(
         self,
@@ -5263,45 +5799,62 @@ class SqlSurfaceHostService:
                     else surface.sql_source
                     or ''
                 )
-                parsed_vm, fid = parse_sql_to_visual_model(
-                    surface.sql_source, surface.catalog_tables_cache
-                )
                 loss_notes: list[str] = []
-                if parsed_vm is not None:
-                    # Preserve user-pinned x/y coordinates & hydrated columns when table/alias already existed
-                    prev_by_key = {}
-                    for pt in surface.visual_model.get('tables') or ():
-                        if isinstance(pt, dict):
-                            for k in (pt.get('id'), pt.get('alias'), pt.get('name')):
-                                if k:
-                                    prev_by_key[str(k)] = pt
-                    for nt in parsed_vm.get('tables') or ():
-                        old = prev_by_key.get(str(nt.get('id'))) or prev_by_key.get(str(nt.get('name')))
-                        if old:
-                            if old.get('x') is not None:
-                                nt['x'] = old['x']
-                            if old.get('y') is not None:
-                                nt['y'] = old['y']
-                            if old.get('columns') and not nt.get('columns'):
-                                nt['columns'] = old['columns']
-                            if old.get('resource_kind') and not nt.get('resource_kind'):
-                                nt['resource_kind'] = old['resource_kind']
-                            if old.get('input_parameters') and not nt.get('input_parameters'):
-                                nt['input_parameters'] = old['input_parameters']
-                    surface.visual_model = parsed_vm
-                    surface.visual_fidelity = fid
+                # If the current visual model already compiles to the exact SQL text, preserve
+                # its full staged CTE / recursive / window structure with exact fidelity!
+                _, current_compiled_sql, _ = build_visual_query_ddn_scene(
+                    surface.visual_model,
+                    surface.catalog_tables_cache,
+                    surface.engine_id,
+                )
+                if (
+                    current_compiled_sql
+                    and surface.sql_source.strip().rstrip(';').strip()
+                    == current_compiled_sql.strip().rstrip(';').strip()
+                ):
+                    surface.visual_fidelity = 'exact'
                     self._hydrate_visual_model_columns(
                         workspace_service, server, surface, all_cat
                     )
-                    if fid == 'lossy':
-                        loss_notes.append(
-                            'The visual model does not fully represent this SQL. Regenerating SQL from it may omit clauses or expressions.'
-                        )
                 else:
-                    surface.visual_fidelity = 'none'
-                    loss_notes.append(
-                        'Non-SELECT statement cannot be represented as a visual join diagram.'
+                    parsed_vm, fid = parse_sql_to_visual_model(
+                        surface.sql_source, surface.catalog_tables_cache
                     )
+                    if parsed_vm is not None:
+                        # Preserve user-pinned x/y coordinates & hydrated columns when table/alias already existed
+                        prev_by_key = {}
+                        for pt in surface.visual_model.get('tables') or ():
+                            if isinstance(pt, dict):
+                                for k in (pt.get('id'), pt.get('alias'), pt.get('name')):
+                                    if k:
+                                        prev_by_key[str(k)] = pt
+                        for nt in parsed_vm.get('tables') or ():
+                            old = prev_by_key.get(str(nt.get('id'))) or prev_by_key.get(str(nt.get('name')))
+                            if old:
+                                if old.get('x') is not None:
+                                    nt['x'] = old['x']
+                                if old.get('y') is not None:
+                                    nt['y'] = old['y']
+                                if old.get('columns') and not nt.get('columns'):
+                                    nt['columns'] = old['columns']
+                                if old.get('resource_kind') and not nt.get('resource_kind'):
+                                    nt['resource_kind'] = old['resource_kind']
+                                if old.get('input_parameters') and not nt.get('input_parameters'):
+                                    nt['input_parameters'] = old['input_parameters']
+                        surface.visual_model = parsed_vm
+                        surface.visual_fidelity = fid
+                        self._hydrate_visual_model_columns(
+                            workspace_service, server, surface, all_cat
+                        )
+                        if fid == 'lossy':
+                            loss_notes.append(
+                                'The visual model does not fully represent this SQL. Regenerating SQL from it may omit clauses or expressions.'
+                            )
+                    else:
+                        surface.visual_fidelity = 'none'
+                        loss_notes.append(
+                            'Non-SELECT statement cannot be represented as a visual join diagram.'
+                        )
                 st = self._serialize_state(
                     surface, user_id, window_offset=window_offset, window_size=window_size
                 )
@@ -5333,7 +5886,10 @@ class SqlSurfaceHostService:
                     surface.catalog_tables_cache,
                     surface.engine_id,
                 )
-                if built_sql or not (surface.visual_model.get('tables') or []):
+                if built_sql or (
+                    not (surface.visual_model.get('tables') or [])
+                    and not (surface.visual_model.get('ctes') or [])
+                ):
                     surface.sql_source = built_sql
                     surface.visual_fidelity = 'exact'
                 st = self._serialize_state(

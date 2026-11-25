@@ -64,7 +64,7 @@
       "control": "password",
       "tab": "General",
       "native_keyword": "PASSWORD",
-      "help": "pgAdmin asks to retype the password (retype: true). Provider tree: a plan never carries a password; a value is refused, set it with the inherited Properties dialog."
+      "help": "Optional login password; redacted as '<redacted>' in SQL previews and plans."
     },
     {
       "field_id": "rolvaliduntil",

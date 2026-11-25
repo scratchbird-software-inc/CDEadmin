@@ -30,7 +30,8 @@
           "help": "Off: WITH NO DATA empties it until the next refresh."
         }
       ],
-      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2): plain and concurrent refresh."
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2): plain and concurrent refresh.",
+      "form_reference": "SR-F-031096"
     },
     {
       "operation_id": "set_load_balancer",
@@ -51,7 +52,8 @@
           "default": true
         }
       ],
-      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2, one node): load balancer off and on (get_load_balancer_state)."
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2, one node): load balancer off and on (get_load_balancer_state).",
+      "form_reference": "SR-F-031097"
     },
     {
       "operation_id": "add_blacklist",
@@ -64,7 +66,8 @@
       "status": "draft",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Untested: on the one-node demo the command is accepted but there is no other node to move replicas to."
+      "notes": "Untested: on the one-node demo the command is accepted but there is no other node to move replicas to.",
+      "form_reference": "SR-F-031098"
     },
     {
       "operation_id": "remove_blacklist",
@@ -77,7 +80,8 @@
       "status": "draft",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Untested: accepted on the one-node demo; no movement to observe."
+      "notes": "Untested: accepted on the one-node demo; no movement to observe.",
+      "form_reference": "SR-F-031099"
     },
     {
       "operation_id": "add_leader_blacklist",
@@ -90,7 +94,8 @@
       "status": "draft",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Untested: accepted on the one-node demo; no other node to take leaders."
+      "notes": "Untested: accepted on the one-node demo; no other node to take leaders.",
+      "form_reference": "SR-F-031100"
     },
     {
       "operation_id": "remove_leader_blacklist",
@@ -103,7 +108,8 @@
       "status": "draft",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Untested: accepted on the one-node demo; no movement to observe."
+      "notes": "Untested: accepted on the one-node demo; no movement to observe.",
+      "form_reference": "SR-F-031101"
     },
     {
       "operation_id": "configure_placement",
@@ -123,7 +129,8 @@
           "required": true
         }
       ],
-      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2, one node): table moved onto a placement tablespace."
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2, one node): table moved onto a placement tablespace.",
+      "form_reference": "SR-F-031102"
     },
     {
       "operation_id": "compact",
@@ -158,7 +165,8 @@
           "default": false
         }
       ],
-      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2, one node)."
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2, one node).",
+      "form_reference": "SR-F-031103"
     },
     {
       "operation_id": "flush",
@@ -186,7 +194,8 @@
           "default": false
         }
       ],
-      "notes": "Writes the tablets' memory to disk files (SST). A tablet split needs them: without flushed data the master drops a split it accepted (live, 2025.2.2.2). Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2, one node)."
+      "notes": "Writes the tablets' memory to disk files (SST). A tablet split needs them: without flushed data the master drops a split it accepted (live, 2025.2.2.2). Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2, one node).",
+      "form_reference": "SR-F-031104"
     },
     {
       "operation_id": "leader_stepdown",
@@ -206,7 +215,8 @@
           "required": false
         }
       ],
-      "notes": "Untested: needs a tablet with another replica (more than one node)."
+      "notes": "Untested: needs a tablet with another replica (more than one node).",
+      "form_reference": "SR-F-031105"
     },
     {
       "operation_id": "split",
@@ -219,7 +229,8 @@
       "status": "complete",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Asynchronous: yb-admin accepts the split and the master performs it. A tablet with no flushed data (SST files) is not split (live, 2025.2.2.2: \"Either no SST file or too small SST files\"); flush the table first. Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2, one node): a flushed one-tablet table split into two."
+      "notes": "Asynchronous: yb-admin accepts the split and the master performs it. A tablet with no flushed data (SST files) is not split (live, 2025.2.2.2: \"Either no SST file or too small SST files\"); flush the table first. Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2, one node): a flushed one-tablet table split into two.",
+      "form_reference": "SR-F-031106"
     },
     {
       "operation_id": "leader_stepdown",
@@ -239,7 +250,8 @@
           "required": false
         }
       ],
-      "notes": "Untested: accepted with a single master, which stays leader; needs several masters."
+      "notes": "Untested: accepted with a single master, which stays leader; needs several masters.",
+      "form_reference": "SR-F-031107"
     },
     {
       "operation_id": "configure",
@@ -297,7 +309,8 @@
           "required": false
         }
       ],
-      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2, one node): the live placement restated."
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2, one node): the live placement restated.",
+      "form_reference": "SR-F-031108"
     },
     {
       "operation_id": "clear",
@@ -311,7 +324,8 @@
       "confirmation": "typed_name",
       "fields": [],
       "notes": "Ran on the demo (clear_placement_info) and left the universe with no live placement until it was configured again; not in a descriptor round trip.",
-      "description": "Leaves the universe with no live placement until a placement is configured again."
+      "description": "Leaves the universe with no live placement until a placement is configured again.",
+      "form_reference": "SR-F-031109"
     },
     {
       "operation_id": "create_database",
@@ -337,7 +351,8 @@
           "required": false
         }
       ],
-      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2, one node): snapshot reached COMPLETE."
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2, one node): snapshot reached COMPLETE.",
+      "form_reference": "SR-F-031110"
     },
     {
       "operation_id": "restore",
@@ -359,7 +374,8 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2, one node): deleted rows came back."
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2, one node): deleted rows came back.",
+      "form_reference": "SR-F-031111"
     },
     {
       "operation_id": "restore",
@@ -382,7 +398,8 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2, one node): point-in-time restore brought deleted rows back."
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_yugabytedb.py, 2025.2.2.2, one node): point-in-time restore brought deleted rows back.",
+      "form_reference": "SR-F-031112"
     },
     {
       "operation_id": "set_enabled",
@@ -403,7 +420,8 @@
           "default": true
         }
       ],
-      "notes": "Untested: needs a second cluster."
+      "notes": "Untested: needs a second cluster.",
+      "form_reference": "SR-F-031113"
     },
     {
       "operation_id": "add_tables",
@@ -447,7 +465,8 @@
           ]
         }
       ],
-      "notes": "Untested: needs a second cluster."
+      "notes": "Untested: needs a second cluster.",
+      "form_reference": "SR-F-031114"
     },
     {
       "operation_id": "remove_tables",
@@ -483,7 +502,8 @@
           "default": false
         }
       ],
-      "notes": "Untested: needs a second cluster."
+      "notes": "Untested: needs a second cluster.",
+      "form_reference": "SR-F-031115"
     },
     {
       "operation_id": "truncate",
@@ -503,7 +523,8 @@
           "required": false,
           "default": false
         }
-      ]
+      ],
+      "form_reference": "SR-F-031116"
     },
     {
       "operation_id": "analyze",
@@ -515,7 +536,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "none",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031117"
     },
     {
       "operation_id": "set_schema",
@@ -534,7 +556,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-031118"
     },
     {
       "operation_id": "set_owner",
@@ -553,7 +576,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-031119"
     },
     {
       "operation_id": "validate",
@@ -565,7 +589,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031120"
     },
     {
       "operation_id": "set_setting",
@@ -597,7 +622,8 @@
           "required": false,
           "help": "Leave empty for every database."
         }
-      ]
+      ],
+      "form_reference": "SR-F-031121"
     },
     {
       "operation_id": "reset_setting",
@@ -623,7 +649,8 @@
           "required": false,
           "help": "Leave empty for every database."
         }
-      ]
+      ],
+      "form_reference": "SR-F-031122"
     },
     {
       "operation_id": "set_setting",
@@ -655,7 +682,8 @@
           "required": false,
           "help": "Leave empty for every database."
         }
-      ]
+      ],
+      "form_reference": "SR-F-031123"
     },
     {
       "operation_id": "reset_setting",
@@ -681,7 +709,8 @@
           "required": false,
           "help": "Leave empty for every database."
         }
-      ]
+      ],
+      "form_reference": "SR-F-031124"
     },
     {
       "operation_id": "grant",
@@ -727,7 +756,8 @@
           "required": false,
           "default": false
         }
-      ]
+      ],
+      "form_reference": "SR-F-031125"
     },
     {
       "operation_id": "revoke",
@@ -766,7 +796,8 @@
             }
           ]
         }
-      ]
+      ],
+      "form_reference": "SR-F-031126"
     },
     {
       "operation_id": "grant",
@@ -808,7 +839,8 @@
           "required": false,
           "default": false
         }
-      ]
+      ],
+      "form_reference": "SR-F-031127"
     },
     {
       "operation_id": "revoke",
@@ -843,7 +875,8 @@
             }
           ]
         }
-      ]
+      ],
+      "form_reference": "SR-F-031128"
     },
     {
       "operation_id": "grant",
@@ -881,7 +914,8 @@
           "required": false,
           "default": false
         }
-      ]
+      ],
+      "form_reference": "SR-F-031129"
     },
     {
       "operation_id": "revoke",
@@ -912,7 +946,8 @@
             }
           ]
         }
-      ]
+      ],
+      "form_reference": "SR-F-031130"
     },
     {
       "operation_id": "terminate_query",
@@ -924,7 +959,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031131"
     },
     {
       "operation_id": "terminate_connection",
@@ -936,7 +972,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "typed_name",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031132"
     },
     {
       "operation_id": "create_partition",
@@ -1080,7 +1117,8 @@
             "equals": "HASH"
           }
         }
-      ]
+      ],
+      "form_reference": "SR-F-031133"
     },
     {
       "operation_id": "attach_partition",
@@ -1225,7 +1263,8 @@
             "equals": "HASH"
           }
         }
-      ]
+      ],
+      "form_reference": "SR-F-031134"
     },
     {
       "operation_id": "detach",
@@ -1237,7 +1276,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "typed_name",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031135"
     }
   ]
 }

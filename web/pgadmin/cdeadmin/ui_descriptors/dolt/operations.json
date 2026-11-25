@@ -34,7 +34,8 @@
         }
       ],
       "execution_host": true,
-      "produces_log": true
+      "produces_log": true,
+      "form_reference": "SR-F-030730"
     },
     {
       "operation_id": "set_default",
@@ -54,7 +55,8 @@
           "required": false,
           "default": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030731"
     },
     {
       "operation_id": "copy",
@@ -80,7 +82,8 @@
           "required": false,
           "default": false
         }
-      ]
+      ],
+      "form_reference": "SR-F-030732"
     },
     {
       "operation_id": "cherry_pick",
@@ -92,7 +95,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-030733"
     },
     {
       "operation_id": "revert",
@@ -104,7 +108,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "typed_name",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-030734"
     },
     {
       "operation_id": "fetch",
@@ -116,7 +121,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-030735"
     },
     {
       "operation_id": "pull",
@@ -135,7 +141,8 @@
           "control": "text",
           "required": false
         }
-      ]
+      ],
+      "form_reference": "SR-F-030736"
     },
     {
       "operation_id": "push",
@@ -161,7 +168,8 @@
           "required": false,
           "default": false
         }
-      ]
+      ],
+      "form_reference": "SR-F-030737"
     },
     {
       "operation_id": "commit",
@@ -200,7 +208,8 @@
           "control": "text",
           "required": false
         }
-      ]
+      ],
+      "form_reference": "SR-F-030738"
     },
     {
       "operation_id": "stage_tables",
@@ -231,7 +240,8 @@
           "default": false
         }
       ],
-      "notes": "typed_from_json: working-set.stage_tables.table_names"
+      "notes": "typed_from_json: working-set.stage_tables.table_names",
+      "form_reference": "SR-F-030739"
     },
     {
       "operation_id": "stage_all",
@@ -243,7 +253,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-030740"
     },
     {
       "operation_id": "unstage_tables",
@@ -267,7 +278,8 @@
           ]
         }
       ],
-      "notes": "typed_from_json: working-set.unstage_tables.table_names"
+      "notes": "typed_from_json: working-set.unstage_tables.table_names",
+      "form_reference": "SR-F-030741"
     },
     {
       "operation_id": "reset_hard",
@@ -286,7 +298,8 @@
           "control": "text",
           "required": false
         }
-      ]
+      ],
+      "form_reference": "SR-F-030742"
     },
     {
       "operation_id": "reset_soft",
@@ -305,7 +318,8 @@
           "control": "text",
           "required": false
         }
-      ]
+      ],
+      "form_reference": "SR-F-030743"
     },
     {
       "operation_id": "clean",
@@ -336,7 +350,8 @@
           "default": false
         }
       ],
-      "notes": "typed_from_json: working-set.clean.table_names"
+      "notes": "typed_from_json: working-set.clean.table_names",
+      "form_reference": "SR-F-030744"
     },
     {
       "operation_id": "start",
@@ -389,7 +404,8 @@
           "required": false,
           "default": false
         }
-      ]
+      ],
+      "form_reference": "SR-F-030745"
     },
     {
       "operation_id": "abort",
@@ -401,7 +417,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "typed_name",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-030746"
     },
     {
       "operation_id": "start",
@@ -451,7 +468,8 @@
           "required": false,
           "default": false
         }
-      ]
+      ],
+      "form_reference": "SR-F-030747"
     },
     {
       "operation_id": "continue",
@@ -463,7 +481,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-030748"
     },
     {
       "operation_id": "abort",
@@ -475,7 +494,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "typed_name",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-030749"
     },
     {
       "operation_id": "resolve",
@@ -504,7 +524,8 @@
             }
           ]
         }
-      ]
+      ],
+      "form_reference": "SR-F-030750"
     },
     {
       "operation_id": "sync",
@@ -516,7 +537,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-030751"
     },
     {
       "operation_id": "set_options",
@@ -548,7 +570,8 @@
           "control": "text",
           "required": false
         }
-      ]
+      ],
+      "form_reference": "SR-F-030752"
     },
     {
       "operation_id": "analyze",
@@ -561,7 +584,8 @@
       "status": "draft",
       "confirmation": "none",
       "fields": [],
-      "notes": "Dolt 1.86.6 analyzes tables of the connection database only."
+      "notes": "Dolt 1.86.6 analyzes tables of the connection database only.",
+      "form_reference": "SR-F-030753"
     },
     {
       "operation_id": "grant",
@@ -594,7 +618,8 @@
           "required": false,
           "default": false
         }
-      ]
+      ],
+      "form_reference": "SR-F-030754"
     },
     {
       "operation_id": "revoke",
@@ -620,7 +645,8 @@
           "required": true,
           "default": "%"
         }
-      ]
+      ],
+      "form_reference": "SR-F-030755"
     },
     {
       "operation_id": "terminate_query",
@@ -632,7 +658,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-030756"
     },
     {
       "operation_id": "terminate_connection",
@@ -644,7 +671,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "typed_name",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-030757"
     },
     {
       "operation_id": "set_global",
@@ -665,7 +693,8 @@
           "help": "Applies until the server restarts."
         }
       ],
-      "notes": "Dolt 1.86.6 has no RESET PERSIST, so a persisted value cannot be removed through SQL; SET PERSIST is not offered."
+      "notes": "Dolt 1.86.6 has no RESET PERSIST, so a persisted value cannot be removed through SQL; SET PERSIST is not offered.",
+      "form_reference": "SR-F-030758"
     }
   ]
 }

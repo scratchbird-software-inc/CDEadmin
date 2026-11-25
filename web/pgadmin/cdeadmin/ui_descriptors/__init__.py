@@ -20,6 +20,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 APP_EXTENSION_KEY = 'cdeadmin_ui_descriptors'
 _VERSION_PART = re.compile(r'\d+')
+SHELL_PRIMITIVES = (
+    'sql_preview', 'data_grid', 'readonly_grid', 'readonly_groups', 'privileges',
+)
 
 
 class UIDescriptorError(RuntimeError):
@@ -152,7 +155,7 @@ class UIDescriptorService:
         for tab in family['tabs']:
             name = tab['tab']
             fields = fields_by_tab.get(name, [])
-            shell_tab = tab['primitive'] in ('sql_preview', 'data_grid', 'readonly_grid', 'readonly_groups')
+            shell_tab = tab['primitive'] in SHELL_PRIMITIVES
             if not fields and not shell_tab:
                 continue  # engine has nothing for it (an omitted or empty tab)
             if name in omitted:

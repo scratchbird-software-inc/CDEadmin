@@ -656,14 +656,70 @@ def build_stage_preview(model: Mapping[str, Any], stage: str | None,
     return build(preview_model, names, available, dialect)
 
 
+_SYSTEM_SCHEMA_NAMES = frozenset({
+    'pg_catalog',
+    'information_schema',
+    'pg_toast',
+    'mysql',
+    'performance_schema',
+    'sys',
+    'crdb_internal',
+})
+_SYSTEM_OBJECT_PREFIXES = (
+    'RDB$',
+    'MON$',
+    'SEC$',
+    'PLG$',
+    'PROFILER$',
+    'SQLITE_',
+    'PG_TOAST_',
+)
+
+
+def _is_system_resource(
+    resource: Mapping[str, Any],
+    system_paths: set[tuple[str, ...]],
+) -> bool:
+    native = resource.get('native')
+    if resource.get('system_object') is True or (
+        isinstance(native, Mapping) and native.get('system_object') is True
+    ):
+        return True
+    path = tuple(str(p) for p in (resource.get('display_path') or ()))
+    if any(path[:size] in system_paths for size in range(1, len(path) + 1)):
+        return True
+    if any(seg.lower() in _SYSTEM_SCHEMA_NAMES for seg in path[:-1]):
+        return True
+    name = str(resource.get('display_name') or (path[-1] if path else '')).upper()
+    if name.startswith(_SYSTEM_OBJECT_PREFIXES):
+        return True
+    return False
+
+
 def relations(catalog: Sequence[Mapping[str, Any]], kinds: Sequence[str],
               columns: Callable[[Mapping[str, Any]], list[str]]
               ) -> list[dict]:
     """The catalog's relations with their columns, for the form's pickers."""
-    found = [{'path': list(resource.get('display_path') or ()),
-              'kind': resource['resource_kind'],
-              'name': resource.get('display_name'),
-              'columns': columns(resource)}
-             for resource in catalog
-             if resource.get('resource_kind') in kinds]
+    system_paths: set[tuple[str, ...]] = set()
+    for resource in catalog:
+        native = resource.get('native')
+        if resource.get('system_object') is True or (
+            isinstance(native, Mapping) and native.get('system_object') is True
+        ):
+            path = tuple(str(p) for p in (resource.get('display_path') or ()))
+            if path:
+                system_paths.add(path)
+    found = []
+    for resource in catalog:
+        if resource.get('resource_kind') not in kinds:
+            continue
+        entry: dict[str, Any] = {
+            'path': list(resource.get('display_path') or ()),
+            'kind': resource['resource_kind'],
+            'name': resource.get('display_name'),
+            'columns': columns(resource),
+        }
+        if _is_system_resource(resource, system_paths):
+            entry['system_object'] = True
+        found.append(entry)
     return sorted(found, key=lambda item: item['path'])

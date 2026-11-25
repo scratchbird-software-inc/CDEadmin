@@ -35,6 +35,7 @@
       "control": "reference",
       "tab": "General",
       "reference_kind": "role",
+      "reference_value": "display_name",
       "native_keyword": "OWNER"
     },
     {
@@ -42,7 +43,30 @@
       "label": "Schema",
       "control": "reference",
       "tab": "General",
-      "reference_kind": "schema"
+      "reference_kind": "schema",
+      "reference_value": "display_name"
+    },
+    {
+      "field_id": "data_type",
+      "label": "Data type",
+      "control": "select",
+      "tab": "General",
+      "native_keyword": "AS",
+      "options": [
+        {
+          "value": "bigint",
+          "label": "bigint (64-bit signed, default)"
+        },
+        {
+          "value": "integer",
+          "label": "integer (32-bit signed)"
+        },
+        {
+          "value": "smallint",
+          "label": "smallint (16-bit signed)"
+        }
+      ],
+      "help": "Underlying integer storage type determining default MINVALUE and MAXVALUE bounds."
     },
     {
       "field_id": "is_sys_obj",
@@ -72,6 +96,18 @@
       ],
       "native_keyword": "RESTART WITH",
       "help": "Sets the sequence object's current value. The next nextval will return exactly the specified value, and sequence advancement commences with the following nextval. Provider tree: setval(..., value, false)."
+    },
+    {
+      "field_id": "restart_initial",
+      "label": "Restart at start value (RESTART)",
+      "control": "boolean",
+      "required": false,
+      "tab": "General",
+      "modes": [
+        "alter"
+      ],
+      "native_keyword": "RESTART",
+      "help": "Resets the sequence back to its configured START WITH value via ALTER SEQUENCE ... RESTART."
     },
     {
       "field_id": "increment",
@@ -156,18 +192,14 @@
     {
       "field_id": "owned_column",
       "label": "Column",
-      "control": "select",
+      "control": "text",
       "tab": "Engine",
       "group": "Owned by",
-      "option_values_path": [
-        "catalog",
-        "columns"
-      ],
       "visible_when": {
         "field": "owned_table",
         "truthy": true
       },
-      "help": "Columns of the selected table (get_columns?tid=owned_table)."
+      "help": "Column name on the selected table that owns this sequence."
     },
     {
       "field_id": "owned_by_none",

@@ -28,7 +28,8 @@
         }
       ],
       "notes": "Erases one document and all its valid-time and system-time history; the row identity comes from the data grid. Read back: no version of the document remains (FOR ALL VALID_TIME FOR ALL SYSTEM_TIME). The table stays listed.",
-      "description": "Erases one document and all of its valid-time and system-time history; this cannot be undone. The table stays listed."
+      "description": "Erases one document and all of its valid-time and system-time history; this cannot be undone. The table stays listed.",
+      "form_reference": "SR-F-031092"
     },
     {
       "operation_id": "erase",
@@ -56,7 +57,8 @@
         }
       ],
       "notes": "Same provider path as Erase on a table; untested from this kind (draft).",
-      "description": "Erases one document and all of its valid-time and system-time history; this cannot be undone."
+      "description": "Erases one document and all of its valid-time and system-time history; this cannot be undone.",
+      "form_reference": "SR-F-031093"
     },
     {
       "operation_id": "erase",
@@ -84,7 +86,8 @@
         }
       ],
       "notes": "Same provider path as Erase on a table; untested from this kind (draft).",
-      "description": "Erases one document and all of its valid-time and system-time history; this cannot be undone."
+      "description": "Erases one document and all of its valid-time and system-time history; this cannot be undone.",
+      "form_reference": "SR-F-031094"
     },
     {
       "operation_id": "execute",
@@ -118,7 +121,8 @@
           "default": false
         }
       ],
-      "notes": "POST /system/finish-block on the health endpoint. Untested (draft): no query reports the block index, so the effect cannot be read back here."
+      "notes": "POST /system/finish-block on the health endpoint. Untested (draft): no query reports the block index, so the effect cannot be read back here.",
+      "form_reference": "SR-F-031095"
     }
   ]
 }

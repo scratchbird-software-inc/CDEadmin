@@ -93,6 +93,7 @@
       "control": "reference",
       "tab": "General",
       "reference_kind": "role",
+      "reference_value": "display_name",
       "native_keyword": "OWNER",
       "visible_when": {
         "field": "variant",
@@ -105,6 +106,7 @@
       "control": "reference",
       "tab": "General",
       "reference_kind": "schema",
+      "reference_value": "display_name",
       "visible_when": {
         "field": "variant",
         "equals": "domain"
@@ -116,7 +118,8 @@
       "control": "reference",
       "tab": "General",
       "reference_kind": "role",
-      "required": true,
+      "reference_value": "display_name",
+      "required": false,
       "native_keyword": "OWNER",
       "visible_when": {
         "field": "variant",
@@ -136,6 +139,7 @@
       "control": "reference",
       "tab": "General",
       "reference_kind": "schema",
+      "reference_value": "display_name",
       "required": true,
       "visible_when": {
         "field": "variant",
@@ -198,6 +202,7 @@
       "label": "Type",
       "control": "select",
       "tab": "General",
+      "default": "c",
       "visible_when": {
         "field": "variant",
         "in": [
@@ -241,7 +246,7 @@
     {
       "field_id": "basetype",
       "label": "Base type",
-      "control": "select",
+      "control": "text",
       "tab": "General",
       "required": true,
       "option_values_path": [
@@ -253,7 +258,7 @@
         "field": "variant",
         "equals": "domain"
       },
-      "help": "Read-only once the domain exists."
+      "help": "Select a catalog type or enter an array/parameterized type such as text[], integer[], or numeric(14,2). Read-only once the domain exists."
     },
     {
       "field_id": "typlen",
@@ -309,7 +314,7 @@
     {
       "field_id": "collname",
       "label": "Collation",
-      "control": "select",
+      "control": "text",
       "tab": "General",
       "option_values_path": [
         "catalog",
@@ -347,7 +352,7 @@
         {
           "field_id": "type",
           "label": "Type",
-          "control": "select",
+          "control": "text",
           "required": true,
           "option_values_path": [
             "catalog",
@@ -367,7 +372,7 @@
         {
           "field_id": "collation",
           "label": "Collation",
-          "control": "select",
+          "control": "text",
           "option_values_path": [
             "catalog",
             "collations"
@@ -400,7 +405,7 @@
     {
       "field_id": "typname",
       "label": "Subtype",
-      "control": "select",
+      "control": "text",
       "tab": "General",
       "group": "Range",
       "visible_when": {
@@ -534,6 +539,64 @@
       "help": "Read-only property shown by pgAdmin in properties mode only."
     },
     {
+      "field_id": "rename_values",
+      "label": "Rename enumeration values",
+      "control": "grid",
+      "tab": "General",
+      "modes": [
+        "alter"
+      ],
+      "visible_when": {
+        "field": "variant",
+        "equals": "enum"
+      },
+      "native_keyword": "ALTER TYPE ... RENAME VALUE",
+      "columns": [
+        {
+          "field_id": "from",
+          "label": "Current label",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "to",
+          "label": "New label",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "help": "Compiles ALTER TYPE ... RENAME VALUE '<current>' TO '<new>'."
+    },
+    {
+      "field_id": "rename_attributes",
+      "label": "Rename composite attributes",
+      "control": "grid",
+      "tab": "General",
+      "modes": [
+        "alter"
+      ],
+      "visible_when": {
+        "field": "variant",
+        "equals": "composite"
+      },
+      "native_keyword": "ALTER TYPE ... RENAME ATTRIBUTE",
+      "columns": [
+        {
+          "field_id": "member_name",
+          "label": "Current member",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "to",
+          "label": "New member",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "help": "Compiles ALTER TYPE ... RENAME ATTRIBUTE <current> TO <new>."
+    },
+    {
       "field_id": "constraints",
       "label": "Constraints",
       "control": "grid",
@@ -566,6 +629,35 @@
         }
       ],
       "help": " Provider tree: on edit the grid is the full set; a new row adds, a row left out drops, a validated flag turned on validates."
+    },
+    {
+      "field_id": "rename_constraints",
+      "label": "Rename domain constraints",
+      "control": "grid",
+      "tab": "Constraints",
+      "modes": [
+        "alter"
+      ],
+      "visible_when": {
+        "field": "variant",
+        "equals": "domain"
+      },
+      "native_keyword": "ALTER DOMAIN ... RENAME CONSTRAINT",
+      "columns": [
+        {
+          "field_id": "conname",
+          "label": "Current constraint",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "to",
+          "label": "New constraint",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "help": "Compiles ALTER DOMAIN ... RENAME CONSTRAINT <current> TO <new>."
     },
     {
       "field_id": "typinput",

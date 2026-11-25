@@ -22,7 +22,7 @@ from . import columns as column_editor
 from . import constraints as constraint_editor
 from .native_admin import (
     PostgreSQLNativeAdminError, privilege_words,
-    _flag, _identifier, _literal, _name,
+    _collation_reference, _flag, _identifier, _literal, _name,
     _qualified, _reference, _type_reference,
 )
 from .policies import expression
@@ -118,6 +118,14 @@ def facts(native, partitions=None):
     }
 
 
+def privileges(native):
+    """Normalized table/relation ACL grants from aclexplode or relacl."""
+    from .cluster import parse_acl_items
+    row = native.get('catalog_row') or native
+    source = native.get('explicit_grants') or row.get('explicit_grants') or row.get('relacl')
+    return parse_acl_items(source, PRIVILEGE_CODES)
+
+
 # -- values -----------------------------------------------------------------
 
 def _number(value, key):
@@ -204,7 +212,7 @@ def _column_clause(row):
         clause += ' COMPRESSION ' + column_editor._compression(
             row['attcompression'])
     if not _blank(row.get('collspcname')):
-        clause += ' COLLATE ' + _reference(row['collspcname'], 'collation')
+        clause += ' COLLATE ' + _collation_reference(row['collspcname'], 'collation')
     if _flag(row, 'attnotnull') if 'attnotnull' in row else False:
         clause += ' NOT NULL'
     constype = row.get('colconstype') or 'n'

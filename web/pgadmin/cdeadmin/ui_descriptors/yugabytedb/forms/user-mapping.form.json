@@ -6,7 +6,7 @@
     "user-mapping"
   ],
   "form_reference": "SR-F-020121",
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "YugabyteDB",
   "omitted_tabs": [],
   "fields": [

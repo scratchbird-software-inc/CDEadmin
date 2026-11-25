@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from .native_admin import (
     PostgreSQLNativeAdminError, privilege_words,
-    _flag, _identifier, _literal, _name,
+    _collation_reference, _flag, _identifier, _literal, _name,
     _qualified, _reference, _type_reference,
 )
 from .policies import expression
@@ -244,7 +244,7 @@ def _create(native, draft):
     clause = (f'ALTER TABLE {table} ADD COLUMN {column} '
               + _type_reference(draft.get('cltype'), 'cltype'))
     if not _blank(draft.get('collspcname')):
-        clause += ' COLLATE ' + _reference(draft['collspcname'], 'collation')
+        clause += ' COLLATE ' + _collation_reference(draft['collspcname'], 'collation')
     if _flag(draft, 'attnotnull'):
         clause += ' NOT NULL'
     if constype != 'g' and not _blank(draft.get('defval')):
@@ -295,8 +295,8 @@ def _alter(native, draft):
                   + _type_reference(draft.get('cltype') or current['cltype'],
                                     'cltype'))
         if not _blank(draft.get('collspcname')):
-            clause += ' COLLATE ' + _reference(draft['collspcname'],
-                                               'collation')
+            clause += ' COLLATE ' + _collation_reference(draft['collspcname'],
+                                                         'collation')
         if not _blank(draft.get('using')):
             clause += ' USING ' + expression(draft['using'], 'using')
         statements.append(clause)

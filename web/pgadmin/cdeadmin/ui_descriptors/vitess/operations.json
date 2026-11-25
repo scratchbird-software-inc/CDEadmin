@@ -36,7 +36,8 @@
           "default": false
         }
       ],
-      "notes": "typed_from_json: keyspace.rebuild_graph.cells"
+      "notes": "typed_from_json: keyspace.rebuild_graph.cells",
+      "form_reference": "SR-F-031061"
     },
     {
       "operation_id": "planned_reparent",
@@ -78,7 +79,8 @@
           "required": false,
           "default": false
         }
-      ]
+      ],
+      "form_reference": "SR-F-031062"
     },
     {
       "operation_id": "emergency_reparent",
@@ -127,7 +129,8 @@
           "required": false,
           "default": false
         }
-      ]
+      ],
+      "form_reference": "SR-F-031063"
     },
     {
       "operation_id": "set_primary_serving",
@@ -146,7 +149,8 @@
           "control": "boolean",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-031064"
     },
     {
       "operation_id": "ping",
@@ -158,7 +162,8 @@
       "tier": 2,
       "status": "complete",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031065"
     },
     {
       "operation_id": "refresh_state",
@@ -170,7 +175,8 @@
       "tier": 2,
       "status": "complete",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031066"
     },
     {
       "operation_id": "run_health_check",
@@ -182,7 +188,8 @@
       "tier": 2,
       "status": "complete",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031067"
     },
     {
       "operation_id": "change_type",
@@ -215,7 +222,8 @@
             }
           ]
         }
-      ]
+      ],
+      "form_reference": "SR-F-031068"
     },
     {
       "operation_id": "set_writable",
@@ -234,7 +242,8 @@
           "control": "boolean",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-031069"
     },
     {
       "operation_id": "backup",
@@ -249,7 +258,8 @@
       "fields": [],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Live round trip: the backup appears in the catalog under its keyspace and shard, and the provider post-state check confirms it."
+      "notes": "Live round trip: the backup appears in the catalog under its keyspace and shard, and the provider post-state check confirms it.",
+      "form_reference": "SR-F-031070"
     },
     {
       "operation_id": "restore",
@@ -277,7 +287,8 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_vitess.py, 23.0.3): a replica restored from a named backup and returned to serving."
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_vitess.py, 23.0.3): a replica restored from a named backup and returned to serving.",
+      "form_reference": "SR-F-031071"
     },
     {
       "operation_id": "rebuild",
@@ -306,7 +317,8 @@
           ]
         }
       ],
-      "notes": "typed_from_json: vschema.rebuild.cells"
+      "notes": "typed_from_json: vschema.rebuild.cells",
+      "form_reference": "SR-F-031072"
     },
     {
       "operation_id": "create_move_tables",
@@ -380,7 +392,8 @@
           ]
         }
       ],
-      "notes": "typed_from_json: workflow.create_move_tables.tables"
+      "notes": "typed_from_json: workflow.create_move_tables.tables",
+      "form_reference": "SR-F-031073"
     },
     {
       "operation_id": "create_reshard",
@@ -462,7 +475,8 @@
           ]
         }
       ],
-      "notes": "typed_from_json: workflow.create_reshard.source_shards, workflow.create_reshard.target_shards"
+      "notes": "typed_from_json: workflow.create_reshard.source_shards, workflow.create_reshard.target_shards",
+      "form_reference": "SR-F-031074"
     },
     {
       "operation_id": "start",
@@ -474,7 +488,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031075"
     },
     {
       "operation_id": "stop",
@@ -486,7 +501,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031076"
     },
     {
       "operation_id": "switch_traffic",
@@ -599,7 +615,8 @@
           "default": false
         }
       ],
-      "notes": "typed_from_json: workflow.switch_traffic.cells"
+      "notes": "typed_from_json: workflow.switch_traffic.cells",
+      "form_reference": "SR-F-031077"
     },
     {
       "operation_id": "reverse_traffic",
@@ -701,7 +718,8 @@
           "default": false
         }
       ],
-      "notes": "typed_from_json: workflow.reverse_traffic.cells"
+      "notes": "typed_from_json: workflow.reverse_traffic.cells",
+      "form_reference": "SR-F-031078"
     },
     {
       "operation_id": "complete",
@@ -774,7 +792,8 @@
             "equals": "movetables"
           }
         }
-      ]
+      ],
+      "form_reference": "SR-F-031079"
     },
     {
       "operation_id": "start",
@@ -786,7 +805,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031080"
     },
     {
       "operation_id": "stop",
@@ -798,7 +818,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031081"
     },
     {
       "operation_id": "launch",
@@ -810,7 +831,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031082"
     },
     {
       "operation_id": "retry",
@@ -822,7 +844,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031083"
     },
     {
       "operation_id": "complete",
@@ -834,7 +857,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031084"
     },
     {
       "operation_id": "cancel",
@@ -846,7 +870,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "typed_name",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031085"
     },
     {
       "operation_id": "cleanup",
@@ -858,7 +883,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "typed_name",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031086"
     },
     {
       "operation_id": "throttle",
@@ -870,7 +896,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031087"
     },
     {
       "operation_id": "unthrottle",
@@ -882,7 +909,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031088"
     },
     {
       "operation_id": "force_cutover",
@@ -894,7 +922,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "typed_name",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031089"
     },
     {
       "operation_id": "set_options",
@@ -914,7 +943,8 @@
           "required": true
         }
       ],
-      "notes": "Applied by vtctld ApplySchema on every shard; confirmed only when every shard's primary shows it."
+      "notes": "Applied by vtctld ApplySchema on every shard; confirmed only when every shard's primary shows it.",
+      "form_reference": "SR-F-031090"
     },
     {
       "operation_id": "visibility",
@@ -944,7 +974,8 @@
           ]
         }
       ],
-      "notes": "Applied by vtctld ApplySchema on every shard; confirmed only when every shard's primary shows it."
+      "notes": "Applied by vtctld ApplySchema on every shard; confirmed only when every shard's primary shows it.",
+      "form_reference": "SR-F-031091"
     }
   ]
 }

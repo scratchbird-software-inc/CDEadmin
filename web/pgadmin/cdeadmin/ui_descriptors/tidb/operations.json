@@ -23,7 +23,8 @@
       "execution_host": true,
       "produces_log": true,
       "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo (full restore needs an empty cluster; point-in-time restore needs a log backup), 2026-10-30.",
-      "description": "Needs the BR tool and backup storage that every TiKV store can reach."
+      "description": "Needs the BR tool and backup storage that every TiKV store can reach.",
+      "form_reference": "SR-F-031018"
     },
     {
       "operation_id": "restore_full",
@@ -52,7 +53,8 @@
       "execution_host": true,
       "produces_log": true,
       "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo (full restore needs an empty cluster; point-in-time restore needs a log backup), 2026-10-30.",
-      "description": "Needs the BR tool and backup storage that every TiKV store can reach."
+      "description": "Needs the BR tool and backup storage that every TiKV store can reach.",
+      "form_reference": "SR-F-031019"
     },
     {
       "operation_id": "restore_point",
@@ -93,7 +95,8 @@
       "execution_host": true,
       "produces_log": true,
       "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo (full restore needs an empty cluster; point-in-time restore needs a log backup), 2026-10-30.",
-      "description": "Needs the BR tool and backup storage that every TiKV store can reach."
+      "description": "Needs the BR tool and backup storage that every TiKV store can reach.",
+      "form_reference": "SR-F-031020"
     },
     {
       "operation_id": "backup_br",
@@ -115,7 +118,8 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Verified live with the opt-in demo component (dev.sh start tidb_br), 2026-10-30."
+      "notes": "Verified live with the opt-in demo component (dev.sh start tidb_br), 2026-10-30.",
+      "form_reference": "SR-F-031021"
     },
     {
       "operation_id": "restore_br",
@@ -137,7 +141,8 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Verified live with the opt-in demo component (dev.sh start tidb_br), 2026-10-30."
+      "notes": "Verified live with the opt-in demo component (dev.sh start tidb_br), 2026-10-30.",
+      "form_reference": "SR-F-031022"
     },
     {
       "operation_id": "configure_placement",
@@ -157,7 +162,8 @@
           "required": true,
           "reference_kind": "placement-policy"
         }
-      ]
+      ],
+      "form_reference": "SR-F-031023"
     },
     {
       "operation_id": "reset_placement",
@@ -169,7 +175,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031024"
     },
     {
       "operation_id": "set_tiflash_replica",
@@ -196,7 +203,8 @@
         }
       ],
       "notes": "Verified live with one TiFlash server (dev.sh start tidb_tiflash, which needs 12 GiB of Docker memory); a count above the server count is refused first.",
-      "description": "A count above the number of TiFlash servers is refused."
+      "description": "A count above the number of TiFlash servers is refused.",
+      "form_reference": "SR-F-031025"
     },
     {
       "operation_id": "backup_br",
@@ -219,7 +227,8 @@
       "execution_host": true,
       "produces_log": true,
       "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo (full restore needs an empty cluster; point-in-time restore needs a log backup), 2026-10-30.",
-      "description": "Needs the BR tool and backup storage that every TiKV store can reach."
+      "description": "Needs the BR tool and backup storage that every TiKV store can reach.",
+      "form_reference": "SR-F-031026"
     },
     {
       "operation_id": "restore_br",
@@ -242,7 +251,8 @@
       "execution_host": true,
       "produces_log": true,
       "notes": "Needs the BR tool and storage every TiKV store can reach; not run against the demo (full restore needs an empty cluster; point-in-time restore needs a log backup), 2026-10-30.",
-      "description": "Needs the BR tool and backup storage that every TiKV store can reach."
+      "description": "Needs the BR tool and backup storage that every TiKV store can reach.",
+      "form_reference": "SR-F-031027"
     },
     {
       "operation_id": "configure_placement",
@@ -262,7 +272,8 @@
           "required": true,
           "reference_kind": "placement-policy"
         }
-      ]
+      ],
+      "form_reference": "SR-F-031028"
     },
     {
       "operation_id": "reset_placement",
@@ -274,7 +285,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031029"
     },
     {
       "operation_id": "set_tiflash_replica",
@@ -301,7 +313,8 @@
         }
       ],
       "notes": "Verified live with one TiFlash server (dev.sh start tidb_tiflash, which needs 12 GiB of Docker memory); a count above the server count is refused first.",
-      "description": "A count above the number of TiFlash servers is refused."
+      "description": "A count above the number of TiFlash servers is refused.",
+      "form_reference": "SR-F-031030"
     },
     {
       "operation_id": "configure_placement",
@@ -321,7 +334,8 @@
           "required": true,
           "reference_kind": "placement-policy"
         }
-      ]
+      ],
+      "form_reference": "SR-F-031031"
     },
     {
       "operation_id": "reset_placement",
@@ -333,7 +347,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031032"
     },
     {
       "operation_id": "cancel",
@@ -345,7 +360,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "typed_name",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031033"
     },
     {
       "operation_id": "pause",
@@ -358,7 +374,8 @@
       "status": "draft",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Verified live with the opt-in demo component (dev.sh start tidb_ticdc), 2026-10-30."
+      "notes": "Verified live with the opt-in demo component (dev.sh start tidb_ticdc), 2026-10-30.",
+      "form_reference": "SR-F-031034"
     },
     {
       "operation_id": "resume",
@@ -371,7 +388,8 @@
       "status": "draft",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Verified live with the opt-in demo component (dev.sh start tidb_ticdc), 2026-10-30."
+      "notes": "Verified live with the opt-in demo component (dev.sh start tidb_ticdc), 2026-10-30.",
+      "form_reference": "SR-F-031035"
     },
     {
       "operation_id": "analyze",
@@ -383,7 +401,8 @@
       },
       "confirmation": "none",
       "fields": [],
-      "status": "draft"
+      "status": "draft",
+      "form_reference": "SR-F-031036"
     },
     {
       "operation_id": "exchange",
@@ -428,7 +447,8 @@
           ]
         }
       ],
-      "status": "draft"
+      "status": "draft",
+      "form_reference": "SR-F-031037"
     },
     {
       "operation_id": "reorganize",
@@ -455,7 +475,8 @@
           "help": "PARTITION name VALUES LESS THAN (...) or VALUES IN (...) clauses, comma separated."
         }
       ],
-      "status": "draft"
+      "status": "draft",
+      "form_reference": "SR-F-031038"
     },
     {
       "operation_id": "add_partitions",
@@ -476,7 +497,8 @@
           "help": "PARTITION name VALUES LESS THAN (...) or VALUES IN (...) clauses, comma separated."
         }
       ],
-      "status": "draft"
+      "status": "draft",
+      "form_reference": "SR-F-031039"
     },
     {
       "operation_id": "set_options",
@@ -509,7 +531,8 @@
           "help": "Only for a table without a clustered primary key."
         }
       ],
-      "notes": "AUTO_INCREMENT is not offered: TiDB 8.5.6 reports it as 0 in information_schema, so a change cannot be read back."
+      "notes": "AUTO_INCREMENT is not offered: TiDB 8.5.6 reports it as 0 in information_schema, so a change cannot be read back.",
+      "form_reference": "SR-F-031040"
     },
     {
       "operation_id": "analyze",
@@ -521,7 +544,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "none",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031041"
     },
     {
       "operation_id": "set_cache",
@@ -550,7 +574,8 @@
             }
           ]
         }
-      ]
+      ],
+      "form_reference": "SR-F-031042"
     },
     {
       "operation_id": "lock_stats",
@@ -562,7 +587,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031043"
     },
     {
       "operation_id": "unlock_stats",
@@ -574,7 +600,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031044"
     },
     {
       "operation_id": "visibility",
@@ -603,7 +630,8 @@
             }
           ]
         }
-      ]
+      ],
+      "form_reference": "SR-F-031045"
     },
     {
       "operation_id": "grant",
@@ -630,7 +658,8 @@
           "default": "%"
         }
       ],
-      "notes": "TiDB 8.5.6 refuses WITH ADMIN OPTION, so delegation is not offered."
+      "notes": "TiDB 8.5.6 refuses WITH ADMIN OPTION, so delegation is not offered.",
+      "form_reference": "SR-F-031046"
     },
     {
       "operation_id": "revoke",
@@ -656,7 +685,8 @@
           "required": true,
           "default": "%"
         }
-      ]
+      ],
+      "form_reference": "SR-F-031047"
     },
     {
       "operation_id": "set_default",
@@ -682,7 +712,8 @@
           "required": true,
           "default": "%"
         }
-      ]
+      ],
+      "form_reference": "SR-F-031048"
     },
     {
       "operation_id": "terminate_query",
@@ -694,7 +725,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031049"
     },
     {
       "operation_id": "terminate_connection",
@@ -706,7 +738,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "typed_name",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031050"
     },
     {
       "operation_id": "set_global",
@@ -727,7 +760,8 @@
           "help": "Applies until the server restarts."
         }
       ],
-      "notes": "TiDB stores some values in a canonical form (20m reads back as 20m0s); a value read back in another form is reported unconfirmed with the stored value."
+      "notes": "TiDB stores some values in a canonical form (20m reads back as 20m0s); a value read back in another form is reported unconfirmed with the stored value.",
+      "form_reference": "SR-F-031051"
     },
     {
       "operation_id": "set_ttl",
@@ -805,7 +839,8 @@
           "help": "How often the TTL job runs, e.g. 1h."
         }
       ],
-      "notes": "Read back from SHOW CREATE TABLE (/*T![ttl] ... */ clauses)."
+      "notes": "Read back from SHOW CREATE TABLE (/*T![ttl] ... */ clauses).",
+      "form_reference": "SR-F-031052"
     },
     {
       "operation_id": "remove_ttl",
@@ -817,7 +852,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031053"
     },
     {
       "operation_id": "create",
@@ -845,7 +881,8 @@
           "help": "The same statement with optimizer hints, e.g. /*+ USE_INDEX(t, k) */."
         }
       ],
-      "notes": "Confirmed by EXPLAIN of the statement and @@last_plan_from_binding on one session; nothing is executed."
+      "notes": "Confirmed by EXPLAIN of the statement and @@last_plan_from_binding on one session; nothing is executed.",
+      "form_reference": "SR-F-031054"
     },
     {
       "operation_id": "set_status",
@@ -874,7 +911,8 @@
             }
           ]
         }
-      ]
+      ],
+      "form_reference": "SR-F-031055"
     },
     {
       "operation_id": "drop",
@@ -886,7 +924,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "typed_name",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-031056"
     },
     {
       "operation_id": "flashback_table",
@@ -912,7 +951,8 @@
           "required": false,
           "help": "Empty: the original name. Only within the GC life time (tidb_gc_life_time)."
         }
-      ]
+      ],
+      "form_reference": "SR-F-031057"
     },
     {
       "operation_id": "split_regions",
@@ -985,7 +1025,8 @@
           "help": "Comma-separated integer row handles."
         }
       ],
-      "notes": "Integer row handles only (an integer primary key, an AUTO_RANDOM key or _tidb_rowid); partitioned tables and clustered non-integer keys are refused. Confirmed from the region start keys in SHOW TABLE ... REGIONS. PD may later merge empty regions."
+      "notes": "Integer row handles only (an integer primary key, an AUTO_RANDOM key or _tidb_rowid); partitioned tables and clustered non-integer keys are refused. Confirmed from the region start keys in SHOW TABLE ... REGIONS. PD may later merge empty regions.",
+      "form_reference": "SR-F-031058"
     },
     {
       "operation_id": "admin_check",
@@ -998,7 +1039,8 @@
       "status": "draft",
       "confirmation": "none",
       "fields": [],
-      "notes": "ADMIN CHECK TABLE. Reads only; the check succeeds, or fails naming the inconsistency. There is no post-state to confirm."
+      "notes": "ADMIN CHECK TABLE. Reads only; the check succeeds, or fails naming the inconsistency. There is no post-state to confirm.",
+      "form_reference": "SR-F-031059"
     },
     {
       "operation_id": "admin_check",
@@ -1011,7 +1053,8 @@
       "status": "draft",
       "confirmation": "none",
       "fields": [],
-      "notes": "ADMIN CHECK INDEX. Reads only; the check succeeds, or fails naming the inconsistency. There is no post-state to confirm."
+      "notes": "ADMIN CHECK INDEX. Reads only; the check succeeds, or fails naming the inconsistency. There is no post-state to confirm.",
+      "form_reference": "SR-F-031060"
     }
   ]
 }

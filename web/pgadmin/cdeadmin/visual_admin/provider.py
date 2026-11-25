@@ -313,7 +313,9 @@ class ProviderVisualAdministration:
                     'message': f"{field['label']} is required.",
                 })
                 continue
-            if value is None:
+            if value is None or (
+                value == '' and field['control'] in {'number', 'select'}
+            ):
                 continue
             normalized, error = self._validate_field(field, value)
             if error:

@@ -21,7 +21,8 @@
       "label": "Name",
       "tab": "General",
       "control": "text",
-      "required": true
+      "required": true,
+      "editable_after_create": false
     },
     {
       "field_id": "parent",
@@ -29,8 +30,62 @@
       "tab": "General",
       "control": "reference",
       "required": false,
-      "help": "Use a qualified database or schema name where needed.",
-      "reference_kind": "schema"
+      "editable_after_create": false,
+      "help": "Target schema in the current DuckDB catalog (defaults to main).",
+      "reference_kind": "schema",
+      "reference_value": "display_name"
+    },
+    {
+      "field_id": "temporary",
+      "label": "Temporary sequence",
+      "tab": "General",
+      "control": "boolean",
+      "modes": [
+        "create"
+      ],
+      "default": false,
+      "record_key": "catalog_metadata.temporary",
+      "help": "Session-local sequence (CREATE TEMPORARY SEQUENCE)."
+    },
+    {
+      "field_id": "or_replace",
+      "label": "Replace if exists (OR REPLACE)",
+      "tab": "General",
+      "control": "boolean",
+      "modes": [
+        "create"
+      ],
+      "default": false,
+      "visible_when": {
+        "field": "if_not_exists",
+        "equals": false
+      }
+    },
+    {
+      "field_id": "if_not_exists",
+      "label": "Do not error if exists (IF NOT EXISTS)",
+      "tab": "General",
+      "control": "boolean",
+      "modes": [
+        "create"
+      ],
+      "default": false,
+      "visible_when": {
+        "field": "or_replace",
+        "equals": false
+      }
+    },
+    {
+      "field_id": "last_value",
+      "label": "Last generated value",
+      "tab": "General",
+      "control": "number",
+      "modes": [
+        "alter"
+      ],
+      "readonly": true,
+      "record_key": "catalog_metadata.last_value",
+      "help": "Current value reported by duckdb_sequences() without advancing the generator (NULL before first nextval)."
     },
     {
       "field_id": "start",
@@ -49,12 +104,32 @@
       "record_key": "catalog_metadata.increment_by"
     },
     {
+      "field_id": "no_minimum",
+      "label": "No minimum bound (NO MINVALUE)",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": false
+    },
+    {
       "field_id": "minimum",
       "label": "Minimum",
       "tab": "General",
       "control": "number",
       "required": false,
-      "record_key": "catalog_metadata.min_value"
+      "record_key": "catalog_metadata.min_value",
+      "visible_when": {
+        "field": "no_minimum",
+        "equals": false
+      }
+    },
+    {
+      "field_id": "no_maximum",
+      "label": "No maximum bound (NO MAXVALUE)",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": false
     },
     {
       "field_id": "maximum",
@@ -62,7 +137,11 @@
       "tab": "General",
       "control": "number",
       "required": false,
-      "record_key": "catalog_metadata.max_value"
+      "record_key": "catalog_metadata.max_value",
+      "visible_when": {
+        "field": "no_maximum",
+        "equals": false
+      }
     },
     {
       "field_id": "cycle",
@@ -72,7 +151,40 @@
       "required": false,
       "default": false,
       "record_key": "catalog_metadata.cycle"
+    },
+    {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "record_key": "catalog_metadata.comment",
+      "visible_when": {
+        "field": "clear_comment",
+        "truthy": false
+      }
+    },
+    {
+      "field_id": "clear_comment",
+      "label": "Clear comment",
+      "tab": "General",
+      "control": "boolean",
+      "modes": [
+        "alter"
+      ],
+      "default": false
+    },
+    {
+      "field_id": "reset_state_confirmed",
+      "label": "Confirm generator reset on parameter replacement",
+      "tab": "Engine",
+      "control": "boolean",
+      "modes": [
+        "alter"
+      ],
+      "default": false,
+      "help": "DuckDB 1.5.2 alters sequence parameters via CREATE OR REPLACE SEQUENCE, which resets last_value to START WITH (comment-only updates preserve last_value)."
     }
   ],
-  "notes": "DuckDB 1.5.2 supports CREATE/DROP SEQUENCE and COMMENT ON SEQUENCE; in-place parameter changes require reviewed DDN CREATE OR REPLACE SEQUENCE (which resets generator state), and ALTER SEQUENCE ... OWNED BY is non-durable across file reopen in DuckDB 1.5.2."
+  "notes": "DuckDB 1.5.2 supports CREATE [OR REPLACE] [TEMPORARY] SEQUENCE [IF NOT EXISTS], NO MINVALUE / NO MAXVALUE, CYCLE / NO CYCLE, DROP SEQUENCE [CASCADE], and COMMENT ON SEQUENCE. Comment-only edits preserve generator state; parameter changes compile guarded CREATE OR REPLACE SEQUENCE while preserving sequence comments."
 }

@@ -13,7 +13,8 @@
       "status": "complete",
       "confirmation": "none",
       "fields": [],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_duckdb.py (dialog draft -> plan -> apply on a database file)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_duckdb.py (dialog draft -> plan -> apply on a database file).",
+      "form_reference": "SR-F-030759"
     },
     {
       "operation_id": "force_checkpoint",
@@ -26,7 +27,8 @@
       "status": "complete",
       "confirmation": "none",
       "fields": [],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_duckdb.py (dialog draft -> plan -> apply on a database file)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_duckdb.py (dialog draft -> plan -> apply on a database file).",
+      "form_reference": "SR-F-030760"
     },
     {
       "operation_id": "vacuum",
@@ -39,7 +41,8 @@
       "status": "complete",
       "confirmation": "none",
       "fields": [],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_duckdb.py (dialog draft -> plan -> apply on a database file)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_duckdb.py (dialog draft -> plan -> apply on a database file).",
+      "form_reference": "SR-F-030761"
     },
     {
       "operation_id": "analyze",
@@ -52,7 +55,8 @@
       "status": "complete",
       "confirmation": "none",
       "fields": [],
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_duckdb.py (dialog draft -> plan -> apply on a database file)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_duckdb.py (dialog draft -> plan -> apply on a database file).",
+      "form_reference": "SR-F-030762"
     },
     {
       "operation_id": "export_database",
@@ -91,7 +95,8 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_duckdb.py (dialog draft -> plan -> apply on a database file)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_duckdb.py (dialog draft -> plan -> apply on a database file).",
+      "form_reference": "SR-F-030763"
     },
     {
       "operation_id": "import_database",
@@ -114,7 +119,8 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_duckdb.py (dialog draft -> plan -> apply on a database file)."
+      "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_duckdb.py (dialog draft -> plan -> apply on a database file).",
+      "form_reference": "SR-F-030764"
     },
     {
       "operation_id": "update_extensions",
@@ -133,7 +139,8 @@
           "control": "boolean",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030765"
     },
     {
       "operation_id": "execute",
@@ -162,7 +169,8 @@
             }
           ]
         }
-      ]
+      ],
+      "form_reference": "SR-F-030766"
     },
     {
       "operation_id": "editor_attachment_inventory",
@@ -176,7 +184,8 @@
       "confirmation": "none",
       "fields": [],
       "description": "Uses the selected original query connection. Native ATTACH/DETACH can affect other connections sharing its instance. Rollback does not undo a detached catalog or remove a created file; no automatic reconnect or replay.",
-      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team.",
+      "form_reference": "SR-F-030767"
     },
     {
       "operation_id": "editor_attachment_review_attach",
@@ -313,7 +322,8 @@
         }
       ],
       "description": "Uses the selected original query connection. Native ATTACH/DETACH can affect other connections sharing its instance. Rollback does not undo a detached catalog or remove a created file; no automatic reconnect or replay. Paths must stay under the registered root; :memory: requires explicit registration permission. Keys bind privately for five minutes, are released after dispatch/discard/expiry/close, and never appear in public SQL or receipts. Storage options do not rewrite existing files. Encrypted writes require a native writable crypto provider (httpfs in this reference runtime); inspect/load it through the extension workflow. No unsafe crypto override is enabled.",
-      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team.",
+      "form_reference": "SR-F-030768"
     },
     {
       "operation_id": "editor_attachment_review_detach",
@@ -340,7 +350,8 @@
         }
       ],
       "description": "Uses the selected original query connection. Native ATTACH/DETACH can affect other connections sharing its instance. Rollback does not undo a detached catalog or remove a created file; no automatic reconnect or replay.",
-      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team.",
+      "form_reference": "SR-F-030769"
     },
     {
       "operation_id": "editor_attachment_apply",
@@ -379,7 +390,8 @@
         }
       ],
       "description": "Uses the selected original query connection. Native ATTACH/DETACH can affect other connections sharing its instance. Rollback does not undo a detached catalog or remove a created file; no automatic reconnect or replay.",
-      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team.",
+      "form_reference": "SR-F-030770"
     },
     {
       "operation_id": "editor_attachment_receipt",
@@ -400,7 +412,8 @@
         }
       ],
       "description": "Uses the selected original query connection. Native ATTACH/DETACH can affect other connections sharing its instance. Rollback does not undo a detached catalog or remove a created file; no automatic reconnect or replay.",
-      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team.",
+      "form_reference": "SR-F-030771"
     },
     {
       "operation_id": "editor_attachment_discard",
@@ -427,7 +440,8 @@
         }
       ],
       "description": "Uses the selected original query connection. Native ATTACH/DETACH can affect other connections sharing its instance. Rollback does not undo a detached catalog or remove a created file; no automatic reconnect or replay. Discards pending authority and releases any private key.",
-      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team.",
+      "form_reference": "SR-F-030772"
     },
     {
       "operation_id": "editor_extension_inventory",
@@ -441,7 +455,8 @@
       "confirmation": "none",
       "fields": [],
       "description": "Uses the selected original query connection. Native extension installation can write files and LOAD registers process code. Neither is undone by database rollback; native signature, repository, TLS, access and runtime admission remain authoritative. No automatic replay. Returns native installed/loaded/source/version facts and actual extension admission settings, not credential values.",
-      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team.",
+      "form_reference": "SR-F-030773"
     },
     {
       "operation_id": "editor_extension_review_install",
@@ -532,7 +547,8 @@
         }
       ],
       "description": "Uses the selected original query connection. Native extension installation can write files and LOAD registers process code. Neither is undone by database rollback; native signature, repository, TLS, access and runtime admission remain authoritative. No automatic replay. URLs must not contain inline credentials, query or fragment. Files/directories must be under the registered root. Source files supply their own version; repository/version options apply only to named installs. Expected HTTP identity is compared against native which_secret selection; it does not supply credentials or prove authentication.",
-      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team.",
+      "form_reference": "SR-F-030774"
     },
     {
       "operation_id": "editor_extension_review_load",
@@ -574,7 +590,8 @@
         }
       ],
       "description": "Uses the selected original query connection. Native extension installation can write files and LOAD registers process code. Neither is undone by database rollback; native signature, repository, TLS, access and runtime admission remain authoritative. No automatic replay. LOAD has no FORCE/repository/version controls. Remote files must be installed first.",
-      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team.",
+      "form_reference": "SR-F-030775"
     },
     {
       "operation_id": "editor_extension_apply",
@@ -613,7 +630,8 @@
         }
       ],
       "description": "Uses the selected original query connection. Native extension installation can write files and LOAD registers process code. Neither is undone by database rollback; native signature, repository, TLS, access and runtime admission remain authoritative. No automatic replay. Review binds native settings, source identity, extension inventory and original session. Repeat requests return the receipt.",
-      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team.",
+      "form_reference": "SR-F-030776"
     },
     {
       "operation_id": "editor_extension_receipt",
@@ -634,7 +652,8 @@
         }
       ],
       "description": "Uses the selected original query connection. Native extension installation can write files and LOAD registers process code. Neither is undone by database rollback; native signature, repository, TLS, access and runtime admission remain authoritative. No automatic replay. Receipt distinguishes native acknowledgement from rediscovery; neither proves success on untested remote transport variants.",
-      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team.",
+      "form_reference": "SR-F-030777"
     },
     {
       "operation_id": "editor_copy_inventory",
@@ -648,7 +667,8 @@
       "confirmation": "none",
       "fields": [],
       "description": "Uses the selected original query connection and attached native catalogs. ALL runs separate native SCHEMA and DATA stages; DATA appends. Commit and rollback remain caller decisions. Failed or interrupted work can be partial or uncertain; never automatically replay. Native inventory includes storage encryption and cipher; copy eligibility is checked again at review and apply.",
-      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team.",
+      "form_reference": "SR-F-030778"
     },
     {
       "operation_id": "editor_copy_review",
@@ -695,7 +715,8 @@
         }
       ],
       "description": "Uses the selected original query connection and attached native catalogs. ALL runs separate native SCHEMA and DATA stages; DATA appends. Commit and rollback remain caller decisions. Failed or interrupted work can be partial or uncertain; never automatically replay. To encrypt/decrypt/change keys, first attach a separate destination with the intended private key and cipher. Copy does not accept an in-place rekey option; after explicit commit/detach, independently reopen before retiring any source.",
-      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team.",
+      "form_reference": "SR-F-030779"
     },
     {
       "operation_id": "editor_copy_apply",
@@ -734,7 +755,8 @@
         }
       ],
       "description": "Uses the selected original query connection and attached native catalogs. ALL runs separate native SCHEMA and DATA stages; DATA appends. Commit and rollback remain caller decisions. Failed or interrupted work can be partial or uncertain; never automatically replay. Confirm the destination name. Poll receipt until phase=finished and inspect every step, native acknowledgement, rediscovery and storage observation.",
-      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team.",
+      "form_reference": "SR-F-030780"
     },
     {
       "operation_id": "editor_copy_receipt",
@@ -755,7 +777,8 @@
         }
       ],
       "description": "Uses the selected original query connection and attached native catalogs. ALL runs separate native SCHEMA and DATA stages; DATA appends. Commit and rollback remain caller decisions. Failed or interrupted work can be partial or uncertain; never automatically replay. Progress includes phase, active table and completed native steps; source declarations and values remain private. Acknowledgement is not caller commit.",
-      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team.",
+      "form_reference": "SR-F-030781"
     },
     {
       "operation_id": "editor_copy_cancel",
@@ -776,7 +799,8 @@
         }
       ],
       "description": "Uses the selected original query connection and attached native catalogs. ALL runs separate native SCHEMA and DATA stages; DATA appends. Commit and rollback remain caller decisions. Failed or interrupted work can be partial or uncertain; never automatically replay. Requests interruption of an active review/apply worker. Read its final receipt; cancellation is not proof of rollback.",
-      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team.",
+      "form_reference": "SR-F-030782"
     },
     {
       "operation_id": "editor_copy_discard",
@@ -803,7 +827,8 @@
         }
       ],
       "description": "Uses the selected original query connection and attached native catalogs. ALL runs separate native SCHEMA and DATA stages; DATA appends. Commit and rollback remain caller decisions. Failed or interrupted work can be partial or uncertain; never automatically replay. Discards unused reviewed authority; it does not remove destination files.",
-      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team.",
+      "form_reference": "SR-F-030783"
     },
     {
       "operation_id": "editor_secret_inventory",
@@ -817,7 +842,8 @@
       "confirmation": "none",
       "fields": [],
       "description": "Uses the original query connection and native secret storage. Secret values and expressions stay private in plans/receipts; values are never read back. Persistent storage writes/removals can survive rollback. Native errors can abort the transaction; only the caller requests rollback. No automatic replay. Same-name temporary and persistent secrets have distinct resource/storage identities.",
-      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team.",
+      "form_reference": "SR-F-030784"
     },
     {
       "operation_id": "editor_secret_review_create",
@@ -993,7 +1019,8 @@
         }
       ],
       "description": "Uses the original query connection and native secret storage. Secret values and expressions stay private in plans/receipts; values are never read back. Persistent storage writes/removals can survive rollback. Native errors can abort the transaction; only the caller requests rollback. No automatic replay. Constants form an ordered typed tree: root keys name properties, LIST children have no key, MAP children have exact string keys. Never infer SQL from literal text.",
-      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team.",
+      "form_reference": "SR-F-030785"
     },
     {
       "operation_id": "editor_secret_review_drop",
@@ -1020,7 +1047,8 @@
         }
       ],
       "description": "Uses the original query connection and native secret storage. Secret values and expressions stay private in plans/receipts; values are never read back. Persistent storage writes/removals can survive rollback. Native errors can abort the transaction; only the caller requests rollback. No automatic replay. Select the exact identity from native session inventory; the backend captures its public storage metadata again and uses native DROP SECRET ... FROM storage. Identical public-metadata replacements cannot be detected.",
-      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team.",
+      "form_reference": "SR-F-030786"
     },
     {
       "operation_id": "editor_secret_apply",
@@ -1053,7 +1081,8 @@
         }
       ],
       "description": "Uses the original query connection and native secret storage. Secret values and expressions stay private in plans/receipts; values are never read back. Persistent storage writes/removals can survive rollback. Native errors can abort the transaction; only the caller requests rollback. No automatic replay. Uses the existing common retained operation pipeline and one-use plan; native acknowledgement and caller transaction finality remain separate.",
-      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team.",
+      "form_reference": "SR-F-030787"
     },
     {
       "operation_id": "editor_secret_receipts",
@@ -1067,7 +1096,8 @@
       "confirmation": "none",
       "fields": [],
       "description": "Uses the original query connection and native secret storage. Secret values and expressions stay private in plans/receipts; values are never read back. Persistent storage writes/removals can survive rollback. Native errors can abort the transaction; only the caller requests rollback. No automatic replay. Existing common operation receipts contain public outcomes, not native credential values or reusable saved SQL.",
-      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team.",
+      "form_reference": "SR-F-030788"
     },
     {
       "operation_id": "editor_receipt_list",
@@ -1094,7 +1124,8 @@
         }
       ],
       "description": "Owner/endpoint/registered-target bound archived observations. Reads require no original native session, send no native SQL and cannot revive native authority. Native acknowledgement, original-session release and transaction finality are separate facts; never automatically replay a saved receipt. Page size is 1..100; rows include family, original-session observation and last persisted state.",
-      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team.",
+      "form_reference": "SR-F-030789"
     },
     {
       "operation_id": "editor_receipt_get",
@@ -1115,7 +1146,8 @@
         }
       ],
       "description": "Owner/endpoint/registered-target bound archived observations. Reads require no original native session, send no native SQL and cannot revive native authority. Native acknowledgement, original-session release and transaction finality are separate facts; never automatically replay a saved receipt. Show live_session_observed=false, archived_read_only, outcome_observation and transaction_finality_inferred=false. Persisted applying/unknown states do not establish a final outcome.",
-      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team.",
+      "form_reference": "SR-F-030790"
     },
     {
       "operation_id": "editor_receipt_release",
@@ -1136,7 +1168,8 @@
         }
       ],
       "description": "Closes the exact original query connection and releases private bindings. Active workers must finish or be explicitly cancelled first. Native close discards uncommitted database work; persistent secret/file effects and loaded process code can survive. Show native release and durable receipt-release acknowledgement separately. Saved receipts remain read-only and never authorize reopening.",
-      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team.",
+      "form_reference": "SR-F-030791"
     },
     {
       "operation_id": "editor_attachment_review_rename",
@@ -1169,7 +1202,8 @@
         }
       ],
       "description": "Review ALTER DATABASE old SET ALIAS TO new on the original native session. Exact catalog/transaction/metadata/file fences; no physical rename. Native alias changes survive rollback. Stored and external SQL references are not rewritten and can fail; explicit acknowledgement is required. Apply, receipt and discard use the existing attachment task routes.",
-      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team."
+      "notes": "Original-session task transport duckdb_editor_operation; request={operation_id,draft}. Machine-readable routing/permissions/outcome contract: operation_id=describe. Never send these IDs to independent-file provider plan/apply. Shared UI task routing and human presentation are owned by the UI team.",
+      "form_reference": "SR-F-030792"
     }
   ]
 }

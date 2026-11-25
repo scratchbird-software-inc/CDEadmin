@@ -522,6 +522,9 @@ class ShellAuthorityStore:
             'default_sql_reference_script': '-- ScratchRobin standard session header\n',
             'disabled_applications': [],
             'action_overrides': {},
+            'tib_config': {},
+            'tib_sections': {},
+            'action_definitions': {},
         }
         stored = self._get_json('global', 'settings', {})
         if not isinstance(stored, dict):
@@ -589,6 +592,12 @@ class ShellAuthorityStore:
             if str(v) in VALID_ACTION_STATUSES:
                 clean_overrides[str(k)] = str(v)
         merged['action_overrides'] = clean_overrides
+        if not isinstance(merged.get('tib_config'), dict):
+            merged['tib_config'] = {}
+        if not isinstance(merged.get('tib_sections'), dict):
+            merged['tib_sections'] = {}
+        if not isinstance(merged.get('action_definitions'), dict):
+            merged['action_definitions'] = {}
         return merged
 
     def update_global_settings(self, patch: dict[str, Any]) -> dict[str, Any]:
@@ -611,6 +620,9 @@ class ShellAuthorityStore:
             'default_sql_reference_script',
             'disabled_applications',
             'action_overrides',
+            'tib_config',
+            'tib_sections',
+            'action_definitions',
         }
         if 'default_tabbed_icon_bar' in (patch or {}) and 'default_show_tabbed_icon_bar' not in (patch or {}):
             current['default_show_tabbed_icon_bar'] = bool(patch['default_tabbed_icon_bar'])
@@ -618,6 +630,10 @@ class ShellAuthorityStore:
             if key in allowed:
                 current[key] = value
         self._put_json('global', 'settings', current)
+        if 'enabled_engines' in (patch or {}) and isinstance(patch.get('enabled_engines'), list):
+            clean_ids = sorted({str(x).strip() for x in patch['enabled_engines'] if str(x).strip()})
+            self._put_json('global', 'engines_initialized', True)
+            self._sync_connector_preferences(clean_ids)
         return self.get_global_settings()
 
     def get_application_settings(self, application_id: str) -> dict[str, Any]:
@@ -1134,12 +1150,7 @@ class ShellAuthorityStore:
             'enabled_engine_ids': [row['id'] for row in catalog_rows if row['enabled']],
         }
 
-    def update_database_engines(self, enabled_engine_ids: list[str]) -> dict[str, Any]:
-        clean_ids = sorted({str(x).strip() for x in (enabled_engine_ids or []) if str(x).strip()})
-        self.update_global_settings({'enabled_engines': clean_ids})
-        self._put_json('global', 'engines_initialized', True)
-
-        # Synchronize live Object Explorer connector preferences when Preferences DB is active
+    def _sync_connector_preferences(self, clean_ids: list[str]) -> None:
         try:
             from pgadmin.utils.preferences import Preferences
 
@@ -1152,7 +1163,7 @@ class ShellAuthorityStore:
 
             uid = None
             try:
-                from flask_login import current_user
+                from flask_security import current_user
                 raw_uid = getattr(current_user, 'id', None)
                 uid = int(raw_uid) if raw_uid is not None else 1
             except Exception:
@@ -1170,6 +1181,11 @@ class ShellAuthorityStore:
         except Exception:
             pass
 
+    def update_database_engines(self, enabled_engine_ids: list[str]) -> dict[str, Any]:
+        clean_ids = sorted({str(x).strip() for x in (enabled_engine_ids or []) if str(x).strip()})
+        self.update_global_settings({'enabled_engines': clean_ids})
+        self._put_json('global', 'engines_initialized', True)
+        self._sync_connector_preferences(clean_ids)
         return self.list_database_engines()
 
     def resolve_user_authorization(

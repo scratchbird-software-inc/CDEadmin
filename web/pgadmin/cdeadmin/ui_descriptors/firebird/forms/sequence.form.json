@@ -27,8 +27,34 @@
       "tab": "General",
       "control": "text",
       "required": false,
-      "help": "Signed 64-bit integer. Creation defaults to 1, including negative increments. For an existing sequence, CREATE OR ALTER restarts the next value; the stored initial value is unchanged.",
+      "editable_after_create": false,
+      "help": "Signed 64-bit integer. Creation defaults to 1, including negative increments. Read-only once created; use Next generated value or Restart at original start below to reposition.",
       "record_key": "initial_value"
+    },
+    {
+      "field_id": "current_value",
+      "label": "Current generator value",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "record_key": "state.current_value",
+      "help": "Observed live via GEN_ID(..., 0) without advancing the generator."
+    },
+    {
+      "field_id": "owner",
+      "label": "Owner",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "record_key": "owner"
     },
     {
       "field_id": "increment",
@@ -44,6 +70,10 @@
       "tab": "General",
       "control": "text",
       "required": false,
+      "visible_when": {
+        "field": "clear_description",
+        "truthy": false
+      },
       "help": "Empty removes the comment."
     },
     {

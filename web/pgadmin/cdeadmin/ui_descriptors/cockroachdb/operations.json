@@ -34,7 +34,8 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3). Runs DETACHED: the job is followed in Jobs."
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3). Runs DETACHED: the job is followed in Jobs.",
+      "form_reference": "SR-F-030669"
     },
     {
       "operation_id": "decommission",
@@ -86,7 +87,8 @@
           ]
         }
       ],
-      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\")."
+      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\").",
+      "form_reference": "SR-F-030670"
     },
     {
       "operation_id": "recommission",
@@ -99,7 +101,8 @@
       "status": "draft",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\")."
+      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\").",
+      "form_reference": "SR-F-030671"
     },
     {
       "operation_id": "configure_zone",
@@ -191,7 +194,8 @@
           ]
         }
       ],
-      "notes": "Constraints and lease preferences are rows (list form); the per-replica-count map form has no editor yet. Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
+      "notes": "Constraints and lease preferences are rows (list form); the per-replica-count map form has no editor yet. Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3).",
+      "form_reference": "SR-F-030672"
     },
     {
       "operation_id": "reset_zone",
@@ -204,7 +208,8 @@
       "status": "complete",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3).",
+      "form_reference": "SR-F-030673"
     },
     {
       "operation_id": "set_primary_region",
@@ -224,7 +229,8 @@
           "required": true
         }
       ],
-      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\")."
+      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\").",
+      "form_reference": "SR-F-030674"
     },
     {
       "operation_id": "add_region",
@@ -244,7 +250,8 @@
           "required": true
         }
       ],
-      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\")."
+      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\").",
+      "form_reference": "SR-F-030675"
     },
     {
       "operation_id": "drop_region",
@@ -264,7 +271,8 @@
           "required": true
         }
       ],
-      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\")."
+      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\").",
+      "form_reference": "SR-F-030676"
     },
     {
       "operation_id": "set_secondary_region",
@@ -284,7 +292,8 @@
           "required": true
         }
       ],
-      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\")."
+      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\").",
+      "form_reference": "SR-F-030677"
     },
     {
       "operation_id": "drop_secondary_region",
@@ -297,7 +306,8 @@
       "status": "draft",
       "confirmation": "typed_name",
       "fields": [],
-      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\")."
+      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\").",
+      "form_reference": "SR-F-030678"
     },
     {
       "operation_id": "set_survival_goal",
@@ -328,7 +338,8 @@
           ]
         }
       ],
-      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\")."
+      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\").",
+      "form_reference": "SR-F-030679"
     },
     {
       "operation_id": "set_placement",
@@ -359,7 +370,8 @@
           ]
         }
       ],
-      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\")."
+      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\").",
+      "form_reference": "SR-F-030680"
     },
     {
       "operation_id": "backup",
@@ -398,7 +410,8 @@
       ],
       "execution_host": true,
       "produces_log": true,
-      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3). Runs DETACHED: the job is followed in Jobs."
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3). Runs DETACHED: the job is followed in Jobs.",
+      "form_reference": "SR-F-030681"
     },
     {
       "operation_id": "configure_zone",
@@ -490,7 +503,8 @@
           ]
         }
       ],
-      "notes": "Constraints and lease preferences are rows (list form); the per-replica-count map form has no editor yet. Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
+      "notes": "Constraints and lease preferences are rows (list form); the per-replica-count map form has no editor yet. Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3).",
+      "form_reference": "SR-F-030682"
     },
     {
       "operation_id": "reset_zone",
@@ -503,7 +517,8 @@
       "status": "complete",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3).",
+      "form_reference": "SR-F-030683"
     },
     {
       "operation_id": "set_locality",
@@ -557,7 +572,8 @@
           }
         }
       ],
-      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\")."
+      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\").",
+      "form_reference": "SR-F-030684"
     },
     {
       "operation_id": "scatter",
@@ -570,7 +586,8 @@
       "status": "complete",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3).",
+      "form_reference": "SR-F-030685"
     },
     {
       "operation_id": "create_changefeed",
@@ -655,7 +672,8 @@
           "required": false
         }
       ],
-      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3).",
+      "form_reference": "SR-F-030686"
     },
     {
       "operation_id": "scatter",
@@ -668,7 +686,8 @@
       "status": "complete",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3).",
+      "form_reference": "SR-F-030687"
     },
     {
       "operation_id": "refresh",
@@ -681,7 +700,8 @@
       "status": "complete",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3).",
+      "form_reference": "SR-F-030688"
     },
     {
       "operation_id": "relocate_lease",
@@ -701,7 +721,8 @@
           "required": true
         }
       ],
-      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\")."
+      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\").",
+      "form_reference": "SR-F-030689"
     },
     {
       "operation_id": "relocate_voter",
@@ -727,7 +748,8 @@
           "required": true
         }
       ],
-      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\")."
+      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\").",
+      "form_reference": "SR-F-030690"
     },
     {
       "operation_id": "relocate_nonvoter",
@@ -753,7 +775,8 @@
           "required": true
         }
       ],
-      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\")."
+      "notes": "Untested: needs a multi-node or multi-region cluster; the demo is one node without locality (docs/en_US/postgresql_wire_parity.rst, \"Untested on CockroachDB\").",
+      "form_reference": "SR-F-030691"
     },
     {
       "operation_id": "pause",
@@ -773,7 +796,8 @@
           "required": false
         }
       ],
-      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3).",
+      "form_reference": "SR-F-030692"
     },
     {
       "operation_id": "resume",
@@ -786,7 +810,8 @@
       "status": "complete",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3).",
+      "form_reference": "SR-F-030693"
     },
     {
       "operation_id": "cancel",
@@ -799,7 +824,8 @@
       "status": "complete",
       "confirmation": "typed_name",
       "fields": [],
-      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3).",
+      "form_reference": "SR-F-030694"
     },
     {
       "operation_id": "pause",
@@ -812,7 +838,8 @@
       "status": "complete",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3).",
+      "form_reference": "SR-F-030695"
     },
     {
       "operation_id": "resume",
@@ -825,7 +852,8 @@
       "status": "complete",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3).",
+      "form_reference": "SR-F-030696"
     },
     {
       "operation_id": "pause",
@@ -838,7 +866,8 @@
       "status": "complete",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3).",
+      "form_reference": "SR-F-030697"
     },
     {
       "operation_id": "resume",
@@ -851,7 +880,8 @@
       "status": "complete",
       "confirmation": "confirm",
       "fields": [],
-      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3).",
+      "form_reference": "SR-F-030698"
     },
     {
       "operation_id": "cancel",
@@ -864,7 +894,8 @@
       "status": "complete",
       "confirmation": "typed_name",
       "fields": [],
-      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3)."
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3).",
+      "form_reference": "SR-F-030699"
     },
     {
       "operation_id": "add_table",
@@ -907,7 +938,8 @@
           ]
         }
       ],
-      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3). Pause the changefeed first."
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3). Pause the changefeed first.",
+      "form_reference": "SR-F-030700"
     },
     {
       "operation_id": "drop_table",
@@ -929,7 +961,8 @@
           "reference_value": "display_path"
         }
       ],
-      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3). Pause the changefeed first."
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3). Pause the changefeed first.",
+      "form_reference": "SR-F-030701"
     },
     {
       "operation_id": "set_sink",
@@ -949,7 +982,8 @@
           "required": true
         }
       ],
-      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3). Pause the changefeed first; the sink keeps its type."
+      "notes": "Live round trip (tools/tests/test_ui_descriptor_roundtrip_cockroachdb.py, 26.1.3). Pause the changefeed first; the sink keeps its type.",
+      "form_reference": "SR-F-030702"
     },
     {
       "operation_id": "truncate",
@@ -969,7 +1003,8 @@
           "required": false,
           "default": false
         }
-      ]
+      ],
+      "form_reference": "SR-F-030703"
     },
     {
       "operation_id": "analyze",
@@ -981,7 +1016,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "none",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-030704"
     },
     {
       "operation_id": "set_schema",
@@ -1000,7 +1036,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030705"
     },
     {
       "operation_id": "set_owner",
@@ -1019,7 +1056,8 @@
           "control": "text",
           "required": true
         }
-      ]
+      ],
+      "form_reference": "SR-F-030706"
     },
     {
       "operation_id": "validate",
@@ -1031,7 +1069,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-030707"
     },
     {
       "operation_id": "set_setting",
@@ -1063,7 +1102,8 @@
           "required": false,
           "help": "Leave empty for every database."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030708"
     },
     {
       "operation_id": "reset_setting",
@@ -1089,7 +1129,8 @@
           "required": false,
           "help": "Leave empty for every database."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030709"
     },
     {
       "operation_id": "set_setting",
@@ -1121,7 +1162,8 @@
           "required": false,
           "help": "Leave empty for every database."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030710"
     },
     {
       "operation_id": "reset_setting",
@@ -1147,7 +1189,8 @@
           "required": false,
           "help": "Leave empty for every database."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030711"
     },
     {
       "operation_id": "grant",
@@ -1197,7 +1240,8 @@
           "required": false,
           "default": false
         }
-      ]
+      ],
+      "form_reference": "SR-F-030712"
     },
     {
       "operation_id": "revoke",
@@ -1240,7 +1284,8 @@
             }
           ]
         }
-      ]
+      ],
+      "form_reference": "SR-F-030713"
     },
     {
       "operation_id": "grant",
@@ -1286,7 +1331,8 @@
           "required": false,
           "default": false
         }
-      ]
+      ],
+      "form_reference": "SR-F-030714"
     },
     {
       "operation_id": "revoke",
@@ -1325,7 +1371,8 @@
             }
           ]
         }
-      ]
+      ],
+      "form_reference": "SR-F-030715"
     },
     {
       "operation_id": "grant",
@@ -1363,7 +1410,8 @@
           "required": false,
           "default": false
         }
-      ]
+      ],
+      "form_reference": "SR-F-030716"
     },
     {
       "operation_id": "revoke",
@@ -1394,7 +1442,8 @@
             }
           ]
         }
-      ]
+      ],
+      "form_reference": "SR-F-030717"
     },
     {
       "operation_id": "terminate_query",
@@ -1406,7 +1455,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "confirm",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-030718"
     },
     {
       "operation_id": "terminate_connection",
@@ -1418,7 +1468,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "typed_name",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-030719"
     },
     {
       "operation_id": "repartition",
@@ -1556,7 +1607,8 @@
             }
           ]
         }
-      ]
+      ],
+      "form_reference": "SR-F-030720"
     },
     {
       "operation_id": "set_value",
@@ -1576,7 +1628,8 @@
           "required": true,
           "help": "Cluster-wide and persistent."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030721"
     },
     {
       "operation_id": "reset",
@@ -1588,7 +1641,8 @@
       "tier": 2,
       "status": "draft",
       "confirmation": "typed_name",
-      "fields": []
+      "fields": [],
+      "form_reference": "SR-F-030722"
     },
     {
       "operation_id": "grant_system",
@@ -1704,7 +1758,8 @@
           "required": false,
           "default": false
         }
-      ]
+      ],
+      "form_reference": "SR-F-030723"
     },
     {
       "operation_id": "revoke_system",
@@ -1813,7 +1868,8 @@
             }
           ]
         }
-      ]
+      ],
+      "form_reference": "SR-F-030724"
     },
     {
       "operation_id": "grant_system",
@@ -1929,7 +1985,8 @@
           "required": false,
           "default": false
         }
-      ]
+      ],
+      "form_reference": "SR-F-030725"
     },
     {
       "operation_id": "revoke_system",
@@ -2038,7 +2095,8 @@
             }
           ]
         }
-      ]
+      ],
+      "form_reference": "SR-F-030726"
     },
     {
       "operation_id": "split_at",
@@ -2066,7 +2124,8 @@
             }
           ]
         }
-      ]
+      ],
+      "form_reference": "SR-F-030727"
     },
     {
       "operation_id": "set_storage_parameter",
@@ -2131,7 +2190,8 @@
           "required": true,
           "help": "true/false, or a number."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030728"
     },
     {
       "operation_id": "reset_storage_parameter",
@@ -2189,7 +2249,8 @@
           ],
           "help": "schema_locked is changed on its own."
         }
-      ]
+      ],
+      "form_reference": "SR-F-030729"
     }
   ]
 }

@@ -2698,6 +2698,14 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                 create_source = (
                     str(definition[0][1]) if definition else ''
                 )
+                seq_state_rows = optional(
+                    f'SELECT next_not_cached_value, cycle_count FROM `{escaped_schema}`.`{escaped_name}`'
+                )
+                seq_comment_rows = optional(
+                    'SELECT TABLE_COMMENT FROM information_schema.TABLES '
+                    'WHERE TABLE_SCHEMA=%s AND TABLE_NAME=%s',
+                    (schema_name, str(object_name)),
+                )
             elif object_type == 'VIEW' and profile is MYSQL_PROFILE:
                 definition = optional(
                     f'SHOW CREATE VIEW `{escaped_schema}`.`{escaped_name}`'
@@ -2737,6 +2745,12 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                 )
             if create_source:
                 native['ddl'] = create_source
+            if kind == 'sequence' and profile is MARIADB_PROFILE:
+                if seq_state_rows:
+                    native['current_value'] = str(seq_state_rows[0][0])
+                    native['cycle_count'] = int(seq_state_rows[0][1] or 0)
+                if seq_comment_rows and seq_comment_rows[0][0]:
+                    native['comment'] = str(seq_comment_rows[0][0])
             if kind == 'table' and (schema_name, str(object_name)) in table_facts:
                 from .mysql_table_options import ddl_options
                 facts = table_facts[(schema_name, str(object_name))]
@@ -3123,6 +3137,101 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                     native['factor_catalog_state'] = 'observed' if len(catalog_failures) == before_failures else 'unavailable'
                     if native['factor_catalog_state'] == 'observed':
                         native['authentication_factors'] = factor_map.get((native['user'], native['host']), [])
+        if profile is MYSQL_PROFILE:
+            default_role_rows = optional_records(
+                'SELECT USER, HOST, DEFAULT_ROLE_USER, DEFAULT_ROLE_HOST '
+                'FROM mysql.default_roles '
+                'ORDER BY USER, HOST, DEFAULT_ROLE_USER, DEFAULT_ROLE_HOST'
+            )
+            default_roles_by_acct = {}
+            default_role_pairs_by_acct = {}
+            for drow in default_role_rows:
+                u_key = (str(drow.get('user') or ''), str(drow.get('host') or '%'))
+                dr_u = str(drow.get('default_role_user') or '')
+                dr_h = str(drow.get('default_role_host') or '%')
+                default_roles_by_acct.setdefault(u_key, []).append({
+                    'role': f'{dr_u}@{dr_h}',
+                    'user': dr_u,
+                    'host': dr_h,
+                })
+                default_role_pairs_by_acct.setdefault(u_key, set()).add((dr_u, dr_h))
+            edge_rows = optional_records(
+                'SELECT FROM_USER, FROM_HOST, TO_USER, TO_HOST, WITH_ADMIN_OPTION '
+                'FROM mysql.role_edges '
+                'ORDER BY FROM_USER, FROM_HOST, TO_USER, TO_HOST'
+            )
+            member_of_by_acct = {}
+            members_by_acct = {}
+            for erow in edge_rows:
+                f_u = str(erow.get('from_user') or '')
+                f_h = str(erow.get('from_host') or '%')
+                t_u = str(erow.get('to_user') or '')
+                t_h = str(erow.get('to_host') or '%')
+                adm = str(erow.get('with_admin_option') or '').upper() == 'Y'
+                is_def = (f_u, f_h) in default_role_pairs_by_acct.get((t_u, t_h), set())
+                member_of_by_acct.setdefault((t_u, t_h), []).append({
+                    'role': f'{f_u}@{f_h}',
+                    'user': f_u,
+                    'host': f_h,
+                    'admin_option': adm,
+                    'default_role': is_def,
+                })
+                members_by_acct.setdefault((f_u, f_h), []).append({
+                    'principal': f'{t_u}@{t_h}',
+                    'user': t_u,
+                    'host': t_h,
+                    'admin_option': adm,
+                })
+            for resource in resources.values():
+                if resource['resource_kind'] in {'user', 'role'}:
+                    nat = resource.setdefault('native', {})
+                    acct_key = (str(nat.get('user') or ''), str(nat.get('host') or '%'))
+                    nat['member_of'] = list(member_of_by_acct.get(acct_key, ()))
+                    nat['members'] = list(members_by_acct.get(acct_key, ()))
+                    nat['default_roles'] = list(default_roles_by_acct.get(acct_key, ()))
+        elif profile is MARIADB_PROFILE:
+            mapping_rows = optional_records(
+                'SELECT Host, User, Role, Admin_option '
+                'FROM mysql.roles_mapping '
+                'ORDER BY Role, User, Host'
+            )
+            maria_member_of = {}
+            maria_members = {}
+            for mrow in mapping_rows:
+                m_user = str(mrow.get('user') or '')
+                m_host = str(mrow.get('host') or '')
+                m_role = str(mrow.get('role') or '')
+                adm = str(mrow.get('admin_option') or '').upper() == 'Y'
+                maria_member_of.setdefault((m_user, m_host), []).append({
+                    'role': m_role,
+                    'admin_option': adm,
+                })
+                maria_members.setdefault(m_role, []).append({
+                    'principal': f'{m_user}@{m_host}' if m_host else m_user,
+                    'user': m_user,
+                    'host': m_host,
+                    'principal_type': 'role' if not m_host else 'user',
+                    'admin_option': adm,
+                })
+            for resource in resources.values():
+                if resource['resource_kind'] in {'user', 'role'}:
+                    nat = resource.setdefault('native', {})
+                    u_name = str(nat.get('user') or resource['display_name'])
+                    h_name = str(nat.get('host') or '')
+                    def_role = str(nat.get('default_role') or '')
+                    m_of = [
+                        {**entry, 'default_role': bool(def_role and entry['role'] == def_role)}
+                        for entry in maria_member_of.get((u_name, h_name), ())
+                    ]
+                    nat['member_of'] = m_of
+                    nat['members'] = (
+                        list(maria_members.get(u_name, ()))
+                        if resource['resource_kind'] == 'role'
+                        else []
+                    )
+                    nat['default_roles'] = (
+                        [{'role': def_role}] if def_role else []
+                    )
         for grantee, privilege in optional(
             'SELECT GRANTEE, PRIVILEGE_TYPE FROM information_schema.'
             'USER_PRIVILEGES ORDER BY 1, 2'
@@ -3132,6 +3241,12 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                 'scope': 'global', 'navigator_scope': 'server',
             })
         if profile in (MYSQL_PROFILE, MARIADB_PROFILE):
+            for resource in resources.values():
+                if resource['resource_kind'] in {
+                    'database', 'table', 'view', 'materialized-view',
+                    'procedure', 'function', 'package', 'sequence',
+                }:
+                    resource.setdefault('native', {}).setdefault('privileges', [])
             from ..mysql_grants import QUERIES as scoped_grants, routine_grants
             for _section, scope, source, keys in scoped_grants:
                 if scope == 'routine' and profile is MYSQL_PROFILE:
@@ -3147,12 +3262,24 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                     database = record['table_schema']
                     if selected_database and database != selected_database:
                         continue
+                    relation_owner_id = None
                     if scope == 'routine':
                         path = [database, record['routine_name']]
-                        owner_kind = record['routine_type'].lower()
+                        raw_rkind = record['routine_type'].lower()
+                        owner_kind = 'package' if raw_rkind == 'package body' else raw_rkind
                     elif scope in {'table', 'column'}:
                         path = [database, record['table_name']]
-                        owner_kind = 'column' if scope == 'column' else 'table'
+                        matched_rel_kind = next(
+                            (
+                                rk for rk in ('table', 'view', 'materialized-view', 'sequence')
+                                if resource_key(rk, [database], record['table_name']) in resources
+                            ),
+                            'table',
+                        )
+                        relation_owner_id = resource_key(
+                            matched_rel_kind, [database], record['table_name']
+                        )
+                        owner_kind = 'column' if scope == 'column' else matched_rel_kind
                         if scope == 'column':
                             path.append(record['column_name'])
                     else:
@@ -3160,10 +3287,27 @@ def _resources(connection, request, profile=MYSQL_PROFILE):
                         owner_kind = 'database'
                     name = record['grantee'] + ' / ' + record['privilege_type']
                     owner_id = resource_key(owner_kind, path[:-1], path[-1])
+                    priv_entry = {
+                        'grantee': record['grantee'],
+                        'privilege': record['privilege_type'],
+                        'grant_option': str(record.get('is_grantable') or '').upper() == 'YES',
+                        'scope': scope,
+                        'database': database,
+                        **({'column': record['column_name']} if scope == 'column' and record.get('column_name') else {}),
+                        **({'routine_type': record['routine_type']} if scope == 'routine' and record.get('routine_type') else {}),
+                    }
+                    if owner_id in resources and resources[owner_id]['resource_kind'] != 'column':
+                        resources[owner_id].setdefault('native', {}).setdefault(
+                            'privileges', []
+                        ).append(priv_entry)
+                    elif scope == 'column' and relation_owner_id in resources:
+                        resources[relation_owner_id].setdefault('native', {}).setdefault(
+                            'privileges', []
+                        ).append(priv_entry)
                     add('privilege', path, name, {**record, 'grantee': record['grantee'],
                         'privilege': record['privilege_type'], 'scope': scope, 'database': database,
                         'navigator_parent_resource_id': owner_id,
-                        'administration': {'allowed_operations': ['inspect']}},
+                        'administration': {'allowed_operations': ['inspect', 'revoke']}},
                         identity=profile.engine_id + '-grant:' + json.dumps([scope, *[record[key] for key in keys]], ensure_ascii=False, separators=(',', ':')))
         tablespace_source = (
             'SELECT DISTINCT TABLESPACE_NAME, ENGINE FROM '

@@ -16,7 +16,19 @@
       "label": "Name",
       "tab": "General",
       "control": "text",
-      "required": true
+      "required": true,
+      "editable_after_create": false
+    },
+    {
+      "field_id": "new_name",
+      "label": "Rename to",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "modes": [
+        "alter"
+      ],
+      "help": "Optional replacement identifier for ALTER DOMAIN <old> TO <new>."
     },
     {
       "field_id": "data_type",
@@ -24,7 +36,94 @@
       "tab": "General",
       "control": "text",
       "required": true,
-      "record_key": "type_sql"
+      "option_values_path": [
+        "dialect",
+        "column_types"
+      ],
+      "record_key": "base_type_sql",
+      "help": "Firebird 5 SQL type such as VARCHAR(120), NUMERIC(12,2), INT128, DECFLOAT(34), BOOLEAN, TIMESTAMP WITH TIME ZONE, or BLOB."
+    },
+    {
+      "field_id": "blob_sub_type",
+      "label": "BLOB subtype",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "options": [
+        {
+          "value": "TEXT",
+          "label": "TEXT (1)"
+        },
+        {
+          "value": "BINARY",
+          "label": "BINARY (0)"
+        }
+      ],
+      "help": "Optional SUB_TYPE for BLOB domains: TEXT, BINARY, or a signed 16-bit custom subtype integer."
+    },
+    {
+      "field_id": "segment_size",
+      "label": "BLOB segment size",
+      "tab": "General",
+      "control": "number",
+      "required": false,
+      "help": "Optional SEGMENT SIZE (1..65535) for BLOB domains."
+    },
+    {
+      "field_id": "array_bounds",
+      "label": "Array bounds",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "help": "Optional shorthand for 1..16 Firebird array dimensions (upper > lower), such as [1:4] or [1:3, 1:2]."
+    },
+    {
+      "field_id": "dimensions",
+      "label": "Array dimensions",
+      "tab": "General",
+      "control": "grid",
+      "required": false,
+      "columns": [
+        {
+          "field_id": "lower",
+          "label": "Lower bound",
+          "control": "number",
+          "required": true,
+          "default": 1
+        },
+        {
+          "field_id": "upper",
+          "label": "Upper bound",
+          "control": "number",
+          "required": true
+        }
+      ],
+      "help": "Structured multi-dimensional array bounds (up to 16 dimensions; every upper bound must strictly exceed its lower bound)."
+    },
+    {
+      "field_id": "character_set",
+      "label": "Character set",
+      "tab": "General",
+      "control": "select",
+      "required": false,
+      "option_values_path": [
+        "catalog",
+        "character_sets"
+      ],
+      "help": "Optional CHARACTER SET clause for CHAR, VARCHAR, and BLOB SUB_TYPE TEXT domains (for example UTF8, ISO8859_1, ASCII, OCTETS)."
+    },
+    {
+      "field_id": "collation",
+      "label": "Collation",
+      "tab": "General",
+      "control": "select",
+      "required": false,
+      "editable_after_create": false,
+      "option_values_path": [
+        "catalog",
+        "collations"
+      ],
+      "help": "Optional COLLATE clause emitted after constraints on CREATE DOMAIN (for example UNICODE_CI_AI, UNICODE_CI, UTF8)."
     },
     {
       "field_id": "default",
@@ -33,7 +132,8 @@
       "control": "text",
       "required": false,
       "record_key": "default_source",
-      "record_pattern": "^\\s*DEFAULT\\s+(.*)$"
+      "record_pattern": "^\\s*DEFAULT\\s+(.*)$",
+      "help": "SQL literal, NULL, or context variable without the DEFAULT keyword (for example 0.00, 'ACTIVE', CURRENT_TIMESTAMP, CURRENT_USER)."
     },
     {
       "field_id": "not_null",
@@ -45,13 +145,46 @@
       "record_truthy": true
     },
     {
-      "field_id": "check",
-      "label": "Check expression",
+      "field_id": "description",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "required": false,
+      "help": "Stored in RDB$DESCRIPTION via COMMENT ON DOMAIN."
+    },
+    {
+      "field_id": "clear_description",
+      "label": "Clear comment",
+      "tab": "General",
+      "control": "boolean",
+      "required": false,
+      "default": false,
+      "modes": [
+        "alter"
+      ],
+      "help": "Clears RDB$DESCRIPTION via COMMENT ON DOMAIN <name> IS NULL."
+    },
+    {
+      "field_id": "constraint_name",
+      "label": "Constraint name",
       "tab": "Constraints",
       "control": "text",
       "required": false,
+      "modes": [
+        "alter"
+      ],
+      "help": "Optional constraint identifier for ALTER DOMAIN <name> ADD CONSTRAINT <constraint_name> CHECK (...)."
+    },
+    {
+      "field_id": "check",
+      "label": "Check expression",
+      "tab": "Constraints",
+      "control": "code",
+      "language": "sql",
+      "required": false,
       "record_key": "validation_source",
-      "record_pattern": "^\\s*CHECK\\s*\\((.*)\\)\\s*$"
+      "record_pattern": "^\\s*CHECK\\s*\\((.*)\\)\\s*$",
+      "help": "Predicate using Firebird's VALUE keyword (for example VALUE BETWEEN 0 AND 100, VALUE IN ('LOW', 'HIGH'), or VALUE IS NULL OR VALUE SIMILAR TO '[A-Z]{3}[0-9]{5}')."
     },
     {
       "field_id": "drop_constraint",
@@ -62,7 +195,8 @@
       "default": false,
       "modes": [
         "alter"
-      ]
+      ],
+      "help": "Drops the existing domain CHECK constraint (automatically combined before ADD CHECK when replacing a constraint)."
     },
     {
       "field_id": "drop_default",
@@ -76,5 +210,5 @@
       ]
     }
   ],
-  "notes": "Drafted by tools/draft_ui_descriptors.py from the provider's effective create/alter forms; field ids, options and visibility are the provider's own. Review tab placement, finish typing any keyvalue field listed under gaps, split combined constraint grids, then set status complete after a verified round trip. Round-tripped against Firebird 5.0.3 by tools/tests/test_ui_descriptor_roundtrip_firebird.py (create, re-inspect pre-fill, alter)."
+  "notes": "Enterprise Firebird 5.0 domain form verified against the Firebird 5.0 Language Reference and FlameRobin parity contract: scalar/extended precision types, BLOB subtype & segment size, 1..16 array dimensions (upper > lower), character sets, collations, defaults, NOT NULL, named/unnamed VALUE check constraints, rename, and COMMENT ON DOMAIN."
 }

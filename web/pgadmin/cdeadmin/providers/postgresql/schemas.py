@@ -38,6 +38,14 @@ def facts(native):
             'nspacl': list(row.get('nspacl') or [])}
 
 
+def privileges(native):
+    """Normalized schema ACL grants from aclexplode or nspacl."""
+    from .cluster import parse_acl_items
+    row = native.get('catalog_row') or native
+    source = native.get('explicit_grants') or row.get('explicit_grants') or row.get('nspacl')
+    return parse_acl_items(source, PRIVILEGE_CODES)
+
+
 def _grantee(value):
     value = _name(value, 'grantee')
     return 'PUBLIC' if value.upper() == 'PUBLIC' else _identifier(

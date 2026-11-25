@@ -384,7 +384,7 @@ class DuckDBAdministration(RelationalAdministration):
                 result['errors'].append({'field_id': None,
                     'code': 'invalid_duckdb_definition_replacement',
                     'message': str(error)})
-        elif (not result['errors'] and request.get('resource_kind') in {'table', 'column'} and
+        elif (not result['errors'] and request.get('resource_kind') in {'table', 'column', 'sequence'} and
                 request.get('operation_id') in {'create', 'alter'}):
             try:
                 normalized = dict(request)
@@ -456,6 +456,8 @@ class DuckDBAdministration(RelationalAdministration):
         if (request['operation_id'] == 'alter' and
                 request['resource_kind'] in {'view', 'macro'}):
             return self._definition_replacement(request)
+        if request['operation_id'] == 'alter' and request['resource_kind'] == 'sequence':
+            return self._compile_duckdb_sequence_alter(request)
         compiled = super()._compile(request)
         if request.get('resource_kind') == 'table' and request.get('operation_id') == 'alter':
             changes = (request.get('draft') or {}).get('changes') or {}
@@ -477,12 +479,179 @@ class DuckDBAdministration(RelationalAdministration):
                     compiled = list(compiled) + comment_stmts
         return compiled
 
+    def _compile_duckdb_sequence_create(self, request):
+        draft = request['draft']
+        options = draft.get('options') or {}
+        or_replace = bool(options.get('or_replace'))
+        if_not_exists = bool(options.get('if_not_exists'))
+        if or_replace and if_not_exists:
+            raise RelationalClientError(
+                'DuckDB sequence cannot combine OR REPLACE and IF NOT EXISTS'
+            )
+        temporary = bool(options.get('temporary'))
+        no_min = bool(options.get('no_minimum'))
+        no_max = bool(options.get('no_maximum'))
+        if no_min and options.get('minimum') not in {None, ''}:
+            raise RelationalClientError(
+                'Choose either a minimum value or NO MINVALUE, not both'
+            )
+        if no_max and options.get('maximum') not in {None, ''}:
+            raise RelationalClientError(
+                'Choose either a maximum value or NO MAXVALUE, not both'
+            )
+        qualified = self._new_object_name(self._identifier(draft['name']), options)
+        prefix = 'CREATE '
+        if or_replace:
+            prefix += 'OR REPLACE '
+        if temporary:
+            prefix += 'TEMPORARY '
+        prefix += 'SEQUENCE '
+        if if_not_exists:
+            prefix += 'IF NOT EXISTS '
+        source = prefix + qualified
+        if options.get('start') not in {None, ''}:
+            source += f' START WITH {self._integer(options["start"], "start")}'
+        if options.get('increment') not in {None, ''}:
+            inc = self._integer(options['increment'], 'increment')
+            if inc == 0:
+                raise RelationalClientError('DuckDB sequence increment cannot be zero')
+            source += f' INCREMENT BY {inc}'
+        if no_min:
+            source += ' NO MINVALUE'
+        elif options.get('minimum') not in {None, ''}:
+            source += f' MINVALUE {self._integer(options["minimum"], "minimum")}'
+        if no_max:
+            source += ' NO MAXVALUE'
+        elif options.get('maximum') not in {None, ''}:
+            source += f' MAXVALUE {self._integer(options["maximum"], "maximum")}'
+        if options.get('cycle'):
+            source += ' CYCLE'
+        statements = [{'source': source, 'parameters': ()}]
+        comment = options.get('comment')
+        if comment not in {None, ''}:
+            if not isinstance(comment, str) or '\x00' in comment:
+                raise RelationalClientError('DuckDB sequence comment must be text without NUL')
+            statements.append({
+                'source': f'COMMENT ON SEQUENCE {qualified} IS {self._literal(comment)}',
+                'parameters': (),
+            })
+        return statements
+
+    def _compile_duckdb_sequence_alter(self, request):
+        target_res = request.get('target_resource')
+        if not isinstance(target_res, Mapping) or target_res.get('resource_kind') != 'sequence':
+            raise RelationalClientError('Select a native DuckDB sequence target')
+        path = self._target_path(target_res)
+        qualified = self._qualified(path)
+        native = target_res.get('native') or {}
+        if not isinstance(native, Mapping):
+            ext = (target_res.get('extensions') or {}).get('duckdb') or {}
+            native = ext.get('native', ext) if isinstance(ext, Mapping) else {}
+        meta = native.get('catalog_metadata') if isinstance(native.get('catalog_metadata'), Mapping) else {}
+        draft = request.get('draft') or {}
+        changes = draft.get('changes') if isinstance(draft.get('changes'), Mapping) else draft
+
+        param_keys = {'start', 'increment', 'minimum', 'maximum', 'no_minimum', 'no_maximum', 'cycle'}
+        has_param_change = any(k in changes and changes[k] not in {None, ''} for k in param_keys)
+        clear_comment = bool(changes.get('clear_comment'))
+        has_comment_change = clear_comment or ('comment' in changes and changes.get('comment') != meta.get('comment'))
+        if clear_comment and changes.get('comment') not in {None, ''}:
+            raise RelationalClientError('Specify either a sequence comment or Clear comment, not both')
+        if not has_param_change and not has_comment_change:
+            raise RelationalClientError('DuckDB sequence alteration has no changes to apply')
+
+        statements = []
+        warnings = []
+        if has_param_change:
+            if meta.get('automatic_dependency_observed'):
+                raise RelationalClientError(
+                    'DuckDB cannot replace a sequence with active automatic table ownership'
+                )
+            if not bool(changes.get('reset_state_confirmed')):
+                raise RelationalClientError(
+                    'Confirm generator state reset to replace DuckDB sequence parameters '
+                    '(CREATE OR REPLACE SEQUENCE resets last_value)'
+                )
+            temporary = bool(meta.get('temporary'))
+            start_val = (
+                self._integer(changes['start'], 'start')
+                if changes.get('start') not in {None, ''}
+                else meta.get('start_value')
+            )
+            inc_val = (
+                self._integer(changes['increment'], 'increment')
+                if changes.get('increment') not in {None, ''}
+                else meta.get('increment_by')
+            )
+            if inc_val == 0:
+                raise RelationalClientError('DuckDB sequence increment cannot be zero')
+            no_min = bool(changes.get('no_minimum'))
+            no_max = bool(changes.get('no_maximum'))
+            if no_min and changes.get('minimum') not in {None, ''}:
+                raise RelationalClientError('Choose either a minimum value or NO MINVALUE, not both')
+            if no_max and changes.get('maximum') not in {None, ''}:
+                raise RelationalClientError('Choose either a maximum value or NO MAXVALUE, not both')
+            min_val = None if no_min else (
+                self._integer(changes['minimum'], 'minimum')
+                if changes.get('minimum') not in {None, ''}
+                else meta.get('min_value')
+            )
+            max_val = None if no_max else (
+                self._integer(changes['maximum'], 'maximum')
+                if changes.get('maximum') not in {None, ''}
+                else meta.get('max_value')
+            )
+            cycle_val = bool(changes['cycle']) if 'cycle' in changes and changes['cycle'] is not None else bool(meta.get('cycle'))
+
+            temp_kw = 'TEMPORARY ' if temporary else ''
+            src = f'CREATE OR REPLACE {temp_kw}SEQUENCE {qualified}'
+            if start_val is not None:
+                src += f' START WITH {int(start_val)}'
+            if inc_val is not None:
+                src += f' INCREMENT BY {int(inc_val)}'
+            if no_min:
+                src += ' NO MINVALUE'
+            elif min_val is not None:
+                src += f' MINVALUE {int(min_val)}'
+            if no_max:
+                src += ' NO MAXVALUE'
+            elif max_val is not None:
+                src += f' MAXVALUE {int(max_val)}'
+            src += ' CYCLE' if cycle_val else ' NO CYCLE'
+            statements.append({'source': src, 'parameters': ()})
+            warnings.append(
+                'CREATE OR REPLACE SEQUENCE resets the DuckDB generator position to START WITH.'
+            )
+
+        effective_comment = (
+            None if clear_comment else (
+                changes.get('comment')
+                if 'comment' in changes
+                else meta.get('comment')
+            )
+        )
+        if effective_comment == '':
+            effective_comment = None
+        if has_comment_change or (has_param_change and effective_comment is not None):
+            if effective_comment is not None and (not isinstance(effective_comment, str) or '\x00' in effective_comment):
+                raise RelationalClientError('DuckDB sequence comment must be text without NUL')
+            statements.append({
+                'source': (
+                    f'COMMENT ON SEQUENCE {qualified} IS '
+                    + ('NULL' if effective_comment is None else self._literal(effective_comment))
+                ),
+                'parameters': (),
+            })
+        return {'statements': statements, 'warnings': warnings}
+
     def _compile_create(self, request):
         if request['resource_kind'] == 'index' and any(
                 key in (request['draft'].get('options') or {})
                 for key in ('terms', 'method', 'index_options')):
             from .indexes import compile_create
             return compile_create(self, request)
+        if request['resource_kind'] == 'sequence':
+            return self._compile_duckdb_sequence_create(request)
         statements = super()._compile_create(request)
         kind = request['resource_kind']
         draft = request['draft']
@@ -515,7 +684,14 @@ class DuckDBAdministration(RelationalAdministration):
     def _normalize_draft(self, kind, operation, draft):
         if kind == 'secret' and operation in {'create', 'drop'}:
             return deepcopy(draft)
+        if kind == 'sequence' and operation == 'alter':
+            return {'changes': deepcopy(dict(draft))}
         result = super()._normalize_draft(kind, operation, draft)
+        if kind == 'sequence' and operation == 'create':
+            options = result.setdefault('options', {})
+            for key in ('if_not_exists', 'no_minimum', 'no_maximum', 'comment', 'or_replace', 'temporary'):
+                if key in result:
+                    options[key] = result.pop(key)
         if kind == 'column' and operation == 'create':
             options = result.setdefault('options', {})
             for key in ('collation', 'generated_expression', 'comment'):

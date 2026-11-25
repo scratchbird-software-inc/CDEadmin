@@ -117,6 +117,15 @@ def facts(native):
     }
 
 
+def privileges(native):
+    """Normalized view/materialized-view ACL grants from aclexplode or relacl."""
+    from .cluster import parse_acl_items
+    from .tables import PRIVILEGE_CODES as RELATION_CODES
+    row = native.get('catalog_row') or native
+    source = native.get('explicit_grants') or row.get('explicit_grants') or row.get('relacl')
+    return parse_acl_items(source, RELATION_CODES)
+
+
 def _storage_changes(draft, current):
     """(sets, resets) of a materialized view's storage parameters from the
     dialog: fill factor, TOAST tuple target and the autovacuum grids."""

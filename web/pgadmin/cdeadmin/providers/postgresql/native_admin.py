@@ -126,6 +126,28 @@ def _reference(value, label, operator=False):
     return value
 
 
+def _collation_reference(value, label='collation'):
+    value = _required_text(value, label)
+    if '"' in value:
+        return _reference(value, label)
+    def _part(seg):
+        if re.fullmatch(r'[a-z_][a-z0-9_$]*', seg) and seg != 'default':
+            return seg
+        return _identifier(seg, label)
+    if '.' not in value:
+        return _reference(_part(value), label)
+    parts = value.split('.')
+    if re.fullmatch(r'(?:utf-?8|iso[-_]?8859[-_]?\d+|latin\d+|euc[-_][a-z]+)', parts[-1], re.I):
+        if len(parts) == 2:
+            return _reference(_identifier(value, label), label)
+        schema_part = parts[-3]
+        coll_part = f'{parts[-2]}.{parts[-1]}'
+        return _reference(f'{_part(schema_part)}.{_identifier(coll_part, label)}', label)
+    if len(parts) > 2:
+        parts = parts[-2:]
+    return _reference('.'.join(_part(p) for p in parts), label)
+
+
 def _type_reference(value, label):
     value = _required_text(value, label)
     if _PG_REFERENCE.fullmatch(value):

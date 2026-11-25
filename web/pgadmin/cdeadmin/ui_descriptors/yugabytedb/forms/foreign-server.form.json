@@ -6,7 +6,7 @@
     "foreign-server"
   ],
   "form_reference": "SR-F-020106",
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "YugabyteDB",
   "omitted_tabs": [],
   "fields": [

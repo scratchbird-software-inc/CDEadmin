@@ -131,7 +131,7 @@ def backend_draft(form: dict, draft: dict, mode: str = "create", baseline: dict 
     for tab in form.get("tabs", []):
         for field in active_fields(tab.get("fields", []), mode, draft):
             fid = field["field_id"]
-            if fid not in draft or field.get("ui_only"):
+            if fid not in draft or field.get("ui_only") or field.get("readonly"):
                 continue
             value = draft[fid]
             if mode == "alter" and field.get("control") == "grid" and fid == "columns" and baseline is not None:
@@ -202,7 +202,9 @@ def is_child_of(row, resource):
 def record_from_resource(form: dict, resource: dict, resources=()) -> dict:
     """The editor record: native facts plus record_children rows (twin of the host)."""
     native = resource.get("native") or {}
-    record = {**native, "name": native.get("name", resource.get("display_name")),
+    facts = native.get(f"{resource.get('resource_kind')}_facts") or {}
+    record = {**native, **(facts if isinstance(facts, dict) else {}),
+              "name": native.get("name", resource.get("display_name")),
               "display_name": resource.get("display_name"), "resource_id": resource.get("resource_id"),
               "resource_kind": resource.get("resource_kind"),
               # as the host: the parent path when the native facts carry none
@@ -236,6 +238,11 @@ def record_value(field: dict, record: dict):
         value = _read_path(record, field["record_key"])
     if value is _MISSING:
         value = _read_path(record, field["field_id"]) if field["field_id"] in record else _MISSING
+    if value is _MISSING and isinstance(field.get("initial_value_path"), list) and field["initial_value_path"]:
+        path_parts = [str(p) for p in field["initial_value_path"]]
+        value = _read_path(record, ".".join(path_parts))
+        if value is _MISSING and path_parts[0] == "native" and len(path_parts) > 1:
+            value = _read_path(record, ".".join(path_parts[1:]))
     if value is _MISSING:
         return value
     if field.get("record_filter") and isinstance(value, list):

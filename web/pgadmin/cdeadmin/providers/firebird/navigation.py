@@ -14,7 +14,7 @@ SECURITY = {'user': 'users', 'role': 'roles', 'privilege': 'grants',
             'global-authentication-mapping': 'global authentication mappings'}
 
 
-def children(resources, prepared, state):
+def children(resources, prepared, state, visual_catalog=None):
     from pgadmin.cdeadmin.navigator import resource_native, ProviderNavigatorError, kind_label
 
     def ordered(nodes):
@@ -91,6 +91,18 @@ def children(resources, prepared, state):
                 'has_children': group_has_children(kind, branch),
                 'virtual_branch': branch or state.get('virtual_branch')}
     scope, branch = state['scope'], state.get('virtual_branch')
+    is_server_scope = (
+        scope == 'server'
+        or state.get('target_id') == 'cdeadmin-server-scope'
+    )
+    if is_server_scope:
+        if scope == 'kind':
+            selected = [
+                resource(p) for p in top
+                if p['resource_kind'] == state.get('resource_kind')
+            ]
+            return sorted(selected, key=lambda p: (p['label'].casefold(), p['resource_id']))
+        return None
     if scope == 'database':
         return ordered([group(name, 'firebird-folder', name) for name in ROOTS] +
                        [resource(p) for p in top if category(p) == 'root'])

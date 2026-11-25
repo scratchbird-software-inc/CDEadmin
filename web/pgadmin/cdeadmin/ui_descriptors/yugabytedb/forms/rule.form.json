@@ -6,7 +6,7 @@
     "rule"
   ],
   "form_reference": "SR-F-020113",
-  "status": "draft",
+  "status": "complete",
   "engine_tab_title": "YugabyteDB",
   "omitted_tabs": [],
   "fields": [

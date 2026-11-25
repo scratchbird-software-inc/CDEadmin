@@ -206,15 +206,59 @@ def database_entries(catalog):
     return entries
 
 
+_SERVER_SCOPED_SECURITY_KINDS = {
+    'mysql': frozenset({'user', 'role'}),
+    'mariadb': frozenset({'user', 'role'}),
+    'tidb': frozenset({'user', 'role'}),
+    'dolt': frozenset({'user', 'role'}),
+    'cockroachdb': frozenset({'role'}),
+    'yugabytedb': frozenset({'role'}),
+    'postgresql': frozenset({'role'}),
+}
+
+
+def _is_server_navigator_state(state):
+    return (
+        state.get('scope') == 'server'
+        or state.get('target_id') == 'cdeadmin-server-scope'
+    )
+
+
 def resource_children(resources, state, visual_catalog=None):
     """Return immediate group or resource presentations for one tree node."""
     if not isinstance(resources, (list, tuple)):
         raise ProviderNavigatorError('provider resources must be an array')
     state = dict(state)
     prepared = _prepared_resources(resources, state)
-    if (visual_catalog or {}).get('engine_id') == 'firebird':
+    engine_id = (visual_catalog or {}).get('engine_id')
+    if not _is_server_navigator_state(state):
+        omitted_server_kinds = _SERVER_SCOPED_SECURITY_KINDS.get(
+            engine_id, frozenset()
+        )
+        prepared = [
+            item for item in prepared
+            if not (
+                (item['resource_kind'] in omitted_server_kinds)
+                or (
+                    item['resource_kind'] in {'user', 'role'}
+                    and (
+                        resource_native(item['_source']).get('navigator_scope') == 'server'
+                        or ((item['_source'].get('extensions') or {}).get('cdeadmin') or {}).get('navigator_scope') == 'server'
+                    )
+                )
+                or (
+                    item['resource_kind'] == 'privilege'
+                    and (
+                        resource_native(item['_source']).get('scope') == 'global'
+                        or resource_native(item['_source']).get('level') == 'global'
+                        or ((item['_source'].get('extensions') or {}).get('cdeadmin') or {}).get('navigator_scope') == 'server'
+                    )
+                )
+            )
+        ]
+    if engine_id == 'firebird':
         from .providers.firebird.navigation import children
-        result = children(resources, prepared, state)
+        result = children(resources, prepared, state, visual_catalog=visual_catalog)
         if result is not None:
             return result
     scope = state['scope']
@@ -327,8 +371,16 @@ def _empty_group_kinds(resources, state, catalog):
     if parent and resource_native(parent).get('system_object'):
         return set()
     parent_kind = parent['resource_kind'] if parent else state.get('scope')
+    engine_id = catalog.get('engine_id')
+    omitted_server_kinds = (
+        _SERVER_SCOPED_SECURITY_KINDS.get(engine_id, frozenset())
+        if parent_kind == 'database' and not _is_server_navigator_state(state)
+        else frozenset()
+    )
     result = set()
     for item in objects:
+        if item['resource_kind'] in omitted_server_kinds:
+            continue
         parents = item.get('navigator', {}).get('parent_kinds', [])
         # Namespace-capable engines place relations under their namespaces,
         # not additionally under the database fallback.
@@ -432,12 +484,22 @@ def _prepared_resources(resources, state):
 
 
 def _database_prefix(resources, state):
-    if state.get('scope') == 'server':
+    if _is_server_navigator_state(state):
         servers = [
             item['display_path'] for item in resources
             if item['resource_kind'] == 'server'
         ]
-        return min(servers, key=len) if servers else []
+        if not servers:
+            return []
+        prefix = min(servers, key=len)
+        if not any(
+            item['resource_kind'] != 'server' and
+            len(item['display_path']) > len(prefix) and
+            item['display_path'][:len(prefix)] == prefix
+            for item in resources
+        ):
+            return []
+        return prefix
     candidates = {
         value for value in (
             state.get('database'), state.get('display_name')

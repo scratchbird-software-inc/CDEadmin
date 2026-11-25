@@ -5444,8 +5444,12 @@ class RelationalAdministration:
             for key in (
                 'parent', 'table', 'columns', 'constraints', 'unique',
                 'start', 'increment', 'minimum', 'maximum', 'cycle',
-                'data_type', 'nullable', 'default', 'not_null', 'check',
-                'primary_key',
+                'data_type', 'array_bounds', 'dimensions', 'blob_sub_type',
+                'segment_size', 'character_set', 'collation', 'description',
+                'comment', 'or_replace', 'temporary', 'element_type',
+                'array_length', 'key_type', 'value_type',
+                'nullable', 'default', 'not_null',
+                'check', 'primary_key',
                 'parameters', 'returns', 'timing', 'events', 'host',
                 'password', 'plugin', 'administrator', 'active',
                 'system_privileges', 'drop_system_privileges', 'members',
@@ -5566,9 +5570,15 @@ class RelationalAdministration:
                 value['changes'] = {
                     key: value.pop(key)
                     for key in (
-                        'data_type', 'default', 'drop_default', 'not_null',
-                        'check', 'drop_constraint',
-                    ) if key in value and value[key] not in {None, ''}
+                        'data_type', 'array_bounds', 'dimensions',
+                        'blob_sub_type', 'segment_size', 'character_set',
+                        'collation', 'default', 'drop_default', 'not_null',
+                        'check', 'constraint_name', 'drop_constraint',
+                        'new_name', 'description', 'clear_description',
+                    ) if key in value and (
+                        value[key] is not None and
+                        (key in {'description', 'dimensions'} or value[key] != '')
+                    )
                 }
             elif kind == 'exception' and (
                     self.dialect.engine_id == 'firebird'):
@@ -5906,7 +5916,7 @@ class RelationalAdministration:
             fields = [self._field('name', 'Name', 'text', True)]
             if kind in {
                 'table', 'view', 'materialized-view', 'index', 'sequence',
-                'domain', 'column',
+                'domain', 'type', 'macro', 'column',
                 'constraint', 'trigger', 'procedure', 'function', 'package',
                 'event', 'materialization',
             } and self.dialect.engine_id != 'firebird':
@@ -6015,11 +6025,30 @@ class RelationalAdministration:
                             default=False,
                         ),
                     ))
+                if self.dialect.engine_id == 'duckdb':
+                    sequence_fields.extend((
+                        self._field('temporary', 'Temporary', 'boolean', False, default=False),
+                        self._field('or_replace', 'Replace if exists', 'boolean', False, default=False),
+                        self._field('if_not_exists', 'If not exists', 'boolean', False, default=False),
+                        self._field('no_minimum', 'No minimum bound', 'boolean', False, default=False),
+                        self._field('no_maximum', 'No maximum bound', 'boolean', False, default=False),
+                        self._field('comment', 'Comment', 'multiline', False),
+                    ))
                 fields.extend(sequence_fields)
             elif kind == 'domain':
                 fields.append(self._field(
                     'data_type', 'Base data type', 'text', True
                 ))
+                if self.dialect.engine_id == 'firebird':
+                    fields.extend((
+                        self._field('array_bounds', 'Array bounds', 'text'),
+                        self._field('dimensions', 'Array dimensions', 'grid', False, default=[]),
+                        self._field('blob_sub_type', 'BLOB subtype', 'text'),
+                        self._field('segment_size', 'BLOB segment size', 'number'),
+                        self._field('character_set', 'Character set', 'text'),
+                        self._field('collation', 'Collation', 'text'),
+                        self._field('description', 'Comment', 'text'),
+                    ))
                 if (
                     self.dialect.engine_id == 'firebird' or
                     self.dialect.sql_family == 'postgresql'
@@ -6169,13 +6198,20 @@ class RelationalAdministration:
                     self._field(
                         'type_kind', 'Type kind', 'select', True,
                         default='ALIAS',
-                        options=('ALIAS', 'ENUM', 'STRUCT', 'UNION'),
+                        options=('ALIAS', 'ENUM', 'STRUCT', 'UNION', 'ARRAY', 'MAP'),
                     ),
+                    self._field('or_replace', 'Replace existing type', 'boolean', False, default=False),
+                    self._field('temporary', 'Temporary', 'boolean', False, default=False),
                     self._field('base_type', 'Alias base type', 'text'),
+                    self._field('element_type', 'Element type', 'text'),
+                    self._field('array_length', 'Array length', 'number'),
+                    self._field('key_type', 'Map key type', 'text'),
+                    self._field('value_type', 'Map value type', 'text'),
                     self._field('enum_values', 'Enum values', 'json', False,
                                 default=[]),
                     self._field('fields', 'Struct/union fields', 'json',
                                 False, default=[]),
+                    self._field('comment', 'Comment', 'text'),
                 ))
                 for item in fields:
                     key = item['field_id']
@@ -6446,6 +6482,23 @@ class RelationalAdministration:
                         ),
                     ],
                 }
+            if self.dialect.engine_id == 'duckdb':
+                return {
+                    'form_id': 'duckdb.sequence.alter',
+                    'title': 'Alter DuckDB sequence',
+                    'fields': [
+                        self._field('start', 'Start value', 'number'),
+                        self._field('increment', 'Increment', 'number'),
+                        self._field('no_minimum', 'No minimum bound', 'boolean', False, default=False),
+                        self._field('minimum', 'Minimum', 'number'),
+                        self._field('no_maximum', 'No maximum bound', 'boolean', False, default=False),
+                        self._field('maximum', 'Maximum', 'number'),
+                        self._field('cycle', 'Cycle', 'boolean', False),
+                        self._field('comment', 'Comment', 'multiline'),
+                        self._field('clear_comment', 'Clear comment', 'boolean', False, default=False),
+                        self._field('reset_state_confirmed', 'Confirm generator reset', 'boolean', False, default=False),
+                    ],
+                }
             return {
                 'form_id': 'sequence.alter', 'title': 'Alter sequence',
                 'fields': [
@@ -6459,16 +6512,28 @@ class RelationalAdministration:
             return {
                 'form_id': 'domain.alter', 'title': 'Alter domain',
                 'fields': [
+                    self._field('new_name', 'Rename to', 'text'),
                     self._field('data_type', 'Replacement type', 'text'),
+                    self._field('array_bounds', 'Array bounds', 'text'),
+                    self._field('dimensions', 'Array dimensions', 'grid', False, default=[]),
+                    self._field('blob_sub_type', 'BLOB subtype', 'text'),
+                    self._field('segment_size', 'BLOB segment size', 'number'),
+                    self._field('character_set', 'Character set', 'text'),
                     self._field('default', 'Default expression', 'text'),
                     self._field(
                         'drop_default', 'Drop default', 'boolean', False,
                         default=False,
                     ),
                     self._field('not_null', 'Not null', 'boolean'),
+                    self._field('constraint_name', 'Constraint name', 'text'),
                     self._field('check', 'Check expression', 'text'),
                     self._field(
                         'drop_constraint', 'Drop check constraint',
+                        'boolean', False, default=False,
+                    ),
+                    self._field('description', 'Comment', 'text'),
+                    self._field(
+                        'clear_description', 'Clear comment',
                         'boolean', False, default=False,
                     ),
                 ],
@@ -7166,22 +7231,50 @@ class RelationalAdministration:
             keyword = self._keyword(kind)
             source = f'CREATE {keyword} {qualified}'
         elif kind == 'domain':
-            data_type = self._safe_fragment(options.get('data_type'), 'type')
+            if self.dialect.engine_id == 'firebird':
+                data_type = self._format_firebird_domain_type(options)
+            else:
+                data_type = self._safe_type(options.get('data_type'), 'type')
             source = f'CREATE DOMAIN {qualified} AS {data_type}'
             if (
                 self.dialect.engine_id == 'firebird' or
                 self.dialect.sql_family == 'postgresql'
             ):
                 if options.get('default') not in {None, ''}:
+                    raw_def = str(options['default']).strip()
+                    if raw_def.upper().startswith('DEFAULT '):
+                        raw_def = raw_def[8:].strip()
                     source += ' DEFAULT ' + self._safe_fragment(
-                        options['default'], 'domain default'
+                        raw_def, 'domain default'
                     )
                 if options.get('not_null'):
                     source += ' NOT NULL'
                 if options.get('check') not in {None, ''}:
-                    source += ' CHECK (' + self._safe_fragment(
-                        options['check'], 'domain check'
-                    ) + ')'
+                    raw_chk = str(options['check']).strip()
+                    m_chk = re.match(r'^CHECK\s*\((.*)\)$', raw_chk, re.I | re.S)
+                    if m_chk:
+                        raw_chk = m_chk.group(1).strip()
+                    checked = (
+                        index_expression(raw_chk, 'domain check')
+                        if self.dialect.engine_id == 'firebird'
+                        else self._safe_fragment(raw_chk, 'domain check')
+                    )
+                    source += f' CHECK ({checked}\n)' if '--' in checked else f' CHECK ({checked})'
+            if self.dialect.engine_id == 'firebird':
+                collation = str(options.get('collation') or '').strip()
+                if collation:
+                    source += f' COLLATE {self._quote(collation)}'
+                if options.get('description') not in {None, ''}:
+                    return [
+                        {'source': source, 'parameters': ()},
+                        {
+                            'source': (
+                                f'COMMENT ON DOMAIN {qualified} IS '
+                                f'{self._literal(str(options["description"]))}'
+                            ),
+                            'parameters': (),
+                        },
+                    ]
         elif kind == 'exception' and self.dialect.engine_id == 'firebird':
             message = options.get('message')
             source = (
@@ -7220,9 +7313,27 @@ class RelationalAdministration:
         elif kind == 'type' and self.dialect.engine_id == 'duckdb':
             type_kind = str(options.get('type_kind', '')).upper()
             if type_kind == 'ALIAS':
-                definition = self._safe_fragment(
+                definition = self._safe_duckdb_type(
                     options.get('base_type'), 'alias base type'
                 )
+            elif type_kind == 'ARRAY':
+                elem = self._safe_duckdb_type(
+                    options.get('element_type'), 'array element type'
+                )
+                arr_len = self._integer(options.get('array_length'), 'array length')
+                if arr_len < 1:
+                    raise RelationalClientError(
+                        'DuckDB fixed-length ARRAY requires array_length >= 1'
+                    )
+                definition = f'{elem}[{arr_len}]'
+            elif type_kind == 'MAP':
+                k_type = self._safe_duckdb_type(
+                    options.get('key_type'), 'map key type'
+                )
+                v_type = self._safe_duckdb_type(
+                    options.get('value_type'), 'map value type'
+                )
+                definition = f'MAP({k_type}, {v_type})'
             elif type_kind == 'ENUM':
                 values = options.get('enum_values')
                 if not isinstance(values, list) or not values:
@@ -7240,12 +7351,28 @@ class RelationalAdministration:
                     )
                 definition = type_kind + ' (' + ', '.join(
                     f'{self._quote(item["name"])} '
-                    f'{self._safe_fragment(item["type"], "field type")}'
+                    f'{self._safe_duckdb_type(item["type"], "field type")}'
                     for item in fields
                 ) + ')'
             else:
                 raise RelationalClientError('DuckDB type kind is invalid')
-            source = f'CREATE TYPE {qualified} AS {definition}'
+            prefix = 'CREATE'
+            if options.get('or_replace'):
+                prefix += ' OR REPLACE'
+            if options.get('temporary'):
+                prefix += ' TEMPORARY'
+            source = f'{prefix} TYPE {qualified} AS {definition}'
+            if options.get('comment') not in {None, ''}:
+                return [
+                    {'source': source, 'parameters': ()},
+                    {
+                        'source': (
+                            f'COMMENT ON TYPE {qualified} IS '
+                            f'{self._literal(str(options["comment"]))}'
+                        ),
+                        'parameters': (),
+                    },
+                ]
         elif kind in {'macro', 'function'} and (
             self.dialect.engine_id == 'duckdb'
         ):
@@ -7618,19 +7745,28 @@ class RelationalAdministration:
                 )
             return statements
         if kind == 'domain' and self.dialect.engine_id == 'firebird':
+            statements = []
+            active_target = target
+            if changes.get('new_name') not in {None, ''}:
+                quoted_new = self._quote(str(changes['new_name']).strip())
+                statements.append({
+                    'source': f'ALTER DOMAIN {active_target} TO {quoted_new}',
+                    'parameters': (),
+                })
+                active_target = quoted_new
             clauses = []
             if changes.get('data_type'):
-                clauses.append(
-                    'TYPE ' + self._safe_fragment(
-                        changes['data_type'], 'domain type'
-                    )
-                )
+                new_type = self._format_firebird_domain_type(changes)
+                clauses.append('TYPE ' + new_type)
             if changes.get('drop_default'):
                 clauses.append('DROP DEFAULT')
             elif changes.get('default') not in {None, ''}:
+                raw_def = str(changes['default']).strip()
+                if raw_def.upper().startswith('DEFAULT '):
+                    raw_def = raw_def[8:].strip()
                 clauses.append(
                     'SET DEFAULT ' + self._safe_fragment(
-                        changes['default'], 'domain default'
+                        raw_def, 'domain default'
                     )
                 )
             if 'not_null' in changes:
@@ -7640,20 +7776,55 @@ class RelationalAdministration:
                 )
             if changes.get('drop_constraint'):
                 clauses.append('DROP CONSTRAINT')
-            elif changes.get('check') not in {None, ''}:
-                clauses.append(
-                    'ADD CHECK (' + self._safe_fragment(
-                        changes['check'], 'domain check'
-                    ) + ')'
+            if changes.get('check') not in {None, ''}:
+                raw_chk = str(changes['check']).strip()
+                m_chk = re.match(r'^CHECK\s*\((.*)\)$', raw_chk, re.I | re.S)
+                if m_chk:
+                    raw_chk = m_chk.group(1).strip()
+                if not changes.get('drop_constraint'):
+                    existing_chk = (
+                        (request.get('target_resource') or {})
+                        .get('native', {})
+                        .get('validation_source')
+                    )
+                    if existing_chk:
+                        clauses.append('DROP CONSTRAINT')
+                checked_alter = index_expression(raw_chk, 'domain check')
+                cname_raw = str(changes.get('constraint_name') or '').strip()
+                c_prefix = (
+                    f'ADD CONSTRAINT {self._quote(cname_raw)} '
+                    if cname_raw else 'ADD '
                 )
-            if not clauses:
+                clauses.append(
+                    f'{c_prefix}CHECK ({checked_alter}\n)'
+                    if '--' in checked_alter
+                    else f'{c_prefix}CHECK ({checked_alter})'
+                )
+            if clauses:
+                statements.append({
+                    'source': f'ALTER DOMAIN {active_target} {" ".join(clauses)}',
+                    'parameters': (),
+                })
+            if changes.get('clear_description') or (
+                'description' in changes and changes['description'] == ''
+            ):
+                statements.append({
+                    'source': f'COMMENT ON DOMAIN {active_target} IS NULL',
+                    'parameters': (),
+                })
+            elif changes.get('description') not in {None, ''}:
+                statements.append({
+                    'source': (
+                        f'COMMENT ON DOMAIN {active_target} IS '
+                        f'{self._literal(str(changes["description"]))}'
+                    ),
+                    'parameters': (),
+                })
+            if not statements:
                 raise RelationalClientError(
                     'domain alteration has no structured changes'
                 )
-            return [{
-                'source': f'ALTER DOMAIN {target} {" ".join(clauses)}',
-                'parameters': (),
-            }]
+            return statements
         if kind == 'exception' and self.dialect.engine_id == 'firebird':
             message = changes.get('message')
             return [{
@@ -9301,6 +9472,134 @@ class RelationalAdministration:
                 return cls._safe_fragment(base, label) + re.sub(
                     r'\s+', '', suffix.group(0))
         return cls._safe_fragment(value, label)
+
+    @classmethod
+    def _safe_duckdb_type(cls, value, label):
+        """Validate a DuckDB scalar, parameterized, ARRAY[N], LIST[], MAP,
+        STRUCT, or UNION type expression with balanced () and []."""
+        if not isinstance(value, str) or not value.strip() or '\x00' in value:
+            raise RelationalClientError(f'{label} must not be empty')
+        text = value.strip()
+        if ';' in text or '--' in text or '/*' in text or _DDL_PREFIX.match(text):
+            raise RelationalClientError(f'{label} contains unsafe syntax')
+        if not re.fullmatch(r'[\w\s(),.\[\]:\'"]+', text, re.UNICODE):
+            raise RelationalClientError(f'{label} contains unsafe syntax')
+        stack, in_q = [], None
+        for ch in text:
+            if in_q:
+                if ch == in_q:
+                    in_q = None
+            elif ch in ('"', "'"):
+                in_q = ch
+            elif ch in ('(', '['):
+                stack.append(ch)
+            elif ch in (')', ']'):
+                if not stack or stack.pop() != {')': '(', ']': '['}[ch]:
+                    raise RelationalClientError(f'{label} has unbalanced brackets')
+        if stack or in_q:
+            raise RelationalClientError(f'{label} has unbalanced brackets or quotes')
+        return text
+
+    def _format_firebird_domain_type(self, options):
+        """Compile and validate a Firebird 5 domain base type with optional
+        BLOB subtype/segment size, 1..16 array dimensions (upper > lower),
+        and CHARACTER SET."""
+        raw_type = str(options.get('data_type') or '').strip()
+        if not raw_type:
+            raise RelationalClientError('domain type must not be empty')
+        # Extract inline [bounds] if typed directly in data_type
+        inline_bounds = None
+        if '[' in raw_type and raw_type.endswith(']'):
+            b_idx = raw_type.index('[')
+            inline_bounds = raw_type[b_idx + 1:-1].strip()
+            raw_type = raw_type[:b_idx].strip()
+        base_type = self._safe_fragment(raw_type, 'domain type')
+        upper_base = base_type.upper()
+        is_blob = upper_base.startswith('BLOB')
+
+        if is_blob:
+            sub = str(options.get('blob_sub_type') or '').strip()
+            if sub and 'SUB_TYPE' not in upper_base:
+                sub_up = sub.upper()
+                if sub_up in {'TEXT', 'BINARY'}:
+                    base_type += f' SUB_TYPE {sub_up}'
+                elif re.fullmatch(r'-?\d+', sub) and -32768 <= int(sub) <= 32767:
+                    base_type += f' SUB_TYPE {int(sub)}'
+                else:
+                    raise RelationalClientError(
+                        'Firebird BLOB subtype must be TEXT, BINARY, or a 16-bit integer'
+                    )
+            seg = options.get('segment_size')
+            if seg not in {None, ''} and 'SEGMENT SIZE' not in upper_base:
+                seg_int = self._integer(seg, 'segment size')
+                if not 1 <= seg_int <= 65535:
+                    raise RelationalClientError(
+                        'Firebird BLOB segment size must be between 1 and 65535'
+                    )
+                base_type += f' SEGMENT SIZE {seg_int}'
+
+        # Collect array dimensions from structured grid, array_bounds text, or inline [l:u]
+        dim_pairs = []
+        dims_grid = options.get('dimensions')
+        raw_bounds = str(options.get('array_bounds') or '').strip()
+        if isinstance(dims_grid, list) and dims_grid:
+            for row in dims_grid:
+                if not isinstance(row, Mapping):
+                    raise RelationalClientError('Invalid Firebird array dimension row')
+                lo = self._integer(row.get('lower', 1), 'lower bound')
+                hi = self._integer(row.get('upper'), 'upper bound')
+                dim_pairs.append((lo, hi))
+        elif raw_bounds or inline_bounds:
+            spec = raw_bounds or inline_bounds
+            if spec.startswith('[') and spec.endswith(']'):
+                spec = spec[1:-1].strip()
+            for part in spec.split(','):
+                part = part.strip()
+                if not part:
+                    raise RelationalClientError('Empty Firebird array dimension')
+                if ':' in part:
+                    lo_s, hi_s = part.split(':', 1)
+                    if not re.fullmatch(r'-?\d+', lo_s.strip()) or not re.fullmatch(r'-?\d+', hi_s.strip()):
+                        raise RelationalClientError(
+                            'Firebird array bounds must be signed integers'
+                        )
+                    dim_pairs.append((int(lo_s.strip()), int(hi_s.strip())))
+                else:
+                    if not re.fullmatch(r'\d+', part):
+                        raise RelationalClientError(
+                            'Firebird array dimension shorthand must be a positive integer'
+                        )
+                    dim_pairs.append((1, int(part)))
+
+        if dim_pairs:
+            if is_blob:
+                raise RelationalClientError(
+                    'Firebird array dimensions require a non-BLOB base type'
+                )
+            if len(dim_pairs) > 16:
+                raise RelationalClientError(
+                    'A Firebird array domain has at most 16 dimensions'
+                )
+            formatted_dims = []
+            for lo, hi in dim_pairs:
+                if not (-2147483648 <= lo <= 2147483647 and -2147483648 <= hi <= 2147483647):
+                    raise RelationalClientError(
+                        'Firebird array bounds must fit in signed 32-bit integers'
+                    )
+                if hi <= lo:
+                    raise RelationalClientError(
+                        'Firebird 5 array upper bound must strictly exceed lower bound'
+                    )
+                formatted_dims.append(f'{lo}:{hi}')
+            base_part, sep, cs_part = base_type.partition(' CHARACTER SET ')
+            base_type = base_part + '[' + ', '.join(formatted_dims) + ']' + (
+                sep + cs_part if sep else ''
+            )
+
+        charset = str(options.get('character_set') or '').strip()
+        if charset and 'CHARACTER SET' not in base_type.upper():
+            base_type += f' CHARACTER SET {self._quote(charset)}'
+        return base_type
 
     @staticmethod
     def _safe_definition(value):

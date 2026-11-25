@@ -16,14 +16,62 @@
       "label": "Name",
       "tab": "General",
       "control": "text",
-      "required": true
+      "required": true,
+      "editable_after_create": false
     },
     {
       "field_id": "parent",
       "label": "Database",
       "tab": "General",
       "control": "reference",
-      "reference_kind": "database"
+      "reference_kind": "database",
+      "reference_value": "display_name",
+      "editable_after_create": false
+    },
+    {
+      "field_id": "or_replace",
+      "label": "Replace existing sequence (OR REPLACE)",
+      "tab": "General",
+      "control": "boolean",
+      "default": false,
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "OR REPLACE"
+    },
+    {
+      "field_id": "if_not_exists",
+      "label": "Skip if exists (IF NOT EXISTS)",
+      "tab": "General",
+      "control": "boolean",
+      "default": false,
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "IF NOT EXISTS"
+    },
+    {
+      "field_id": "temporary",
+      "label": "Temporary (session-scoped)",
+      "tab": "General",
+      "control": "boolean",
+      "default": false,
+      "modes": [
+        "create"
+      ],
+      "native_keyword": "TEMPORARY"
+    },
+    {
+      "field_id": "current_value",
+      "label": "Current position (next_not_cached_value)",
+      "tab": "General",
+      "control": "text",
+      "readonly": true,
+      "modes": [
+        "alter"
+      ],
+      "record_key": "current_value",
+      "help": "Observed directly from the sequence table without calling NEXTVAL."
     },
     {
       "field_id": "integer_type",
@@ -33,7 +81,7 @@
       "options": [
         {
           "value": "",
-          "label": "Preserve"
+          "label": "Preserve / Default (BIGINT)"
         },
         {
           "value": "TINYINT",
@@ -84,7 +132,7 @@
     },
     {
       "field_id": "cache",
-      "label": "Exact signed cache size",
+      "label": "Exact signed cache size (0 = NOCACHE)",
       "control": "text",
       "tab": "General",
       "record_key": "ddl",
@@ -106,10 +154,25 @@
         },
         {
           "value": "NATIVE",
-          "label": "NATIVE"
+          "label": "NATIVE (NO MINVALUE)"
         }
       ],
-      "tab": "General"
+      "tab": "General",
+      "record_derive": {
+        "cases": [
+          {
+            "key": "ddl",
+            "matches": "\\bnominvalue\\b|\\bno minvalue\\b",
+            "value": "NATIVE"
+          },
+          {
+            "key": "ddl",
+            "matches": "\\bminvalue\\s+-?\\d+",
+            "value": "VALUE"
+          }
+        ],
+        "default": "PRESERVE"
+      }
     },
     {
       "field_id": "minimum",
@@ -139,10 +202,25 @@
         },
         {
           "value": "NATIVE",
-          "label": "NATIVE"
+          "label": "NATIVE (NO MAXVALUE)"
         }
       ],
-      "tab": "General"
+      "tab": "General",
+      "record_derive": {
+        "cases": [
+          {
+            "key": "ddl",
+            "matches": "\\bnomaxvalue\\b|\\bno maxvalue\\b",
+            "value": "NATIVE"
+          },
+          {
+            "key": "ddl",
+            "matches": "\\bmaxvalue\\s+-?\\d+",
+            "value": "VALUE"
+          }
+        ],
+        "default": "PRESERVE"
+      }
     },
     {
       "field_id": "maximum",
@@ -193,6 +271,14 @@
       }
     },
     {
+      "field_id": "comment",
+      "label": "Comment",
+      "tab": "General",
+      "control": "text",
+      "record_key": "comment",
+      "native_keyword": "COMMENT"
+    },
+    {
       "field_id": "restart",
       "label": "Exact next value",
       "control": "text",
@@ -221,5 +307,5 @@
       "tab": "General"
     }
   ],
-  "notes": "Native typed options preserve exact decimal values; native bounds/default intent and confirmed restart are explicit."
+  "notes": "Native typed options preserve exact decimal values; native bounds/default intent, sequence comments, and confirmed restart are explicit."
 }

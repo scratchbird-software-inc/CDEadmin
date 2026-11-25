@@ -220,8 +220,8 @@ def _column(row):
     else:
         text = _identifier(name, 'column')
     if not _blank(row.get('collspcname')):
-        from .native_admin import _reference
-        text += ' COLLATE ' + _reference(row['collspcname'], 'collation')
+        from .native_admin import _collation_reference
+        text += ' COLLATE ' + _collation_reference(row['collspcname'], 'collation')
     if not _blank(row.get('op_class')):
         from .native_admin import _reference
         text += ' ' + _reference(row['op_class'], 'operator class')

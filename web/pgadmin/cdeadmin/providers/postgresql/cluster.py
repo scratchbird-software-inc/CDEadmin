@@ -34,6 +34,154 @@ _VALID_UNTIL = re.compile(r'[0-9A-Za-z :+./-]{1,64}')
 _OPTION = re.compile(r'[a-z_]{1,64}')
 _OPTION_VALUE = re.compile(r'[0-9]+(?:\.[0-9]+)?')
 TABLESPACE_PRIVILEGES = {'C': 'CREATE'}
+PG_ACL_CODES = {
+    'a': 'INSERT',
+    'r': 'SELECT',
+    'w': 'UPDATE',
+    'd': 'DELETE',
+    'D': 'TRUNCATE',
+    'x': 'REFERENCES',
+    't': 'TRIGGER',
+    'm': 'MAINTAIN',
+    'X': 'EXECUTE',
+    'U': 'USAGE',
+    'C': 'CREATE',
+    'c': 'CONNECT',
+    'T': 'TEMPORARY',
+}
+
+
+def parse_acl_items(acl_items, allowed_codes=None):
+    """Normalize PostgreSQL aclitem strings or aclexplode rows into privileges."""
+    if not acl_items:
+        return []
+    out = []
+    code_map = allowed_codes or PG_ACL_CODES
+    for entry in acl_items:
+        if isinstance(entry, dict):
+            priv = str(entry.get('privilege') or entry.get('privilege_type') or '').upper()
+            if not priv:
+                continue
+            grantee = str(entry.get('grantee') or '') or 'PUBLIC'
+            g_opt = bool(
+                entry.get('grant_option', entry.get('with_grant', entry.get('is_grantable', False)))
+            )
+            out.append({
+                'grantee': grantee,
+                'grantee_kind': entry.get('grantee_kind') or (
+                    'special' if grantee.upper() == 'PUBLIC' else 'role'
+                ),
+                'grantor': entry.get('grantor') or '',
+                'privilege': priv,
+                'grant_option': g_opt,
+                'with_grant': g_opt,
+            })
+            continue
+        if not isinstance(entry, str) or '=' not in entry:
+            continue
+        # Parse aclitem: [grantee]=privs[/grantor] where grantee/grantor may be double-quoted
+        idx = 0
+        n = len(entry)
+
+        def read_ident(start):
+            if start < n and entry[start] == '"':
+                pos = start + 1
+                chars = []
+                while pos < n:
+                    if entry[pos] == '"':
+                        if pos + 1 < n and entry[pos + 1] == '"':
+                            chars.append('"')
+                            pos += 2
+                            continue
+                        return ''.join(chars), pos + 1
+                    chars.append(entry[pos])
+                    pos += 1
+                return ''.join(chars), pos
+            end = start
+            while end < n and entry[end] not in ('=', '/'):
+                end += 1
+            return entry[start:end], end
+
+        grantee_raw, idx = read_ident(0)
+        if idx >= n or entry[idx] != '=':
+            continue
+        idx += 1
+        priv_start = idx
+        while idx < n and entry[idx] != '/':
+            idx += 1
+        priv_part = entry[priv_start:idx]
+        grantor_raw = ''
+        if idx < n and entry[idx] == '/':
+            grantor_raw, _ = read_ident(idx + 1)
+        grantee = grantee_raw if grantee_raw else 'PUBLIC'
+        grantee_kind = 'special' if not grantee_raw else 'role'
+        pos = 0
+        while pos < len(priv_part):
+            ch = priv_part[pos]
+            grant_opt = (pos + 1 < len(priv_part) and priv_part[pos + 1] == '*')
+            pos += 2 if grant_opt else 1
+            priv_name = code_map.get(ch) or PG_ACL_CODES.get(ch)
+            if priv_name:
+                out.append({
+                    'grantee': grantee,
+                    'grantee_kind': grantee_kind,
+                    'grantor': grantor_raw,
+                    'privilege': priv_name,
+                    'grant_option': grant_opt,
+                    'with_grant': grant_opt,
+                })
+    return out
+
+
+def _parse_rolconfig(rolconfig, db_settings=None):
+    """Parse PostgreSQL rolconfig ('key=val') and pg_db_role_setting entries."""
+    rows = []
+    seen = set()
+    for item in db_settings or ():
+        if isinstance(item, dict) and item.get('name'):
+            key = (item['name'], item.get('database') or None)
+            if key not in seen:
+                seen.add(key)
+                entry = {'name': str(item['name']), 'value': str(item.get('value') or '')}
+                if item.get('database'):
+                    entry['database'] = str(item['database'])
+                rows.append(entry)
+    for raw in rolconfig or ():
+        if isinstance(raw, dict) and raw.get('name'):
+            key = (raw['name'], raw.get('database') or None)
+            if key not in seen:
+                seen.add(key)
+                entry = {'name': str(raw['name']), 'value': str(raw.get('value') or '')}
+                if raw.get('database'):
+                    entry['database'] = str(raw['database'])
+                rows.append(entry)
+        elif isinstance(raw, str) and '=' in raw:
+            name, value = raw.split('=', 1)
+            key = (name, None)
+            if key not in seen:
+                seen.add(key)
+                rows.append({'name': name, 'value': value})
+    return rows
+
+
+def _normalize_membership_rows(rows):
+    out = []
+    for item in rows or ():
+        if not isinstance(item, dict) or not item.get('role'):
+            continue
+        admin = bool(item.get('admin', item.get('admin_option', False)))
+        inherit = bool(item.get('inherit', item.get('inherit_option', True)))
+        set_opt = bool(item.get('set', item.get('set_option', True)))
+        out.append({
+            'role': str(item['role']),
+            'admin': admin,
+            'admin_option': admin,
+            'inherit': inherit,
+            'inherit_option': inherit,
+            'set': set_opt,
+            'set_option': set_opt,
+        })
+    return out
 
 
 def _blank(value):
@@ -72,6 +220,26 @@ def role_facts(native):
     for key in ('rolconnlimit', 'rolvaliduntil'):
         if key in meta:
             current[key] = meta[key]
+    if 'rolmembership' in meta or 'rolmembership' in native:
+        current['rolmembership'] = _normalize_membership_rows(
+            meta.get('rolmembership') if 'rolmembership' in meta else native.get('rolmembership')
+        )
+    if 'rolmembers' in meta or 'rolmembers' in native:
+        current['rolmembers'] = _normalize_membership_rows(
+            meta.get('rolmembers') if 'rolmembers' in meta else native.get('rolmembers')
+        )
+    if any(k in meta or k in native for k in ('variables', 'rolconfig', 'db_role_settings')):
+        raw_vars = (
+            meta.get('variables')
+            if 'variables' in meta
+            else native.get('variables')
+            if 'variables' in native
+            else meta.get('rolconfig', native.get('rolconfig'))
+        )
+        current['variables'] = _parse_rolconfig(
+            raw_vars,
+            meta.get('db_role_settings', native.get('db_role_settings')),
+        )
     return current
 
 
@@ -115,11 +283,15 @@ def _memberships(name, draft, key, direction, label):
         # The dialog's INHERIT and SET columns (PostgreSQL 16+) join the
         # admin option in the WITH list; alone, admin keeps the older form.
         options = []
-        for column, keyword in (('inherit', 'INHERIT'), ('set', 'SET')):
-            if column in row and row[column] is not None and \
-                    row[column] != '':
-                options.append(f'{keyword} {str(_flag(row, column)).upper()}')
-        admin = _flag(row, 'admin') if 'admin' in row else False
+        for column, alt_col, keyword in (
+            ('inherit', 'inherit_option', 'INHERIT'),
+            ('set', 'set_option', 'SET'),
+        ):
+            src_col = column if column in row else (alt_col if alt_col in row else None)
+            if src_col is not None and row[src_col] is not None and row[src_col] != '':
+                options.append(f'{keyword} {str(_flag(row, src_col)).upper()}')
+        adm_col = 'admin' if 'admin' in row else ('admin_option' if 'admin_option' in row else None)
+        admin = _flag(row, adm_col) if adm_col is not None else False
         if options:
             options.insert(0, f'ADMIN {str(admin).upper()}')
             option = ' WITH ' + ', '.join(options)
@@ -142,11 +314,14 @@ def _labels(name, draft):
     return statements
 
 
-def _no_password(draft):
-    if not _blank(draft.get('rolpassword')):
-        raise PostgreSQLNativeAdminError(
-            'a provider-tree plan never carries a password; set it with '
-            'the inherited Properties dialog')
+def _password_clauses(draft):
+    """Return (exec_clause, preview_clause) or (None, None) for rolpassword."""
+    pwd = draft.get('rolpassword')
+    if _blank(pwd):
+        return None, None
+    if not isinstance(pwd, str) or '\x00' in pwd:
+        raise PostgreSQLNativeAdminError('password must be valid text')
+    return 'PASSWORD ' + _literal(pwd, 'password'), "PASSWORD '<redacted>'"
 
 
 def _revocations(name, draft, key, direction, label):
@@ -179,8 +354,8 @@ def _settings(name, rows):
 
 
 def _create_role(draft):
-    _no_password(draft)
     name = _identifier(draft.get('rolname'), 'name')
+    pwd_exec, pwd_prev = _password_clauses(draft)
     words = []
     for key, keyword in ATTRIBUTES:
         value = draft.get(key)
@@ -191,28 +366,35 @@ def _create_role(draft):
         words.append(f'CONNECTION LIMIT {_limit(draft["rolconnlimit"])}')
     if not _blank(draft.get('rolvaliduntil')):
         words.append('VALID UNTIL ' + _valid_until(draft['rolvaliduntil']))
-    statements = [f'CREATE ROLE {name} WITH ' + ' '.join(words)]
-    statements += _memberships(name, draft, 'rolmembership', 'member_of',
-                               'member of')
-    statements += _memberships(name, draft, 'rolmembers', 'members',
-                               'members')
-    statements += _settings(name, _rows(draft, 'variables', 'settings'))
-    statements += _labels(name, draft)
+    exec_words = list(words) + ([pwd_exec] if pwd_exec else [])
+    prev_words = list(words) + ([pwd_prev] if pwd_prev else [])
+    tail = []
+    tail += _memberships(name, draft, 'rolmembership', 'member_of',
+                         'member of')
+    tail += _memberships(name, draft, 'rolmembers', 'members',
+                         'members')
+    tail += _settings(name, _rows(draft, 'variables', 'settings'))
+    tail += _labels(name, draft)
     if not _blank(draft.get('description')):
-        statements.append(_comment('ROLE', name, draft['description']))
-    return statements
+        tail.append(_comment('ROLE', name, draft['description']))
+    exec_stmts = [f'CREATE ROLE {name} WITH ' + ' '.join(exec_words)] + tail
+    prev_stmts = [f'CREATE ROLE {name} WITH ' + ' '.join(prev_words)] + tail
+    return exec_stmts, prev_stmts
 
 
 def _alter_role(native, draft):
-    _no_password(draft)
     current = native.get('role_facts') or role_facts(native)
     name = _name(current['rolname'], 'name')
     quoted = _identifier(name, 'name')
-    statements = []
+    pwd_exec, pwd_prev = _password_clauses(draft)
+    exec_statements = []
+    prev_statements = []
     new_name = draft.get('rolname')
     if not _blank(new_name) and new_name != name:
-        statements.append(f'ALTER ROLE {quoted} RENAME TO '
-                          + _identifier(new_name, 'name'))
+        rename_sql = (f'ALTER ROLE {quoted} RENAME TO '
+                      + _identifier(new_name, 'name'))
+        exec_statements.append(rename_sql)
+        prev_statements.append(rename_sql)
         quoted = _identifier(new_name, 'name')
     words = []
     for key, keyword in ATTRIBUTES:
@@ -228,16 +410,20 @@ def _alter_role(native, draft):
     if not _blank(draft.get('rolvaliduntil')) and \
             draft['rolvaliduntil'] != current.get('rolvaliduntil'):
         words.append('VALID UNTIL ' + _valid_until(draft['rolvaliduntil']))
-    if words:
-        statements.append(f'ALTER ROLE {quoted} WITH ' + ' '.join(words))
-    statements += _revocations(quoted, draft, 'revoke_membership',
-                               'member_of', 'revoked memberships')
-    statements += _memberships(quoted, draft, 'rolmembership', 'member_of',
-                               'member of')
-    statements += _revocations(quoted, draft, 'revoke_members', 'members',
-                               'revoked members')
-    statements += _memberships(quoted, draft, 'rolmembers', 'members',
-                               'members')
+    exec_words = list(words) + ([pwd_exec] if pwd_exec else [])
+    prev_words = list(words) + ([pwd_prev] if pwd_prev else [])
+    if exec_words:
+        exec_statements.append(f'ALTER ROLE {quoted} WITH ' + ' '.join(exec_words))
+        prev_statements.append(f'ALTER ROLE {quoted} WITH ' + ' '.join(prev_words))
+    tail = []
+    tail += _revocations(quoted, draft, 'revoke_membership',
+                         'member_of', 'revoked memberships')
+    tail += _memberships(quoted, draft, 'rolmembership', 'member_of',
+                         'member of')
+    tail += _revocations(quoted, draft, 'revoke_members', 'members',
+                         'revoked members')
+    tail += _memberships(quoted, draft, 'rolmembers', 'members',
+                         'members')
     for row in _rows(draft, 'reset_variables', 'reset settings'):
         variable = row.get('name')
         if not isinstance(variable, str) or not _SETTING.fullmatch(variable):
@@ -245,15 +431,17 @@ def _alter_role(native, draft):
         scope = ''
         if not _blank(row.get('database')):
             scope = ' IN DATABASE ' + _identifier(row['database'], 'database')
-        statements.append(f'ALTER ROLE {quoted}{scope} RESET {variable}')
-    statements += _settings(quoted, _rows(draft, 'variables', 'settings'))
-    statements += _labels(quoted, draft)
+        tail.append(f'ALTER ROLE {quoted}{scope} RESET {variable}')
+    tail += _settings(quoted, _rows(draft, 'variables', 'settings'))
+    tail += _labels(quoted, draft)
     if 'description' in draft and (draft['description'] or None) != (
             current['description'] or None):
-        statements.append(_comment('ROLE', quoted, draft['description']))
-    if not statements:
+        tail.append(_comment('ROLE', quoted, draft['description']))
+    exec_statements += tail
+    prev_statements += tail
+    if not exec_statements:
         raise PostgreSQLNativeAdminError('nothing to change')
-    return statements
+    return exec_statements, prev_statements
 
 
 def _drop_role(native, draft):
@@ -374,15 +562,21 @@ def compile_operation(kind, operation, native, draft):
     """One exact native text for a role or tablespace lifecycle."""
     if kind == 'role':
         if operation == 'create':
-            statements = _create_role(draft)
+            statements, prev_statements = _create_role(draft)
         elif operation == 'alter':
-            statements = _alter_role(native, draft)
+            statements, prev_statements = _alter_role(native, draft)
         elif operation == 'drop':
             statements = _drop_role(native, draft)
+            prev_statements = statements
         else:
             raise PostgreSQLNativeAdminError(
                 'role inspection stays with the provider tree')
-        return {'statement': ';\n'.join(statements), 'read_only': False}
+        exec_text = ';\n'.join(statements)
+        prev_text = ';\n'.join(prev_statements)
+        result = {'statement': exec_text, 'read_only': False}
+        if prev_text != exec_text:
+            result['preview_statement'] = prev_text
+        return result
     if operation == 'create':
         return _create_tablespace(draft)
     if operation == 'alter':

@@ -1250,6 +1250,41 @@ def resource_group_context_actions(profile, resource_kind, visual_catalog,
     """Creation belongs to a presentation group, never a fabricated object."""
     if system:
         return []
+    engine_id = str(profile.get('engine_id') or '').strip()
+    tool_base = ({'database_target_id': database_target_id}
+                 if database_target_id else {})
+    group_tools = (
+        declared_tool_actions(engine_id, 'resource_group', state={
+            'engine_id': engine_id,
+            'route_kind': profile.get('route_kind'),
+            'resource_kind': resource_kind,
+            'database_target_id': database_target_id,
+            'verified': True,
+            'owner': True,
+        }, base=tool_base)
+        if engine_id else []
+    )
+    if (parent_resource is None and resource_kind in {'user', 'role'} and
+            engine_id in {'firebird', 'postgresql', 'mysql', 'mariadb',
+                          'cockroachdb', 'yugabytedb', 'tidb', 'dolt'}):
+        is_server_scope = (
+            database_target_id in (None, '', 'cdeadmin-server-scope')
+        )
+        group_tools.append(_action(
+            f'resource_group.{engine_id}.{resource_kind}.security_manager',
+            ('Manage Users & Roles...' if engine_id in {'mysql', 'mariadb', 'tidb', 'dolt'}
+             else 'Manage Server Users...' if engine_id == 'firebird' and is_server_scope
+             else 'Manage Cluster Roles...' if engine_id in {'postgresql', 'cockroachdb', 'yugabytedb'}
+             else 'Manage Firebird roles...'),
+            'open_tool', icon='action.security', group='security',
+            priority=45, mutation='admin',
+            arguments={
+                **({} if is_server_scope else tool_base),
+                'surface': 'security.manager',
+                'scope': 'server' if is_server_scope else 'database',
+                'initial_kind': resource_kind,
+            },
+        ))
     from pgadmin.cdeadmin.navigator import resource_native
     if parent_resource:
         member_task = resource_native(parent_resource).get(
@@ -1266,7 +1301,7 @@ def resource_group_context_actions(profile, resource_kind, visual_catalog,
                          member_task.get('operation_id') and
                          item.get('native_supported') is not False), None)
             if not task:
-                return []
+                return group_tools
             enabled = task.get('execution_available') is True
             arguments = {'tab': 'object',
                          'resource_id': parent_resource['resource_id'],
@@ -1282,17 +1317,17 @@ def resource_group_context_actions(profile, resource_kind, visual_catalog,
                 disabled_reason=', '.join(task.get('blockers') or []) or (
                     '' if enabled else
                     'Owning definition editor unavailable.'),
-            )]
+            )] + group_tools
     descriptor = next((item for item in
                        (visual_catalog or {}).get('objects', [])
                        if item.get('resource_kind') == resource_kind), None)
     if not descriptor:
-        return []
+        return group_tools
     create = next((item for item in descriptor.get('operations', [])
                    if item.get('operation_id') == 'create' and
                    item.get('native_supported') is not False), None)
     if not create:
-        return []
+        return group_tools
     arguments = {'tab': 'administration', 'operation_id': 'create',
                  'resource_kind': resource_kind}
     if database_target_id:
@@ -1308,7 +1343,7 @@ def resource_group_context_actions(profile, resource_kind, visual_catalog,
         mutation=create.get('mutation_class', 'admin'), enabled=enabled,
         disabled_reason=', '.join(create.get('blockers') or []) or (
             '' if enabled else 'The provider has not admitted creation.'),
-    )]
+    )] + group_tools
 
 
 _SQL_SCRIPT_ENGINES = frozenset({
