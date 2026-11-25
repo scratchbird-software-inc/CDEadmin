@@ -1586,3 +1586,36 @@ which adds only its create action; MySQL's ``role`` is merged into ``user``, so
 "New role" remains). Membership operations still target the role-kind resource of
 the selected account. No heuristic claims an account is a role. MySQL stays
 ``draft`` (membership listing and non-table grant listings remain).
+
+Decision 21: MySQL membership, scoped grants and held grants (2026-11-25)
+-------------------------------------------------------------------------
+
+Declared in ``mysql/security.json`` and verified against the demo MySQL 9.7.0
+container (``test_ui_descriptor_security_mysql_live.py``, 5 passed and 1 skipped
+without the grammar library):
+
+* ``membership.listing`` (members of the selected account's role: ``members``)
+  and the new ``membership.member_of_listing`` (the roles it holds: ``member_of``),
+  each with an optional ``title``. Their column fields exist in the provider rows.
+* ``grants.listing.kinds`` with ``scope_field``: database, table and view (table
+  and column rows), procedure and function (routine rows, told apart by
+  ``routine_type``), matched against the tail of the object's tree path, so a table
+  of the same name in another database is not shown. Verified for global, database,
+  table, column and routine grants.
+* ``grants.listing.held`` and ``grantee_template`` (``'{name}'@'{host}'``): the
+  account view lists every grant it holds across all scopes, the only place global
+  grants appear (MySQL has no object to hang them on).
+* The lingering grantable ``USAGE`` row after privileges are revoked is listed by the
+  provider and shown as a privilege with grant option Yes.
+* ``grants.dialog``: the shared grants view no longer names any engine's dialog
+  fields. Each engine declares which operation fields receive the object type, name
+  and path qualifiers, any constants, and how a listed row prefills a revoke
+  (Firebird: grantee kind, name, privileges; MySQL: a user and host grid split from
+  the account string, privileges with a column list). The validator checks that
+  every named field exists in the grant and revoke operations.
+
+Not done: no click-through of the Accounts view in a running UI; the grant and
+revoke operations were round-tripped for table and column scope only (not database,
+routine, proxy or global); the role form's create and alter were not round-tripped
+live; MariaDB, which shares the provider, was not run. MySQL stays ``draft`` as
+instructed. Lint counts unchanged (engine_prop 135, security_ui 22).

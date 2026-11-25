@@ -86,7 +86,7 @@ def env():
         return cursor.fetchall()
 
     try:
-        yield SimpleNamespace(names=names, listed=listed, run=run, one=one, tag=tag)
+        yield SimpleNamespace(names=names, listed=listed, run=run, one=one, exec=lambda sql: cursor.execute(sql), tag=tag)
     finally:
         client.close()
         for statement in (f'DROP TABLE IF EXISTS `{SCHEMA}`.`{names.table}`',
@@ -161,3 +161,82 @@ def test_table_privilege_grant_and_revoke_round_trip_with_columns(env):
                                     'confirmation': f"{names.member}@%"})
     assert env.one('SELECT 1 FROM information_schema.TABLE_PRIVILEGES WHERE GRANTEE=%s AND TABLE_NAME=%s',
                    (f"'{names.member}'@'%'", names.table)) == []
+
+
+def _security():
+    import json
+    return json.loads((ROOT / 'web/pgadmin/cdeadmin/ui_descriptors/mysql/security.json').read_text(encoding='utf-8'))
+
+
+def _rows(env, grantee):
+    return [r['native'] for r in env.listed('privilege') if r['native'].get('grantee') == grantee]
+
+
+def _match(listing, kind, native, path):
+    """The Python twin of grantRows' filter in DescriptorObjectGrants.jsx."""
+    spec = listing['kinds'][kind]
+    return (native.get(listing['scope_field']) in spec['scopes']
+            and all(native.get(field) == path[len(path) - len(spec['fields']) + i] for i, field in enumerate(spec['fields']))
+            and all(native.get(k) == v for k, v in (spec.get('where') or {}).items()))
+
+
+def test_the_declared_listing_finds_every_scope_the_server_reports(env):
+    """The descriptor's grants.listing and grantee template, applied to what the provider returns live."""
+    security = _security()
+    listing = security['grants']['listing']
+    names = env.names
+    account = security['grants']['listing']['grantee_template'].format(name=names.member, host='%')
+    assert account == f"'{names.member}'@'%'"
+    routine = f'sr_p_{env.tag}'
+    for statement in (f'CREATE PROCEDURE `{SCHEMA}`.`{routine}`() BEGIN END',
+                      f'GRANT PROCESS ON *.* TO `{names.member}`@`%`',
+                      f'GRANT SELECT ON `{SCHEMA}`.* TO `{names.member}`@`%` WITH GRANT OPTION',
+                      f'GRANT SELECT, UPDATE ON `{SCHEMA}`.`{names.table}` TO `{names.member}`@`%`',
+                      f'GRANT INSERT (a) ON `{SCHEMA}`.`{names.table}` TO `{names.member}`@`%`',
+                      f'GRANT EXECUTE ON PROCEDURE `{SCHEMA}`.`{routine}` TO `{names.member}`@`%`'):
+        env.exec(statement)
+    try:
+        rows = _rows(env, account)
+        by_scope = {}
+        for native in rows:
+            by_scope.setdefault(native['scope'], []).append(native)
+        assert set(by_scope) == {'global', 'database', 'table', 'column', 'routine'}, sorted(by_scope)
+        assert [n['privilege'] for n in by_scope['global']] == ['PROCESS']
+        table_path = [SCHEMA, names.table]
+        found = [(n['privilege'], n.get('column_name')) for n in rows if _match(listing, 'table', n, table_path)]
+        assert sorted(found, key=str) == sorted([('SELECT', None), ('UPDATE', None), ('INSERT', 'a')], key=str), found
+        assert [n['privilege'] for n in rows if _match(listing, 'database', n, [SCHEMA])] == ['SELECT']
+        assert [n['privilege'] for n in rows if _match(listing, 'procedure', n, [SCHEMA, routine])] == ['EXECUTE']
+        assert not [n for n in rows if _match(listing, 'function', n, [SCHEMA, routine])]
+        grantable = {n['privilege']: n[listing['grant_option_field']] for n in by_scope['database']}
+        assert grantable == {'SELECT': listing['grant_option_equals']}
+    finally:
+        env.exec(f'DROP PROCEDURE IF EXISTS `{SCHEMA}`.`{routine}`')
+
+
+def test_a_grant_option_left_after_revoking_privileges_is_listed_as_usage(env):
+    names = env.names
+    account = f"'{names.member}'@'%'"
+    env.exec(f'GRANT SELECT ON `{SCHEMA}`.`{names.table}` TO `{names.member}`@`%` WITH GRANT OPTION')
+    env.exec(f'REVOKE SELECT ON `{SCHEMA}`.`{names.table}` FROM `{names.member}`@`%`')
+    listing = _security()['grants']['listing']
+    left = [n for n in _rows(env, account) if _match(listing, 'table', n, [SCHEMA, names.table])]
+    assert [(n['privilege'], n[listing['grant_option_field']]) for n in left] == [('USAGE', 'YES')], left
+
+
+def test_the_membership_listings_name_fields_the_provider_returns(env):
+    names = env.names
+    membership = _security()['membership']
+    env.exec(f'GRANT `{names.role}`@`%` TO `{names.member}`@`%` WITH ADMIN OPTION')
+    env.exec(f'SET DEFAULT ROLE `{names.role}`@`%` TO `{names.member}`@`%`')
+    role = next(r for r in env.listed('role') if r['resource_id'] == f'role:{names.role}@%')
+    account = next(r for r in env.listed('user') if r['resource_id'] == f'user:{names.member}@%')
+    members = role['native'][membership['listing']['native_field']]
+    held = account['native'][membership['member_of_listing']['native_field']]
+    assert [m['principal'] for m in members] == [f'{names.member}@%']
+    assert [h['role'] for h in held] == [f'{names.role}@%']
+    for column in membership['listing']['columns']:
+        assert column['field'] in members[0], column
+    for column in membership['member_of_listing']['columns']:
+        assert column['field'] in held[0], column
+    assert members[0]['admin_option'] is True and held[0]['default_role'] is True

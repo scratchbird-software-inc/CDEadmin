@@ -40,32 +40,114 @@ export function objectGrantsOffered(bundle, objectKind) {
   return Array.isArray(grantable) && grantable.includes(objectKind);
 }
 
-/** The object-grant rows for one object, read through the descriptor's listing. */
-export function grantRows(grants, resources, objectName) {
+/** 'user'@'host' (the quoting a server prints a grantee with) split into its two parts. */
+export function parseAccount(text) {
+  const match = /^(?:'((?:[^']|'')*)'|`((?:[^`]|``)*)`|([^@]*))@(?:'((?:[^']|'')*)'|`((?:[^`]|``)*)`|(.*))$/.exec(String(text ?? ''));
+  if(!match) return {user: String(text ?? ''), host: ''};
+  const unquote = (quoted, ticked, bare, doubled) => (quoted ?? ticked ?? bare ?? '').replaceAll(doubled, doubled[0]);
+  return {user: unquote(match[1], match[2], match[3], '\'\'').replaceAll('``', '`'),
+    host: unquote(match[4], match[5], match[6], '\'\'').replaceAll('``', '`')};
+}
+
+/** The grant rows for one object, read through the descriptor's listing.
+ *  objectPath is the object's path in the tree (outermost first), whose tail the listing's fields match. */
+export function grantRows(grants, resources, objectName, objectPath, objectKind) {
   const listing = grants.listing;
-  // A grant names its object by one native field, or by a path whose last field is the object's own name.
-  const objectKey = listing.object_field || listing.object_fields.at(-1);
+  const path = objectPath?.length ? objectPath : [objectName];
+  const spec = listing.kinds?.[objectKind];
+  const objectKey = listing.object_field || listing.object_fields?.at(-1);
   // Without codes the engine stores privilege names directly.
+  const codes = listing.privilege_codes;
+  const privilegeName = (stored) => (codes ? codes[stored] : stored);
+  const onObject = (native) => {
+    if(spec) {
+      return spec.scopes.includes(native[listing.scope_field])
+        && spec.fields.every((field, index) => native[field] === path[path.length - spec.fields.length + index])
+        && Object.entries(spec.where || {}).every(([field, value]) => native[field] === value);
+    }
+    return native[objectKey] === objectName;
+  };
+  return resources
+    .filter((resource) => resource.resource_kind === grants.grant_kind)
+    .map((resource) => resourceNative(resource))
+    .filter((native) => onObject(native) && (!codes || Object.hasOwn(codes, native[listing.privilege_field])))
+    .map((native) => toRow(listing, native, privilegeName))
+    .sort((a, b) => `${a.grantee}:${a.privilege}:${a.column}`.localeCompare(`${b.grantee}:${b.privilege}:${b.column}`));
+}
+
+function toRow(listing, native, privilegeName) {
+  const kindCode = listing.grantee_kind_field ? native[listing.grantee_kind_field] : undefined;
+  return {
+    grantee: native[listing.grantee_field],
+    granteeKind: listing.grantee_kinds?.[String(kindCode)] ?? null,
+    privilege: privilegeName(native[listing.privilege_field]),
+    stored: native[listing.privilege_field],
+    scope: listing.scope_field ? native[listing.scope_field] : undefined,
+    column: listing.column_field ? native[listing.column_field] || '' : '',
+    grantOption: listing.grant_option_field
+      ? native[listing.grant_option_field] === listing.grant_option_equals : null,
+    grantor: listing.grantor_field ? native[listing.grantor_field] || '' : '',
+    native,
+  };
+}
+
+/** How the selected principal is spelled in a grant row's grantee field. */
+export function granteeSpelling(security, principal, resource) {
+  const native = resourceNative(resource);
+  const template = security.grants?.listing?.grantee_template;
+  const first = (principal.identity || ['name'])[0];
+  if(!template) return String(native[first] ?? resource?.display_name ?? '');
+  return template.replace(/\{(\w+)\}/g, (_, field) => String(native[field] ?? ''));
+}
+
+/** Every grant a principal holds, across all scopes (the only place global grants show). */
+export function heldRows(grants, resources, grantee) {
+  const listing = grants.listing;
   const codes = listing.privilege_codes;
   const privilegeName = (stored) => (codes ? codes[stored] : stored);
   return resources
     .filter((resource) => resource.resource_kind === grants.grant_kind)
     .map((resource) => resourceNative(resource))
-    .filter((native) => native[objectKey] === objectName
-      && (!codes || Object.hasOwn(codes, native[listing.privilege_field])))
-    .map((native) => {
-      const kindCode = listing.grantee_kind_field ? native[listing.grantee_kind_field] : undefined;
-      return {
-        grantee: native[listing.grantee_field],
-        granteeKind: listing.grantee_kinds?.[String(kindCode)] ?? null,
-        privilege: privilegeName(native[listing.privilege_field]),
-        column: listing.column_field ? native[listing.column_field] || '' : '',
-        grantOption: listing.grant_option_field
-          ? native[listing.grant_option_field] === listing.grant_option_equals : null,
-        grantor: listing.grantor_field ? native[listing.grantor_field] || '' : '',
-      };
-    })
-    .sort((a, b) => `${a.grantee}:${a.privilege}:${a.column}`.localeCompare(`${b.grantee}:${b.privilege}:${b.column}`));
+    .filter((native) => native[listing.grantee_field] === grantee)
+    .map((native) => ({...toRow(listing, native, privilegeName),
+      object: [native.database, native.table_name || native.routine_name].filter(Boolean).join('.')}))
+    .sort((a, b) => `${a.scope}:${a.object}:${a.privilege}:${a.column}`.localeCompare(`${b.scope}:${b.object}:${b.privilege}:${b.column}`));
+}
+
+/** The dialog values a grants view fixes for one object (and one listed row), as the descriptor's dialog maps them. */
+export function dialogValues(grants, operation, objectKind, objectName, objectPath, row) {
+  const dialog = grants.dialog || {};
+  const fixed = {...(dialog.fixed || {})};
+  const objectType = objectTypeValue(operation, objectKind);
+  if(dialog.object_type && objectType) fixed[dialog.object_type] = objectType;
+  const path = objectPath?.length ? objectPath : [objectName];
+  fixed[dialog.object_by_kind?.[objectKind] || dialog.object] = objectName;
+  (dialog.qualifiers || []).forEach((field, index) => {
+    const offset = path.length - 1 - (dialog.qualifiers.length - index);
+    if(offset >= 0 && !dialog.object_by_kind?.[objectKind]) fixed[field] = path[offset];
+  });
+  const target = dialog.row;
+  if(row && target) {
+    if(target.grantee_kind_field && row.granteeKind) fixed[target.grantee_kind_field] = row.granteeKind;
+    if(target.grantee_field && row.granteeKind) fixed[target.grantee_field] = row.grantee;
+    if(target.grantee_grid) fixed[target.grantee_grid.field] = [{
+      [target.grantee_grid.user]: parseAccount(row.grantee).user, [target.grantee_grid.host]: parseAccount(row.grantee).host}];
+    if(target.privileges_field) {
+      const item = target.privilege_key
+        ? {[target.privilege_key]: row.privilege, ...(row.column && target.columns_key ? {[target.columns_key]: [row.column]} : {})}
+        : row.privilege;
+      fixed[target.privileges_field] = [item];
+    }
+  }
+  return fixed;
+}
+
+/** Whether one listed grant can be revoked in a click: the dialog needs to know who and (for a column grant) which columns. */
+export function canRevoke(grants, row) {
+  const target = grants.dialog?.row;
+  if(!target) return false;
+  const named = target.grantee_grid || (target.grantee_kind_field && row.granteeKind);
+  return Boolean(named) && (!row.column || Boolean(target.columns_key));
 }
 
 /** The operation's own spelling of an object kind (its object_type option matching the resource kind). */
@@ -78,7 +160,7 @@ export function objectTypeValue(operation, objectKind) {
 }
 
 export default function DescriptorObjectGrants({
-  api, endpointUrl, engine, version, databaseTargetId = '', objectKind, objectName, onApplied, onAuthRequired,
+  api, endpointUrl, engine, version, databaseTargetId = '', objectKind, objectName, objectPath, onApplied, onAuthRequired,
 }) {
   const client = useMemo(() => descriptorClient(api), [api]);
   const post = useMemo(() => makePost(api, endpointUrl, databaseTargetId || undefined, {onAuthRequired}),
@@ -103,18 +185,16 @@ export default function DescriptorObjectGrants({
 
   const grants = state.bundle?.security?.grants;
   const rows = useMemo(() => (grants && state.status === 'ready' && objectGrantsOffered(state.bundle, objectKind)
-    ? grantRows(grants, state.resources, objectName) : []), [grants, state, objectKind, objectName]);
+    ? grantRows(grants, state.resources, objectName, objectPath, objectKind) : []), [grants, state, objectKind, objectName, objectPath]);
   const operations = useMemo(() => Object.fromEntries(
     (state.bundle?.kinds?.[grants?.grant_kind]?.operations || []).map((op) => [op.operation_id, op])), [state.bundle, grants]);
 
   const open = useCallback((operationId, row) => {
     const operation = operations[operationId];
-    const objectType = objectTypeValue(operation, objectKind);
-    const fixed = {privilege_scope: 'object', ...(objectType ? {object_type: objectType} : {}), object_name: objectName};
-    if(row?.granteeKind) Object.assign(fixed, {principal_kind: row.granteeKind, principal: row.grantee, privileges: [row.privilege]});
+    const fixed = dialogValues(grants, operation, objectKind, objectName, objectPath, row);
     setDialog({operation, fixed, calls: visualAdminCalls(post, {
       resourceKind: grants.grant_kind, operationId, target: null})});
-  }, [operations, objectKind, objectName, post, grants]);
+  }, [operations, objectKind, objectName, objectPath, post, grants]);
 
   const applied = useCallback((result) => {
     setDialog(null);
@@ -152,7 +232,7 @@ export default function DescriptorObjectGrants({
           {listing.column_field && <Box component="td" sx={{pr: 2}}>{row.column}</Box>}
           {listing.grant_option_field && <Box component="td" sx={{pr: 2}}>{row.grantOption ? gettext('Yes') : gettext('No')}</Box>}
           {listing.grantor_field && <Box component="td" sx={{pr: 2}}>{row.grantor}</Box>}
-          <td>{editable && row.granteeKind && !row.column && <Button intent="neutral"
+          <td>{editable && canRevoke(grants, row) && <Button intent="neutral"
             aria-label={gettext('Revoke %s from %s', row.privilege, row.grantee)}
             onClick={() => open('revoke', row)}>{gettext('Revoke')}</Button>}</td>
         </tr>)}</tbody>
@@ -170,6 +250,7 @@ DescriptorObjectGrants.propTypes = {
   databaseTargetId: PropTypes.string,
   objectKind: PropTypes.string.isRequired,
   objectName: PropTypes.string.isRequired,
+  objectPath: PropTypes.arrayOf(PropTypes.string),
   onApplied: PropTypes.func,
   onAuthRequired: PropTypes.func,
 };

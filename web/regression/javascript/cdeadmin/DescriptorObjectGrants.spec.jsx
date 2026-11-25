@@ -1,7 +1,7 @@
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import Theme from 'sources/Theme';
 import DescriptorObjectGrants, {
-  grantRows, objectGrantsOffered, objectTypeValue,
+  grantRows, objectGrantsOffered, objectTypeValue, parseAccount, dialogValues, canRevoke, heldRows, granteeSpelling,
 } from '../../../pgadmin/static/js/cdeadmin_ui/security/DescriptorObjectGrants';
 import ObjectGrantsSurface, {objectContext} from '../../../pgadmin/static/js/cdeadmin_ui/security/ObjectGrantsSurface';
 import {resetDescriptorClient} from '../../../pgadmin/static/js/cdeadmin_ui/objects';
@@ -164,9 +164,73 @@ describe('grantRows with a composite object path and stored privilege names', ()
   const grant = (native) => ({resource_kind: 'privilege', native});
   it('matches on the last path field and keeps privilege names as stored', () => {
     const rows = grantRows(grants, [
-      grant({grantee: "'app'@'%'", privilege: 'SELECT', database: 'd', table_name: 't', is_grantable: 'YES'}),
-      grant({grantee: "'app'@'%'", privilege: 'DROP', database: 'd', table_name: 'other'}),
+      grant({grantee: '\'app\'@\'%\'', privilege: 'SELECT', database: 'd', table_name: 't', is_grantable: 'YES'}),
+      grant({grantee: '\'app\'@\'%\'', privilege: 'DROP', database: 'd', table_name: 'other'}),
     ], 't');
-    expect(rows).toEqual([expect.objectContaining({grantee: "'app'@'%'", privilege: 'SELECT', grantOption: true, granteeKind: null})]);
+    expect(rows).toEqual([expect.objectContaining({grantee: '\'app\'@\'%\'', privilege: 'SELECT', grantOption: true, granteeKind: null})]);
+  });
+});
+
+
+describe('MySQL-shaped grants: scope-keyed rows, account strings and the declared dialog', () => {
+  const mysql = () => loadEngineBundle('mysql').security.grants;
+  const grant = (native) => ({resource_kind: 'privilege', native: {grantee: '\'app\'@\'%\'', is_grantable: 'NO', ...native}});
+  const RESOURCES = [
+    grant({scope: 'table', database: 'd', table_name: 't', privilege: 'SELECT', is_grantable: 'YES'}),
+    grant({scope: 'column', database: 'd', table_name: 't', column_name: 'a', privilege: 'UPDATE'}),
+    grant({scope: 'table', database: 'other', table_name: 't', privilege: 'DROP'}),
+    grant({scope: 'database', database: 'd', privilege: 'SELECT'}),
+    grant({scope: 'routine', database: 'd', routine_name: 'p', routine_type: 'PROCEDURE', privilege: 'EXECUTE'}),
+    grant({scope: 'routine', database: 'd', routine_name: 'p', routine_type: 'FUNCTION', privilege: 'ALTER ROUTINE'}),
+    grant({scope: 'global', privilege: 'PROCESS'}),
+    grant({scope: 'table', database: 'd', table_name: 't', privilege: 'USAGE', grantee: '\'x\'@\'h\'', is_grantable: 'YES'}),
+  ];
+
+  it('finds a table\'s table and column grants only in its own database, keeping USAGE', () => {
+    const rows = grantRows(mysql(), RESOURCES, 't', ['d', 't'], 'table');
+    expect(rows.map((r) => `${r.grantee}:${r.privilege}:${r.column}:${r.grantOption}`)).toEqual([
+      '\'app\'@\'%\':SELECT::true', '\'app\'@\'%\':UPDATE:a:false', '\'x\'@\'h\':USAGE::true']);
+  });
+
+  it('keeps database, routine and routine-type grants apart', () => {
+    expect(grantRows(mysql(), RESOURCES, 'd', ['d'], 'database').map((r) => r.privilege)).toEqual(['SELECT']);
+    expect(grantRows(mysql(), RESOURCES, 'p', ['d', 'p'], 'procedure').map((r) => r.privilege)).toEqual(['EXECUTE']);
+    expect(grantRows(mysql(), RESOURCES, 'p', ['d', 'p'], 'function').map((r) => r.privilege)).toEqual(['ALTER ROUTINE']);
+  });
+
+  it('splits an account string, with quotes and a doubled quote', () => {
+    expect(parseAccount('\'app\'@\'10.0.%\'')).toEqual({user: 'app', host: '10.0.%'});
+    expect(parseAccount('\'o\'\'brien\'@\'%\'')).toEqual({user: 'o\'brien', host: '%'});
+    expect(parseAccount('`a`@`b`')).toEqual({user: 'a', host: 'b'});
+    expect(parseAccount('plain')).toEqual({user: 'plain', host: ''});
+  });
+
+  it('fills the declared dialog fields for a table, a column row and a database', () => {
+    const grants = mysql();
+    const operation = loadEngineBundle('mysql').kinds.privilege.operations.find((op) => op.operation_id === 'revoke');
+    const column = grantRows(grants, RESOURCES, 't', ['d', 't'], 'table').find((r) => r.column);
+    expect(dialogValues(grants, operation, 'table', 't', ['d', 't'], column)).toEqual({
+      object_type: 'TABLE', object: 't', database: 'd',
+      grantees: [{user: 'app', host: '%'}], privileges: [{name: 'UPDATE', columns: ['a']}]});
+    expect(dialogValues(grants, operation, 'database', 'd', ['d'])).toEqual({object_type: 'DATABASE', database: 'd'});
+  });
+
+  it('allows a one-click revoke of a column grant only where the engine\'s dialog takes columns', () => {
+    const mysqlRow = {column: 'a', granteeKind: null};
+    expect(canRevoke(mysql(), mysqlRow)).toBe(true);
+    const firebird = loadEngineBundle('firebird').security.grants;
+    expect(canRevoke(firebird, {column: 'N', granteeKind: 'USER'})).toBe(false);
+    expect(canRevoke(firebird, {column: '', granteeKind: 'USER'})).toBe(true);
+    expect(canRevoke(firebird, {column: '', granteeKind: null})).toBe(false);
+  });
+
+  it('lists everything an account holds, global grants included, by its spelled grantee', () => {
+    const security = loadEngineBundle('mysql').security;
+    const grantee = granteeSpelling(security, security.principals[0], {display_name: 'app@%', native: {name: 'app', host: '%'}});
+    expect(grantee).toBe('\'app\'@\'%\'');
+    const held = heldRows(security.grants, RESOURCES, grantee);
+    expect(held.map((r) => `${r.scope}:${r.object}:${r.privilege}`)).toEqual([
+      'column:d.t:UPDATE', 'database:d:SELECT', 'global::PROCESS', 'routine:d.p:ALTER ROUTINE', 'routine:d.p:EXECUTE',
+      'table:d.t:SELECT', 'table:other.t:DROP']);
   });
 });

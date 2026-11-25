@@ -31,6 +31,7 @@ export function objectContext(boundNodeData, resource) {
     version: node.verified_runtime_version,
     objectKind: String(node.cde_resource_kind || resource?.resource_kind || '').toLowerCase(),
     objectName: resource?.display_name || node.label || '',
+    objectPath: Array.isArray(resource?.display_path) ? resource.display_path.map(String) : undefined,
   };
 }
 
@@ -54,7 +55,7 @@ export default function ObjectGrantsSurface(props) {
   if(choice === 'descriptor') {
     return <DescriptorObjectGrants api={api} endpointUrl={context.endpointUrl} engine={context.engine}
       version={context.version} databaseTargetId={context.databaseTargetId}
-      objectKind={context.objectKind} objectName={context.objectName} onApplied={props.onApplied} />;
+      objectKind={context.objectKind} objectName={context.objectName} objectPath={context.objectPath} onApplied={props.onApplied} />;
   }
   return <ObjectPermissionsMatrix {...props} />;
 }

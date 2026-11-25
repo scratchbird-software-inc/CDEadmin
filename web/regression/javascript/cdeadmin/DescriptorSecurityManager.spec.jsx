@@ -199,3 +199,26 @@ describe('DescriptorSecurityManager with one account catalog (MySQL)', () => {
       .toMatchObject({resource_kind: 'role', operation_id: 'grant', target_resource: {resource_id: 'role:reader@%'}});
   });
 });
+
+
+describe('DescriptorSecurityManager membership and held grants (MySQL)', () => {
+  beforeEach(() => { resetDescriptorClient(); mockEditor.mockClear(); });
+  const account = {resource_kind: 'user', resource_id: 'user:app@%', display_name: 'app@%', native: {
+    name: 'app', host: '%',
+    member_of: [{role: 'reader@%', user: 'reader', host: '%', admin_option: true, default_role: true}]}};
+  const roleRow = {resource_kind: 'role', resource_id: 'role:app@%', display_name: 'app@%', native: {
+    name: 'app', host: '%', members: [{principal: 'x@%', user: 'x', host: '%', admin_option: false}]}};
+  const grant = {resource_kind: 'privilege', resource_id: 'g1', display_name: 'g', native: {
+    grantee: '\'app\'@\'%\'', scope: 'global', privilege: 'PROCESS', is_grantable: 'NO'}};
+  const cells = (table) => Array.from(table.querySelectorAll('tbody tr')).map((tr) =>
+    Array.from(tr.querySelectorAll('td')).map((td) => td.textContent));
+
+  it('shows the roles an account holds, the members of its role, and every grant it holds', async () => {
+    const {api} = makeApi('mysql', [account, roleRow, grant]);
+    mount({api, engine: 'mysql', scope: 'server'});
+    fireEvent.click(await screen.findByRole('button', {name: /^app@%/}));
+    expect(cells(await screen.findByRole('region', {name: 'Roles held'}))).toEqual([['reader@%', 'Yes', 'Yes']]);
+    expect(cells(screen.getByRole('region', {name: 'Members'}))).toEqual([['x@%', 'No']]);
+    expect(cells(screen.getByRole('region', {name: 'Privileges held'}))).toEqual([['global', '', 'PROCESS', '', 'No']]);
+  });
+});

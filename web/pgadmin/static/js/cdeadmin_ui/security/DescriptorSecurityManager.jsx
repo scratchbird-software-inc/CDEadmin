@@ -31,6 +31,7 @@ import OperationDialog from '../objects/OperationDialog';
 import ProviderObjectEditorHost, {makePost, resourceNative} from '../objects/ProviderObjectEditorHost';
 import {descriptorClient, visualAdminCalls} from '../objects/DescriptorClient';
 import {listResources} from './providerList';
+import {granteeSpelling, heldRows} from './DescriptorObjectGrants';
 
 /** The name a roster row shows: the descriptor's identity fields, joined. */
 export function principalLabel(principal, resource) {
@@ -52,7 +53,9 @@ function cell(column, row) {
 function Memberships({listing, resource}) {
   const rows = resourceNative(resource)?.[listing.native_field];
   if(!Array.isArray(rows) || rows.length === 0) return null;
-  return <Box component="section" aria-label={gettext('Memberships')} sx={{p: 1}}>
+  const title = gettext(listing.title || 'Memberships');
+  return <Box component="section" aria-label={title} sx={{p: 1}}>
+    {listing.title && <Box sx={{fontWeight: 600, mb: 0.5}}>{title}</Box>}
     <Box component="table" sx={{borderCollapse: 'collapse', fontSize: '0.8125rem', width: '100%'}}>
       <thead><tr>{listing.columns.map((column) =>
         <Box component="th" key={column.field} sx={{textAlign: 'left', pr: 2}}>{gettext(column.label)}</Box>)}</tr></thead>
@@ -62,6 +65,31 @@ function Memberships({listing, resource}) {
     </Box>
   </Box>;
 }
+
+function Held({grants, resources, grantee}) {
+  const rows = heldRows(grants, resources, grantee);
+  if(rows.length === 0) return null;
+  const listing = grants.listing;
+  return <Box component="section" aria-label={gettext('Privileges held')} sx={{p: 1}}>
+    <Box sx={{fontWeight: 600, mb: 0.5}}>{gettext('Privileges held')}</Box>
+    <Box component="table" sx={{borderCollapse: 'collapse', fontSize: '0.8125rem', width: '100%'}}>
+      <thead><tr>
+        {['Scope', 'Object', 'Privilege', ...(listing.column_field ? ['Column'] : []),
+          ...(listing.grant_option_field ? ['Grant option'] : [])].map((label) =>
+          <Box component="th" key={label} sx={{textAlign: 'left', pr: 2}}>{gettext(label)}</Box>)}
+      </tr></thead>
+      <tbody>{rows.map((row, index) => <tr key={`${row.scope}:${row.object}:${row.privilege}:${row.column}:${index}`}>
+        <Box component="td" sx={{pr: 2}}>{row.scope}</Box>
+        <Box component="td" sx={{pr: 2}}>{row.object}</Box>
+        <Box component="td" sx={{pr: 2}}>{row.privilege}</Box>
+        {listing.column_field && <Box component="td" sx={{pr: 2}}>{row.column}</Box>}
+        {listing.grant_option_field && <Box component="td" sx={{pr: 2}}>{row.grantOption ? gettext('Yes') : gettext('No')}</Box>}
+      </tr>)}</tbody>
+    </Box>
+  </Box>;
+}
+
+Held.propTypes = {grants: PropTypes.object.isRequired, resources: PropTypes.array.isRequired, grantee: PropTypes.string.isRequired};
 
 Memberships.propTypes = {listing: PropTypes.object.isRequired, resource: PropTypes.object};
 
@@ -201,6 +229,9 @@ export default function DescriptorSecurityManager({
               resourceKind: membershipTarget.resource_kind, operationId: operation.operation_id, target: membershipTarget})})}>{gettext(operation.title)}</Button>)}
         </Box>
         {security.membership?.listing && membershipTarget && <Memberships listing={security.membership.listing} resource={membershipTarget} />}
+        {security.membership?.member_of_listing && <Memberships listing={security.membership.member_of_listing} resource={selected} />}
+        {security.grants?.listing?.held && <Held grants={security.grants} resources={state.resources}
+          grantee={granteeSpelling(security, principal, selected)} />}
         <ProviderObjectEditorHost key={`alter:${selected.resource_id}`}
           api={api} endpointUrl={endpointUrl} engine={engine} version={version}
           resourceId={selected.resource_id} resourceKind={kind} displayName={selected.display_name}

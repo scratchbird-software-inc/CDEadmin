@@ -99,6 +99,18 @@
       "grant_option_field": "grant_option",
       "grant_option_equals": 1,
       "grantor_field": "grantor"
+    },
+    "dialog": {
+      "object_type": "object_type",
+      "object": "object_name",
+      "fixed": {
+        "privilege_scope": "object"
+      },
+      "row": {
+        "grantee_kind_field": "principal_kind",
+        "grantee_field": "principal",
+        "privileges_field": "privileges"
+      }
     }
   },
   "requires": {

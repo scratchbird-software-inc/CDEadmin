@@ -217,6 +217,19 @@ def check_security_descriptor(engine, engine_dir, caps, schemas, errors):
         for needed in ("grant", "revoke"):
             if needed not in ops:
                 errors.append(f"{rel}: grant kind {grants['grant_kind']!r} declares no {needed} operation")
+    dialog = grants.get("dialog")
+    if dialog and grant_kind is not None:
+        for op_id in ("grant", "revoke"):
+            op = next((x for x in grant_kind.get("operations", []) if x.get("operation_id") == op_id), None)
+            have = {f.get("field_id") for f in (op or {}).get("fields", [])}
+            row = dialog.get("row") or {}
+            wanted = [dialog.get("object_type"), dialog.get("object"), *dialog.get("qualifiers", []),
+                      *(dialog.get("fixed") or {}), *(dialog.get("object_by_kind") or {}).values(),
+                      row.get("grantee_kind_field"), row.get("grantee_field"), row.get("privileges_field"),
+                      *[(row.get("grantee_grid") or {}).get("field")]]
+            for field in wanted:
+                if field and have and field not in have:
+                    errors.append(f"{rel}: grants.dialog names field {field!r}, which the {op_id} operation does not declare")
     for key in ("system_privileges", "object_privileges", "grantable_kinds"):
         if key in grants and grants[key] not in dialect:
             errors.append(f"{rel}: grants.{key} reads dialect.{grants[key]} which options.json does not define")
@@ -225,10 +238,21 @@ def check_security_descriptor(engine, engine_dir, caps, schemas, errors):
         errors.append(f"{rel}: grants.status (draft or complete) is required when grants are declared")
     listing = grants.get("listing")
     if listing:
-        if not (listing.get("object_field") or listing.get("object_fields")):
-            errors.append(f"{rel}: grants.listing needs object_field or object_fields")
-        if listing.get("object_field") and listing.get("object_fields"):
-            errors.append(f"{rel}: grants.listing declares both object_field and object_fields")
+        ways = [key for key in ("object_field", "object_fields", "kinds") if listing.get(key)]
+        if not ways:
+            errors.append(f"{rel}: grants.listing needs object_field, object_fields or kinds")
+        if len(ways) > 1:
+            errors.append(f"{rel}: grants.listing declares both {' and '.join(ways)}")
+        if listing.get("kinds") and not listing.get("scope_field"):
+            errors.append(f"{rel}: grants.listing kinds needs scope_field")
+        grantable_kinds = dialect.get(grants.get("grantable_kinds"), [])
+        for kind_name in (listing.get("kinds") or {}):
+            if kind_name not in grantable_kinds:
+                errors.append(f"{rel}: grants.listing kind {kind_name!r} is not in grantable_kinds")
+        membership_doc = doc.get("membership") or {}
+        for key in ("listing", "member_of_listing"):
+            if key in membership_doc and "native_field" not in membership_doc[key]:
+                errors.append(f"{rel}: membership.{key} needs native_field")
         grantable = {name for names in object_privileges.values() for name in names}
         for code, name in (listing.get("privilege_codes") or {}).items():
             if name not in grantable:
