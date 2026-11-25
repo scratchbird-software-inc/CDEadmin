@@ -481,20 +481,23 @@ class ContextMenuTests(unittest.TestCase):
         self.assertNotIn('database.firebird.administration', by_id)
         self.assertNotIn('database.firebird.operations', by_id)
         self.assertNotIn('database.firebird.movement', by_id)
-        for resource_kind in ('user', 'role', 'privilege'):
+        # Users are server-wide in Firebird, so their manager opens from the
+        # endpoint (endpoint.firebird.security.user); the database menu only
+        # offers the database-scoped role and grant managers, which open the
+        # shared security.manager surface.
+        self.assertNotIn('database.firebird.security.user', by_id)
+        for resource_kind in ('role', 'privilege'):
             security = by_id[
                 f'database.firebird.security.{resource_kind}'
             ]
+            self.assertEqual('open_tool', security['handler'])
             self.assertEqual(
-                'administration', security['arguments']['tab']
+                'security.manager', security['arguments']['surface']
             )
-            self.assertEqual(
-                resource_kind, security['arguments']['resource_kind']
-            )
+            self.assertEqual('database', security['arguments']['scope'])
+            self.assertEqual('role', security['arguments']['initial_kind'])
             self.assertNotIn('resource_id', security['arguments'])
             self.assertEqual('database-one', security['arguments']['database_target_id'])
-            if resource_kind == 'privilege':
-                self.assertEqual('grant', security['arguments']['operation_id'])
         self.assertNotIn('database.firebird.resources', by_id)
         self.assertNotIn('database.firebird.data', by_id)
         self.assertEqual('export', by_id[

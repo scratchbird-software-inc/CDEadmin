@@ -349,4 +349,54 @@ def test_user_preferences_persistence_and_command_line_tabbed_icon_bar(tmp_path)
     assert get_scoped['preferences']['query_limits'] == 250
 
 
+def test_global_tib_config_sections_and_action_definitions_persistence(tmp_path):
+    app, _store = _build_test_app(tmp_path)
+    client = app.test_client()
+
+    put_resp = client.put(
+        '/cdeadmin/api/shell/settings',
+        json={
+            'global': {
+                'tib_config': {
+                    'subtab_visibility': 'multi_only',
+                    'section_height_px': 92,
+                    'hero_button_px': 44,
+                    'show_section_headers': True,
+                },
+                'tib_sections': {
+                    'SEC-TX': {
+                        'label': 'Transaction Controls',
+                        'sectionIcon': 'tib.section_transaction',
+                    },
+                },
+                'action_definitions': {
+                    'tib.execute_statement': {
+                        'text': 'Run Active SQL',
+                        'icon': 'tib.execute_script',
+                        'hint': 'Execute current statement via custom handler',
+                        'status': 'enabled',
+                        'target': {
+                            'kind': 'client',
+                            'handlerId': 'sql.exec_statement',
+                        },
+                    },
+                },
+            },
+        },
+    )
+    assert put_resp.status_code == 200
+
+    authz = client.get('/cdeadmin/api/shell/authorization').get_json()
+    gcfg = authz['global_settings']
+    assert gcfg['tib_config']['section_height_px'] == 92
+    assert gcfg['tib_config']['subtab_visibility'] == 'multi_only'
+    assert gcfg['tib_sections']['SEC-TX']['label'] == 'Transaction Controls'
+    act_def = gcfg['action_definitions']['tib.execute_statement']
+    assert act_def['text'] == 'Run Active SQL'
+    assert act_def['icon'] == 'tib.execute_script'
+    assert act_def['status'] == 'enabled'
+    assert act_def['target']['handlerId'] == 'sql.exec_statement'
+
+
+
 

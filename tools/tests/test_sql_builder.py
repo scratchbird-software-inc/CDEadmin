@@ -614,3 +614,40 @@ def test_ddn_query_dataflow_admitted_and_stage_preview_executes():
     assert stage_res['columns'] == ['customer_id', 'amount']
     assert stage_res['rows'] == [[1, 5], [1, 7], [2, 3]]
     assert closed_sessions == ['s-preview']
+
+
+def test_relations_and_sql_surface_catalog_classify_system_objects():
+    from pgadmin.cdeadmin.sdk.sql_builder import relations
+    from pgadmin.cdeadmin.workspace.sql_surface_host import (
+        SqlEditorSurfaceState,
+        SqlSurfaceHostService,
+    )
+
+    sample_catalog = [
+        {'resource_id': 's1', 'resource_kind': 'schema', 'display_name': 'pg_catalog', 'display_path': ['pg_catalog'], 'native': {'system_object': True}},
+        {'resource_id': 't1', 'resource_kind': 'table', 'display_name': 'pg_class', 'display_path': ['pg_catalog', 'pg_class'], 'native': {}},
+        {'resource_id': 't2', 'resource_kind': 'table', 'display_name': 'RDB$RELATIONS', 'display_path': ['RDB$RELATIONS'], 'native': {'system_object': True}},
+        {'resource_id': 't3', 'resource_kind': 'table', 'display_name': 'CUSTOMERS', 'display_path': ['public', 'CUSTOMERS'], 'native': {'system_object': False}},
+    ]
+    rels = relations(sample_catalog, ['table'], lambda _r: ['id'])
+    by_name = {r['name']: r for r in rels}
+    assert by_name['pg_class'].get('system_object') is True
+    assert by_name['RDB$RELATIONS'].get('system_object') is True
+    assert 'system_object' not in by_name['CUSTOMERS']
+
+    host = SqlSurfaceHostService()
+    surf = SqlEditorSurfaceState(
+        surface_id='test-vb-sys',
+        user_id=1,
+        server_id=1,
+        database_target_id=None,
+        language_profile='firebird-sql',
+        engine_id='firebird',
+    )
+    surf.full_catalog_loaded = True
+    surf.full_catalog_items = list(sample_catalog)
+    host._ensure_visual_catalog(SimpleNamespace(), None, surf)
+    vb_by_name = {item['display_name']: item for item in surf.visual_catalog_objects}
+    assert vb_by_name['pg_class']['system_object'] is True
+    assert vb_by_name['RDB$RELATIONS']['system_object'] is True
+    assert vb_by_name['CUSTOMERS']['system_object'] is False

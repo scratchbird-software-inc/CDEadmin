@@ -191,6 +191,70 @@ def test_sequence_and_domain_forms(live):
     alter = backend_draft(type_form, {**baseline, 'default': "'b'"}, mode='alter', baseline=baseline)
     assert 'SET DEFAULT \'b\'' in run(client, route, 'domain', 'alter', alter, target=domain)
 
+    # Full constraint/charset/collation/array/blob/comment/rename Firebird 5 domain variations
+    ci_sql = run(client, route, 'domain', 'create', backend_draft(type_form, {
+        'name': 'RT_DOM_EMAIL',
+        'data_type': 'VARCHAR(120)',
+        'character_set': 'UTF8',
+        'collation': 'UNICODE_CI_AI',
+        'not_null': True,
+        'check': "VALUE SIMILAR TO '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}'",
+        'description': 'Case-insensitive email domain',
+    }))
+    assert 'CHARACTER SET "UTF8"' in ci_sql and 'COLLATE "UNICODE_CI_AI"' in ci_sql
+    dom_email, email_base = record(client, route, 'domain', 'RT_DOM_EMAIL', 'type')
+    assert email_base['character_set'] == 'UTF8'
+    assert email_base['collation'] == 'UNICODE_CI_AI'
+    assert email_base['description'] == 'Case-insensitive email domain'
+
+    # Atomic CHECK constraint replacement + rename + comment update
+    alter_email = backend_draft(
+        type_form,
+        {**email_base, 'new_name': 'RT_DOM_EMAIL_V2', 'check': "CHAR_LENGTH(TRIM(VALUE)) >= 5", 'description': 'Updated email domain'},
+        mode='alter',
+        baseline=email_base,
+    )
+    planned_email = ADMINISTRATION.plan({
+        'resource_kind': 'domain', 'operation_id': 'alter',
+        'target_resource': dom_email, '_provider_route': route, 'draft': alter_email,
+    })
+    stmt_sources = [s['source'] for s in planned_email['command_preview']['statements']]
+    assert any('ALTER DOMAIN "RT_DOM_EMAIL" TO "RT_DOM_EMAIL_V2"' in s for s in stmt_sources)
+    assert any('DROP CONSTRAINT ADD CHECK (CHAR_LENGTH(TRIM(VALUE)) >= 5)' in s for s in stmt_sources)
+    assert ADMINISTRATION.apply(client, planned_email)['accepted']
+
+    # Multi-dimensional array domain (structured grid + upper > lower check) & text BLOB domain
+    arr_sql = run(client, route, 'domain', 'create', backend_draft(type_form, {
+        'name': 'RT_DOM_QUARTERLY',
+        'data_type': 'NUMERIC(12,2)',
+        'dimensions': [{'lower': 1, 'upper': 4}, {'lower': 1, 'upper': 2}],
+        'description': '4x2 budget matrix',
+    }))
+    assert 'NUMERIC(12,2)[1:4, 1:2]' in arr_sql
+    _dom_arr, arr_base = record(client, route, 'domain', 'RT_DOM_QUARTERLY', 'type')
+    assert arr_base['array_bounds'] == '[1:4, 1:2]'
+    assert [(d['lower'], d['upper']) for d in arr_base['dimensions']] == [(1, 4), (1, 2)]
+
+    # Equal bounds (1:1) must be rejected per Firebird 5.0.4 native array contract
+    with pytest.raises(Exception, match='upper bound must strictly exceed lower bound'):
+        ADMINISTRATION.plan({
+            'resource_kind': 'domain', 'operation_id': 'create',
+            'target_resource': None, '_provider_route': route,
+            'draft': {'name': 'RT_BAD_ARR', 'data_type': 'INTEGER', 'dimensions': [{'lower': 1, 'upper': 1}]},
+        })
+
+    # Structured BLOB SUB_TYPE TEXT + SEGMENT SIZE domain
+    blob_sql = run(client, route, 'domain', 'create', backend_draft(type_form, {
+        'name': 'RT_DOM_NOTES_BLOB',
+        'data_type': 'BLOB',
+        'blob_sub_type': 'TEXT',
+        'segment_size': 80,
+        'character_set': 'UTF8',
+    }))
+    assert 'BLOB SUB_TYPE TEXT SEGMENT SIZE 80 CHARACTER SET "UTF8"' in blob_sql
+    _dom_blob, blob_base = record(client, route, 'domain', 'RT_DOM_NOTES_BLOB', 'type')
+    assert blob_base['blob_sub_type'] == 'TEXT' and blob_base['segment_size'] == 80
+
 
 def test_routine_and_role_forms(live):
     route, client = live

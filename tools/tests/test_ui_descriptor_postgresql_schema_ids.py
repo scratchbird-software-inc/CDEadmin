@@ -48,6 +48,8 @@ PROVIDER_TREE_IDS = {
     'privilege', 'remote_schema', 'remote_table', 'reset_options',
     'right_type', 'roles', 'schemas', 'scope', 'table', 'table_schema',
     'target', 'validate', 'with_grant',
+    'rename_constraints', 'rename_values', 'rename_attributes', 'from', 'to',
+    'restart_initial',
 }
 
 

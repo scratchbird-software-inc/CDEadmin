@@ -13,7 +13,7 @@ if 'pgadmin' not in sys.modules:
     sys.modules['pgadmin'] = package
 
 from pgadmin.cdeadmin.ui_descriptors import (  # noqa: E402
-    UIDescriptorError, UIDescriptorService, version_gate_state,
+    SHELL_PRIMITIVES, UIDescriptorError, UIDescriptorService, version_gate_state,
 )
 
 BETA_ENGINES = ('postgresql', 'mysql', 'mariadb', 'firebird', 'duckdb', 'sqlite',
@@ -63,8 +63,8 @@ def test_resolved_tabs_follow_the_family_order(service, engine):
         assert positions == sorted(positions), (engine, family, tabs)
         # every rendered tab either carries fields or is a shell-provided tab
         for tab in form['tabs']:
-            assert tab['fields'] or tab['primitive'] in (
-                'sql_preview', 'data_grid', 'readonly_grid', 'readonly_groups'), (engine, family, tab['tab'])
+            assert tab['fields'] or tab['primitive'] in SHELL_PRIMITIVES, (
+                engine, family, tab['tab'])
         if form['status'] == 'complete':
             assert not form['missing_required_tabs'], (engine, family)
 

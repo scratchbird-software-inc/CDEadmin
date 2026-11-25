@@ -1138,11 +1138,24 @@ class PostgreSQLCatalogOwnershipTests(unittest.TestCase):
         driver = FakeDriver(manager)
         renderer = Mock(return_value='SELECT preserved_catalog')
         source = PostgreSQLCatalogSource(driver, renderer)
-        manager._connection.execute_dict = Mock(side_effect=(
-            (True, {'rows': [{'oid': 10, 'rolname': 'app_owner',
-                              'rolcanlogin': True}]}),
-            (True, {'rows': [{'oid': 1663, 'name': 'pg_default'}]}),
-        ))
+        # Answer by statement, not call order: role rows are enriched from
+        # pg_roles / pg_auth_members, which this test leaves empty.
+        catalog = {
+            'roles/sql': (True, {'rows': [{
+                'oid': 10, 'rolname': 'app_owner', 'rolcanlogin': True}]}),
+            'tablespaces/sql': (True, {'rows': [
+                {'oid': 1663, 'name': 'pg_default'}]}),
+        }
+        renderer.side_effect = (
+            lambda template, **_kw: 'catalog:' + template.split('/#')[0])
+
+        def execute_dict(sql, *_args):
+            for prefix, answer in catalog.items():
+                if sql.startswith('catalog:' + prefix):
+                    return answer
+            return (True, {'rows': []})
+
+        manager._connection.execute_dict = Mock(side_effect=execute_dict)
         roles = source.read('role', {'server_id': 7})
         spaces = source.read('tablespace', {'server_id': 7})
         templates = [call.args[0] for call in renderer.call_args_list]
@@ -1160,6 +1173,7 @@ class PostgreSQLCatalogOwnershipTests(unittest.TestCase):
         renderer = Mock(return_value='SELECT preserved_catalog')
         source = PostgreSQLCatalogSource(FakeDriver(manager), renderer)
         manager._connection.execute_dict = Mock(side_effect=(
+            (True, {'rows': [{'installed': True}]}),
             (True, {'rows': [{'jobid': 3, 'jobname': 'nightly vacuum'}]}),
             (True, {'rows': [{'has_connstr': True}]}),
             (True, {'rows': [{'jstid': 9, 'jstname': 'vac'}]}),

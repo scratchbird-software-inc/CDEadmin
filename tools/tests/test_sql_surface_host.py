@@ -1451,3 +1451,189 @@ def test_columnar_pages_survive_empty_terminal_result_and_respect_buffer_limit(t
     decoded = base64.b64decode(exp['content_base64']).decode('utf-8')
     assert decoded.splitlines() == ['VALUE', '43']
 
+
+def test_visual_builder_recursive_cte_and_window_analytics_compile_and_execute_live_sqlite(tmp_path):
+    import sqlite3
+
+    visual_model = {
+        'active_stage': '__final__',
+        'ctes': [
+            {
+                'id': 'c_org',
+                'name': 'org_tree',
+                'columns': 'emp_id, emp_name, dept, salary, depth',
+                'recursive': True,
+                'union_mode': 'UNION ALL',
+                'materialized': '',
+                'anchor': {
+                    'tables': [
+                        {
+                            'id': 'e0',
+                            'name': 'employees',
+                            'alias': 'e0',
+                            'columns': [
+                                {'name': 'id', 'type': 'INTEGER'},
+                                {'name': 'name', 'type': 'TEXT'},
+                                {'name': 'manager_id', 'type': 'INTEGER'},
+                                {'name': 'dept', 'type': 'TEXT'},
+                                {'name': 'salary', 'type': 'INTEGER'},
+                            ],
+                        }
+                    ],
+                    'joins': [],
+                    'projections': [
+                        {'expr': 'e0.id', 'alias': 'emp_id'},
+                        {'expr': 'e0.name', 'alias': 'emp_name'},
+                        {'expr': 'e0.dept', 'alias': 'dept'},
+                        {'expr': 'e0.salary', 'alias': 'salary'},
+                        {'expr': '0', 'alias': 'depth'},
+                    ],
+                    'where': ['e0.manager_id IS NULL'],
+                },
+                'recursive_branch': {
+                    'tables': [
+                        {
+                            'id': 'r1',
+                            'resource_kind': 'cte-self',
+                            'name': 'org_tree',
+                            'alias': 'r1',
+                        },
+                        {
+                            'id': 'e1',
+                            'name': 'employees',
+                            'alias': 'e1',
+                        },
+                    ],
+                    'joins': [
+                        {
+                            'join_type': 'INNER',
+                            'left_table': 'r1',
+                            'left_column': 'emp_id',
+                            'right_table': 'e1',
+                            'right_column': 'manager_id',
+                        }
+                    ],
+                    'projections': [
+                        {'expr': 'e1.id'},
+                        {'expr': 'e1.name'},
+                        {'expr': 'e1.dept'},
+                        {'expr': 'e1.salary'},
+                        {'expr': 'r1.depth + 1'},
+                    ],
+                    'where': ['r1.depth < 5'],
+                },
+            }
+        ],
+        'tables': [
+            {
+                'id': 'c1',
+                'resource_kind': 'cte',
+                'name': 'org_tree',
+                'alias': 'c1',
+            }
+        ],
+        'joins': [],
+        'projections': [
+            {'expr': 'c1.emp_name', 'alias': 'emp_name'},
+            {'expr': 'c1.dept', 'alias': 'dept'},
+            {'expr': 'c1.depth', 'alias': 'depth'},
+            {'expr': 'c1.salary', 'alias': 'salary'},
+            {
+                'expr': 'c1.salary',
+                'alias': 'dept_rank',
+                'aggregate': 'WINDOW',
+                'window': {
+                    'function': 'ROW_NUMBER',
+                    'window_ref': 'w_dept',
+                },
+            },
+            {
+                'expr': 'c1.salary',
+                'alias': 'running_payroll',
+                'aggregate': 'WINDOW',
+                'window': {
+                    'function': 'SUM',
+                    'argument': 'c1.salary',
+                    'partition_by': ['c1.dept'],
+                    'order_by': ['c1.salary DESC'],
+                    'frame_mode': 'ROWS',
+                    'frame_start': 'UNBOUNDED PRECEDING',
+                    'frame_end': 'CURRENT ROW',
+                },
+            },
+            {
+                'expr': 'c1.salary',
+                'alias': 'prev_salary',
+                'aggregate': 'WINDOW',
+                'window': {
+                    'function': 'LAG',
+                    'argument': 'c1.salary',
+                    'offset': 1,
+                    'default_expr': '0',
+                    'window_ref': 'w_dept',
+                },
+            },
+        ],
+        'windows': [
+            {
+                'name': 'w_dept',
+                'partition_by': ['c1.dept'],
+                'order_by': ['c1.salary DESC'],
+            }
+        ],
+        'order_by': ['c1.dept ASC', 'dept_rank ASC'],
+    }
+
+    # Check Recursive Step canvas scene renders CTE_SELF role
+    rec_scene, _, _ = build_visual_query_ddn_scene(
+        {**visual_model, 'active_stage': 'cte:c_org:recursive'}, {}, 'sqlite'
+    )
+    assert any(n['role'] == 'CTE_SELF' for n in rec_scene['nodes'])
+
+    # Check Final SELECT canvas scene renders CTE + WINDOW cards and compiles executable SQL
+    final_scene, sql_out, warnings = build_visual_query_ddn_scene(visual_model, {}, 'sqlite')
+    assert warnings == []
+    assert any(n['role'] == 'CTE' for n in final_scene['nodes'])
+    assert any(n['role'] == 'WINDOW' for n in final_scene['nodes'])
+    assert 'WITH RECURSIVE' in sql_out
+    assert 'ROW_NUMBER() OVER "w_dept"' in sql_out
+    assert 'ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW' in sql_out
+    assert 'LAG(c1.salary, 1, 0) OVER "w_dept"' in sql_out
+    assert 'WINDOW "w_dept" AS (PARTITION BY c1.dept ORDER BY c1.salary DESC)' in sql_out
+
+    # Execute compiled SQL live on SQLite
+    with sqlite3.connect(':memory:') as conn:
+        conn.executescript(
+            """
+            CREATE TABLE employees (id INTEGER PRIMARY KEY, name TEXT, manager_id INTEGER, dept TEXT, salary INTEGER);
+            INSERT INTO employees VALUES
+              (1, 'Ada', NULL, 'Core', 200),
+              (2, 'Grace', 1, 'Core', 160),
+              (3, 'Linus', 2, 'Core', 140),
+              (4, 'Barbara', 1, 'Data', 180);
+            """
+        )
+        rows = conn.execute(sql_out).fetchall()
+    assert rows == [
+        ('Ada', 'Core', 0, 200, 1, 200, 0),
+        ('Grace', 'Core', 1, 160, 2, 360, 200),
+        ('Linus', 'Core', 2, 140, 3, 500, 160),
+        ('Barbara', 'Data', 1, 180, 1, 180, 0),
+    ]
+
+    # Verify SqlSurfaceHostService preserves exact CTE + Window model across visual_builder_from_sql round-trips
+    host = SqlSurfaceHostService(
+        snippets_store=SqlSnippetsStore(tmp_path / 'snips.db'),
+        quick_query_store=QuickQueryStore(tmp_path / 'qq.db'),
+        layout_store=SurfaceLayoutStore(tmp_path / 'lay.db'),
+    )
+    workspace = FakeSqlWorkspaceService()
+    server = SimpleNamespace(id=1, user_id=1)
+    base = {'surface_id': 'cte-win-rt', 'engine_id': 'sqlite', 'language_profile': 'sqlite-sql'}
+    saved = host.dispatch(workspace, server, {**base, 'sub_action': 'visual_builder_scene', 'model': visual_model})
+    resynced = host.dispatch(workspace, server, {**base, 'sub_action': 'visual_builder_from_sql', 'sql_text': saved['sql_text']})
+    assert resynced['fidelity'] == 'exact'
+    assert len(resynced['model']['ctes']) == 1
+    assert resynced['model']['ctes'][0]['recursive'] is True
+    assert len(resynced['model']['windows']) == 1
+

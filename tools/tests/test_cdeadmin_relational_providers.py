@@ -556,7 +556,12 @@ class RelationalInventoryTests(unittest.TestCase):
         for key, value in expected_database.items():
             self.assertEqual(value, databases[0]['native'][key])
         self.assertEqual(
-            {**expected_database, 'database_options_state': 'unavailable'},
+            {
+                **expected_database,
+                'database_options_state': 'unavailable',
+                # Per-object grants are part of the editable definition.
+                'privileges': [],
+            },
             databases[0]['native']['definition']
         )
         self.assertNotIn('read_only', databases[0]['native'])
@@ -679,7 +684,10 @@ class RelationalInventoryTests(unittest.TestCase):
         }
         for key, value in expected_database.items():
             self.assertEqual(value, database['native'][key])
-        self.assertEqual(expected_database, database['native']['definition'])
+        self.assertEqual(
+            {**expected_database, 'privileges': []},
+            database['native']['definition'],
+        )
         server = next(
             item for item in resources if item['resource_kind'] == 'server'
         )

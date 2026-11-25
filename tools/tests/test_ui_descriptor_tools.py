@@ -69,9 +69,9 @@ def test_arguments_merge_over_the_scope_base_and_labels_format():
         'firebird', 'database', 'post_lifecycle', state={'engine_id': 'firebird'},
         base={'resource_id': 't1', 'database_target_id': 't1'})}
     privilege = actions['database.firebird.security.privilege']
-    # collection tasks keep the database route only
-    assert privilege['arguments'] == {'database_target_id': 't1', 'tab': 'administration',
-                                      'resource_kind': 'privilege', 'operation_id': 'grant'}
+    # collection tasks keep the database route only and open the security manager surface
+    assert privilege['arguments'] == {'database_target_id': 't1', 'surface': 'security.manager',
+                                      'scope': 'database', 'initial_kind': 'role'}
     endpoint = {item['command_id']: item for item in declared_tool_actions(
         'firebird', 'endpoint', 'after_verify', state={'engine_id': 'firebird', 'display': 'Firebird',
                                                        'verified': True, 'owner': True, 'route_kind': 'network'})}

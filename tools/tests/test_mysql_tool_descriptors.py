@@ -63,8 +63,8 @@ def test_database_tools_keep_exact_selected_scope_and_viewer_collector_editor_se
 
 def test_tools_are_openers_with_unique_ids_and_do_not_duplicate_native_operation_descriptors():
     rows = DOCUMENT['tools']; ids = [row['command_id'] for row in rows]
-    assert len(rows) == len(set(ids)) == 37
-    # Six shared design/BI openers augment the 31 engine-specific tools.
+    assert len(rows) == len(set(ids)) == 39
+    # Six shared design/BI openers augment the 33 engine-specific tools (including the two security.manager openers).
     assert {row['command_id'] for row in rows if '{engine_id}' in row['command_id']} == {
         'endpoint.{engine_id}.bi_questions',
         'database.{engine_id}.design_erd',

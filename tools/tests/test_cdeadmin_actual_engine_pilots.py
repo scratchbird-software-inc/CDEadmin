@@ -242,6 +242,9 @@ class Client:
         self.closed = False
         self.cancelled = []
 
+    def _uses_server_scope(self, _request):
+        return False
+
     def runtime_identity(self):
         return {
             'engine_id': self.profile.engine_id,

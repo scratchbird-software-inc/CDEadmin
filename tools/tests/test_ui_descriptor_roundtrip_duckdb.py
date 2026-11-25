@@ -72,14 +72,87 @@ def test_table_sequence_type_and_view_forms(live):
     run(client, route, 'table', 'alter', alter, target=table)
     assert 'amount' in [row[0] for row in connection.execute("select column_name from information_schema.columns where table_name='orders'").fetchall()]
 
+    seq_form = resolved_form('duckdb', 'sequence')
     run(client, route, 'sequence', 'create',
-        backend_draft(resolved_form('duckdb', 'sequence'), {'name': 'order_seq', 'parent': 'main', 'start': 10, 'increment': 5, 'cycle': False}))
+        backend_draft(seq_form, {
+            'name': 'order_seq', 'parent': 'main', 'start': 10, 'increment': 5,
+            'no_minimum': True, 'maximum': 1000, 'cycle': False, 'comment': 'Order allocation sequence',
+        }))
     assert connection.execute("select nextval('order_seq')").fetchone()[0] == 10
+    seq_res = resource(connection, 'sequence', 'order_seq')
+    seq_base = record_draft(seq_form, {**seq_res['native'], 'name': seq_res['display_name']})
+    assert seq_base['last_value'] == 10 and seq_base['comment'] == 'Order allocation sequence'
+    # Comment-only alter preserves current sequence position
+    seq_comment_edit = {**seq_base, 'comment': 'Updated order sequence note'}
+    run(client, route, 'sequence', 'alter',
+        backend_draft(seq_form, seq_comment_edit, mode='alter', baseline=seq_base), target=seq_res)
+    assert connection.execute("select nextval('order_seq')").fetchone()[0] == 15
+    # Parameter replacement alter (with reset_state_confirmed=True) replaces sequence and preserves comment
+    seq_res2 = resource(connection, 'sequence', 'order_seq')
+    seq_base2 = record_draft(seq_form, {**seq_res2['native'], 'name': seq_res2['display_name']})
+    seq_param_edit = {**seq_base2, 'start': 100, 'increment': 10, 'reset_state_confirmed': True}
+    run(client, route, 'sequence', 'alter',
+        backend_draft(seq_form, seq_param_edit, mode='alter', baseline=seq_base2), target=seq_res2)
+    assert connection.execute("select nextval('order_seq')").fetchone()[0] == 100
+    assert connection.execute("select comment from duckdb_sequences() where sequence_name='order_seq'").fetchone()[0] == 'Updated order sequence note'
 
     type_form = resolved_form('duckdb', 'type')
     run(client, route, 'type', 'create',
-        backend_draft(type_form, {'name': 'mood', 'type_kind': 'ENUM', 'enum_values': [{'value': 'happy'}, {'value': 'sad'}]}))
+        backend_draft(type_form, {'name': 'mood', 'type_kind': 'ENUM', 'enum_values': [{'value': 'happy'}, {'value': 'sad'}], 'comment': 'Sentiment enum'}))
     assert connection.execute("select 'sad'::mood").fetchone()[0] == 'sad'
+    mood_res = resource(connection, 'type', 'mood')
+    mood_rec = record_draft(type_form, {**mood_res['native'], 'name': mood_res['display_name']})
+    assert mood_rec['type_kind'] == 'ENUM'
+    assert [r['value'] for r in mood_rec['enum_values']] == ['happy', 'sad']
+    assert mood_rec['comment'] == 'Sentiment enum'
+
+    run(client, route, 'type', 'create',
+        backend_draft(type_form, {
+            'name': 'geo_addr', 'parent': 'main', 'type_kind': 'STRUCT',
+            'fields': [{'name': 'street', 'type': 'VARCHAR'}, {'name': 'country_iso', 'type': 'VARCHAR'}],
+            'comment': 'Structured shipping address',
+        }))
+    addr_res = resource(connection, 'type', 'geo_addr')
+    addr_rec = record_draft(type_form, {**addr_res['native'], 'name': addr_res['display_name']})
+    assert addr_rec['type_kind'] == 'STRUCT'
+    assert [(f['name'], f['type']) for f in addr_rec['fields']] == [('street', 'VARCHAR'), ('country_iso', 'VARCHAR')]
+
+    run(client, route, 'type', 'create',
+        backend_draft(type_form, {
+            'name': 'pay_instrument', 'parent': 'main', 'type_kind': 'UNION',
+            'fields': [{'name': 'wire_id', 'type': 'BIGINT'}, {'name': 'token', 'type': 'VARCHAR'}],
+        }))
+    union_res = resource(connection, 'type', 'pay_instrument')
+    union_rec = record_draft(type_form, {**union_res['native'], 'name': union_res['display_name']})
+    assert union_rec['type_kind'] == 'UNION'
+    assert [(f['name'], f['type']) for f in union_rec['fields']] == [('wire_id', 'BIGINT'), ('token', 'VARCHAR')]
+
+    run(client, route, 'type', 'create',
+        backend_draft(type_form, {
+            'name': 'kpi_vec4', 'parent': 'main', 'type_kind': 'ARRAY',
+            'element_type': 'DOUBLE', 'array_length': 4, 'comment': 'Fixed 4-element KPI vector',
+        }))
+    vec_res = resource(connection, 'type', 'kpi_vec4')
+    vec_rec = record_draft(type_form, {**vec_res['native'], 'name': vec_res['display_name']})
+    assert vec_rec['type_kind'] == 'ARRAY' and vec_rec['element_type'] == 'DOUBLE' and vec_rec['array_length'] == 4
+
+    run(client, route, 'type', 'create',
+        backend_draft(type_form, {
+            'name': 'metric_map', 'parent': 'main', 'type_kind': 'MAP',
+            'key_type': 'VARCHAR', 'value_type': 'INTEGER[]',
+        }))
+    map_res = resource(connection, 'type', 'metric_map')
+    map_rec = record_draft(type_form, {**map_res['native'], 'name': map_res['display_name']})
+    assert map_rec['type_kind'] == 'MAP' and map_rec['key_type'] == 'VARCHAR' and map_rec['value_type'] == 'INTEGER[]'
+
+    # CREATE OR REPLACE TYPE over existing mood ENUM
+    replace_sql = run(client, route, 'type', 'create',
+        backend_draft(type_form, {
+            'name': 'mood', 'type_kind': 'ENUM', 'or_replace': True,
+            'enum_values': [{'value': 'happy'}, {'value': 'sad'}, {'value': 'curious'}],
+        }))
+    assert replace_sql.startswith('CREATE OR REPLACE TYPE')
+    assert connection.execute("select 'curious'::mood").fetchone()[0] == 'curious'
 
     run(client, route, 'view', 'create',
         backend_draft(resolved_form('duckdb', 'view'), {'name': 'owner_names', 'parent': 'main', 'query': 'SELECT label FROM owner'}))

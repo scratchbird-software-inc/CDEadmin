@@ -23,6 +23,7 @@ JS_ROOT = REPO_ROOT / 'web' / 'pgadmin' / 'static' / 'js'
 DESCRIPTORS_ROOT = REPO_ROOT / 'web' / 'pgadmin' / 'cdeadmin' / 'ui_descriptors'
 FORM_REFS_PATH = JS_ROOT / 'cdeadmin_ui' / 'navigation' / 'formReferences.json'
 ICON_REGISTRY_PATH = JS_ROOT / 'cdeadmin_ui' / 'icons' / 'registry.js'
+TIB_CATALOG_PATH = JS_ROOT / 'cdeadmin_ui' / 'icons' / 'tibThreeToneCatalog.jsx'
 UI_CATALOGS_PATH = JS_ROOT / 'cdeadmin_ui' / 'i18n' / 'ui_catalogs.json'
 VALIDATE_SCRIPT = REPO_ROOT / 'tools' / 'validate_ui_descriptors.py'
 LINT_MAXIMUMS = REPO_ROOT / 'tools' / 'ui_lint_maximums.json'
@@ -78,6 +79,19 @@ def _parse_registered_icon_keys() -> tuple[set[str], list[str]]:
         r"(?:componentDefinition|definition)\(\s*'([a-z0-9._-]+)'", src
     ):
         keys.add(explicit)
+
+    # registry.js registers every TiB three-tone icon from the catalog at
+    # runtime as ``tib.<slug>``; the slugs are the TIB_ICON_SPECS keys.
+    if TIB_CATALOG_PATH.exists():
+        tib_src = TIB_CATALOG_PATH.read_text(encoding='utf-8')
+        specs = re.search(
+            r'const\s+TIB_ICON_SPECS\s*=\s*Object\.freeze\(\{(.*?)\}\);\s*$',
+            tib_src,
+            re.S | re.M,
+        )
+        body = specs.group(1) if specs else ''
+        for slug in re.findall(r"(?:^|[,{])\s*'([a-z0-9_]+)'\s*:\s*\{'label'", body):
+            keys.add(f'tib.{slug}')
 
     tax_block = re.search(
         r'const\s+TAXONOMY_FALLBACKS\s*=\s*Object\.freeze\(\[(.*?)\]\);',

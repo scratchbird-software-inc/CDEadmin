@@ -143,7 +143,9 @@ class WiringTests(unittest.TestCase):
                       text)
         # Owner decision 2026-11-11 (option 1): nodes flag the lifecycle
         # operations their provider edits with a form of its own.
-        self.assertEqual(3, text.count("'cde_native_editor': _native_editor_operations("))
+        # The fourth is the server-scope resource-group node, which flags
+        # its own natively edited lifecycle operations like the others.
+        self.assertEqual(4, text.count("'cde_native_editor': _native_editor_operations("))
         # The database node lists the database-scoped kinds created natively.
         self.assertIn("'cde_native_editor_kinds': list(native_create_kinds)", text)
         self.assertIn("native_create_kinds=_native_create_kinds(visual_admin)", text)
