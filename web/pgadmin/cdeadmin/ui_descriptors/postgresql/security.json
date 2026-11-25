@@ -1,0 +1,47 @@
+{
+  "schema": "cdeadmin.ui-security.v1",
+  "engine": "postgresql",
+  "notes": "One principal object: a role, with login as an attribute of its form. Its system attributes (SUPERUSER, CREATEDB, ...) are fields of the role form, not grants, so no system_privileges source is declared. Membership options inherit and set are provider version-gated.",
+  "principals": [
+    {
+      "kind": "role",
+      "label": "Role",
+      "plural_label": "Roles",
+      "scope": "server",
+      "identity": [
+        "rolname"
+      ]
+    }
+  ],
+  "membership": {
+    "kind": "role",
+    "admin_option": true,
+    "inherit_option": true,
+    "set_option": true
+  },
+  "grants": {
+    "grant_kind": "privilege",
+    "object_privileges": "privileges",
+    "grantable_kinds": "grantable_kinds",
+    "column_privileges": {
+      "table": [
+        "SELECT",
+        "INSERT",
+        "UPDATE",
+        "REFERENCES"
+      ],
+      "view": [
+        "SELECT",
+        "INSERT",
+        "UPDATE",
+        "REFERENCES"
+      ]
+    },
+    "grant_option": true,
+    "default_privileges": "default-privileges"
+  },
+  "requires": {
+    "inspect": "verified",
+    "mutate": "verified"
+  }
+}

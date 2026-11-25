@@ -1,0 +1,6 @@
+{
+  "schema": "cdeadmin.ui-security.v1",
+  "engine": "sqlite",
+  "principals": [],
+  "reason": "SQLite is an embedded engine with no users, roles or GRANT/REVOKE, so the Security Manager is not offered."
+}

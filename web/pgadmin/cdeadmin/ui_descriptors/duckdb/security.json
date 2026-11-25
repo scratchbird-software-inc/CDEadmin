@@ -1,0 +1,6 @@
+{
+  "schema": "cdeadmin.ui-security.v1",
+  "engine": "duckdb",
+  "principals": [],
+  "reason": "DuckDB is an embedded engine with no users, roles or GRANT/REVOKE, so the Security Manager is not offered."
+}

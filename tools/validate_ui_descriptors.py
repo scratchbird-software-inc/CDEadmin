@@ -46,7 +46,8 @@ FAMILIES = ("table", "view", "index", "routine", "trigger", "sequence", "type",
             "role", "database", "server")
 FORBIDDEN_LABEL = re.compile(r"\bexact native\b|\bnative .* reference\b", re.I)
 ENGINE_FILES = {"capabilities.json", "operations.json", "navigator.json",
-                "omitted_families.json", "options.json", "tools.json", "README.md"}
+                "omitted_families.json", "options.json", "tools.json", "security.json",
+                "README.md"}
 IGNORED_FOLDERS = {"forms", "__pycache__"}
 
 
@@ -143,6 +144,83 @@ def walk_fields(fields, prefix=""):
 # --------------------------------------------------------------------------
 # Descriptor validation
 # --------------------------------------------------------------------------
+def check_security_descriptor(engine, engine_dir, caps, schemas, errors):
+    """Validate security.json and resolve every reference it makes (Decision 21).
+
+    The file only names kinds, form fields and option keys that other
+    descriptors own, so each name must resolve in this engine's own folder.
+    """
+    rel = f"{engine}/security.json"
+    doc = load(engine_dir / "security.json")
+    schemas.check(doc, schemas.schemas["security.schema.json"], schemas.schemas["security.schema.json"], rel, errors)
+    if doc.get("engine") != engine:
+        errors.append(f"{rel}: engine {doc.get('engine')!r} does not match its folder")
+    kinds = {k["resource_kind"]: k for k in caps.get("kinds", [])}
+    principals = doc.get("principals", [])
+    if not principals:
+        if not doc.get("reason"):
+            errors.append(f"{rel}: an empty principals list needs a reason")
+        for extra in ("membership", "grants"):
+            if extra in doc:
+                errors.append(f"{rel}: {extra} is declared but the engine has no principals")
+        return
+    options = load(engine_dir / "options.json") if (engine_dir / "options.json").exists() else {}
+    dialect = options.get("dialect", {})
+    seen = set()
+    for principal in principals:
+        kind = principal.get("kind")
+        if kind in seen:
+            errors.append(f"{rel}: principal kind {kind!r} is listed twice")
+        seen.add(kind)
+        entry = kinds.get(kind)
+        if entry is None:
+            errors.append(f"{rel}: principal kind {kind!r} is not in capabilities.json")
+            continue
+        if entry.get("family") != "role":
+            errors.append(f"{rel}: principal kind {kind!r} belongs to family {entry.get('family')!r}, not 'role'")
+        form_rel = entry.get("form")
+        if not form_rel or not (engine_dir / form_rel).exists():
+            errors.append(f"{rel}: principal kind {kind!r} has no editor form")
+            continue
+        fields = dict(walk_fields(load(engine_dir / form_rel).get("fields")))
+        for fid in principal.get("identity", []):
+            if fid not in fields:
+                errors.append(f"{rel}: {kind} identity field {fid!r} is not in {form_rel}")
+        variant = principal.get("variant")
+        if variant:
+            field = fields.get(variant["field_id"])
+            values = {o.get("value") for o in (field or {}).get("options", [])}
+            if field is None:
+                errors.append(f"{rel}: {kind} variant field {variant['field_id']!r} is not in {form_rel}")
+            elif variant["value"] not in values:
+                errors.append(f"{rel}: {kind} variant value {variant['value']!r} is not an option of {variant['field_id']}")
+    membership = doc.get("membership")
+    if membership and membership["kind"] not in seen:
+        errors.append(f"{rel}: membership kind {membership['kind']!r} is not a declared principal")
+    grants = doc.get("grants") or {}
+    for key in ("grant_kind", "default_privileges"):
+        if key in grants and grants[key] not in kinds:
+            errors.append(f"{rel}: grants.{key} {grants[key]!r} is not in capabilities.json")
+    grant_kind = kinds.get(grants.get("grant_kind"))
+    if grant_kind is not None:
+        ops = {o.get("operation_id") for o in grant_kind.get("operations", [])}
+        for needed in ("grant", "revoke"):
+            if needed not in ops:
+                errors.append(f"{rel}: grant kind {grants['grant_kind']!r} declares no {needed} operation")
+    for key in ("system_privileges", "object_privileges", "grantable_kinds"):
+        if key in grants and grants[key] not in dialect:
+            errors.append(f"{rel}: grants.{key} reads dialect.{grants[key]} which options.json does not define")
+    object_privileges = dialect.get(grants.get("object_privileges"), {})
+    for object_kind, privileges in (grants.get("column_privileges") or {}).items():
+        allowed = set(object_privileges.get(object_kind, []))
+        if object_kind not in object_privileges:
+            errors.append(f"{rel}: column_privileges names object kind {object_kind!r} that object_privileges does not list")
+        for privilege in privileges:
+            if privilege not in allowed:
+                errors.append(f"{rel}: column_privileges {object_kind}.{privilege} is not a grantable privilege")
+
+
+
 def validate_descriptors(strict_pending: bool) -> tuple[list[str], dict]:
     errors: list[str] = []
     schemas = SchemaSet(DESCRIPTORS / "schema")
@@ -235,6 +313,8 @@ def validate_descriptors(strict_pending: bool) -> tuple[list[str], dict]:
                 if tool["command_id"] in seen_commands:
                     errors.append(f"{engine}/tools.json: duplicate command_id {tool['command_id']!r}")
                 seen_commands.add(tool["command_id"])
+        if (engine_dir / "security.json").exists():
+            check_security_descriptor(engine, engine_dir, caps, schemas, errors)
         nav = load(engine_dir / "navigator.json")
         schemas.check(nav, schemas.schemas["navigator.schema.json"], schemas.schemas["navigator.schema.json"],
                       f"{engine}/navigator.json", errors)

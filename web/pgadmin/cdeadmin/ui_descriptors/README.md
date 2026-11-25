@@ -29,6 +29,7 @@ ui_descriptors/
                          catalog lists resolved from the endpoint's resources by kind
     tools.json           tool, dashboard and registration openers for the Object Explorer menu
                          (what context_menu.py used to add with engine_id branches)
+    security.json        principals and grants the Security Manager tool offers (Decision 21)
     forms/<family>.form.json   the fields this engine shows on each canonical tab
 ```
 
@@ -62,6 +63,38 @@ the remaining `engine_id` branches in `context_menu.py`
 (`engine_branches_in_context_menu`, maximum in `tools/ui_lint_maximums.json`);
 lower the maximum as an engine's branches move into its `tools.json`. The
 MySQL and MariaDB branches are the MySQL stream's to migrate.
+
+### security.json (Decision 21: principals and grants)
+
+Engines name and run the same security concept differently: PostgreSQL has one
+object (a role, with login as an attribute); MySQL has `user@host` accounts and
+roles; Firebird has server-wide users and per-database roles; SQLite and DuckDB
+have none. `security.json` declares only what no other file holds, and
+references everything else by id so nothing is written twice:
+
+- `principals[]`: a `kind` from `capabilities.json` whose family is `role`
+  (its form is the editor), the user-facing `label` / `plural_label`, the
+  `scope` (`server` or `database`), the form fields that form the `identity`
+  (MySQL: `name`, `host`), and a `variant` when one form serves several kinds
+  (Firebird, MySQL and MariaDB select `user`, `role` or `grant` in one form).
+- `membership`: which principal kind can be a member of which, and the
+  options the engine has (`admin_option`, `default_role`, `inherit_option`,
+  `set_option`). An option the engine lacks is left out and never shown.
+- `grants`: the kind carrying `grant` / `revoke`, and the `options.json`
+  dialect keys that list system privileges, object privileges per object kind
+  and grantable kinds. `column_privileges` names the privileges that accept a
+  column list (Firebird: `UPDATE`, `REFERENCES`); `grant_option`, `granted_by`
+  and `default_privileges` appear only on engines that have them.
+- An engine with no principals declares `"principals": []` and a `reason`;
+  the tool is not offered.
+
+`tools/validate_ui_descriptors.py` resolves every reference against the same
+engine's folder: unknown kinds, kinds outside the `role` family, identity
+fields or variant values the form lacks, option keys `options.json` does not
+define, column privileges the engine cannot grant, and a grant kind without
+`grant` and `revoke` operations are all errors. The resolved bundle exposes the
+file as `security` (an empty object when an engine has not declared one).
+Tests are in `tools/tests/test_ui_descriptor_security.py`.
 
 ## Regenerating a first draft
 

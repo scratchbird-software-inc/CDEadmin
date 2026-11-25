@@ -1,0 +1,60 @@
+{
+  "schema": "cdeadmin.ui-security.v1",
+  "engine": "firebird",
+  "notes": "Users are server-wide (security database); roles live in each database. One role form serves user, role and grant through its variant select. Column grants accept only UPDATE and REFERENCES. Roster columns are added when the provider resources' attributes are verified.",
+  "principals": [
+    {
+      "kind": "user",
+      "label": "User",
+      "plural_label": "Users",
+      "scope": "server",
+      "identity": [
+        "name"
+      ],
+      "variant": {
+        "field_id": "variant",
+        "value": "user"
+      }
+    },
+    {
+      "kind": "role",
+      "label": "Role",
+      "plural_label": "Roles",
+      "scope": "database",
+      "identity": [
+        "name"
+      ],
+      "variant": {
+        "field_id": "variant",
+        "value": "role"
+      }
+    }
+  ],
+  "membership": {
+    "kind": "role",
+    "admin_option": true,
+    "default_role": true
+  },
+  "grants": {
+    "grant_kind": "privilege",
+    "system_privileges": "system_privileges",
+    "object_privileges": "privileges",
+    "grantable_kinds": "grantable_kinds",
+    "column_privileges": {
+      "table": [
+        "UPDATE",
+        "REFERENCES"
+      ],
+      "view": [
+        "UPDATE",
+        "REFERENCES"
+      ]
+    },
+    "grant_option": true,
+    "granted_by": true
+  },
+  "requires": {
+    "inspect": "verified",
+    "mutate": "verified"
+  }
+}

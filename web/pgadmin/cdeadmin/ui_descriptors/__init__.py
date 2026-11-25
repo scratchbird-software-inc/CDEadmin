@@ -126,6 +126,8 @@ class UIDescriptorService:
                 'omitted_families': (_load_json(folder / 'omitted_families.json') or {}).get('omitted', []),
                 'options': _load_json(folder / 'options.json') or {'dialect': {}, 'catalog': {}},
                 'tools': (_load_json(folder / 'tools.json') or {}).get('tools', []),
+                # Decision 21: principals and grants the Security Manager offers.
+                'security': _load_json(folder / 'security.json') or {},
                 'forms': {},
             }
             for path in sorted((folder / 'forms').glob('*.form.json')):

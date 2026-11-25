@@ -1757,35 +1757,41 @@ Once 1, 2 and 3 are decided, phase 0 can start immediately; nothing in phases 0 
        names the source; it does not list privileges.
 
     Sketch, with values taken from the current code (checked against the
-    existing ``capabilities.json`` for each engine)::
+    existing ``capabilities.json`` for each engine; the schema is
+    ``ui_descriptors/schema/security.schema.json``)::
 
        {
-         "schema": "cdeadmin.ui.security.v1",
+         "schema": "cdeadmin.ui-security.v1",
          "engine": "firebird",
          "principals": [
            {"kind": "user", "label": "User", "plural_label": "Users",
-            "scope": "server", "form": "role", "variant": "user",
-            "roster": {"columns": ["name", "plugin", "active"],
-                       "search": ["name", "plugin"]}},
+            "scope": "server", "identity": ["name"],
+            "variant": {"field_id": "variant", "value": "user"}},
            {"kind": "role", "label": "Role", "plural_label": "Roles",
-            "scope": "database", "form": "role", "variant": "role",
-            "roster": {"columns": ["name", "owner"], "search": ["name"]}}
+            "scope": "database", "identity": ["name"],
+            "variant": {"field_id": "variant", "value": "role"}}
          ],
          "membership": {"kind": "role", "admin_option": true,
                         "default_role": true},
          "grants": {
            "grant_kind": "privilege",
-           "system_privileges": {"option_source": "system_privileges"},
-           "object_kinds": [
-             {"kind": "table", "option_source": "table_privileges",
-              "column_level": true, "grant_option": true},
-             {"kind": "procedure", "option_source": "execute_privileges",
-              "grant_option": true}
-           ],
-           "granted_by": true
+           "system_privileges": "system_privileges",
+           "object_privileges": "privileges",
+           "grantable_kinds": "grantable_kinds",
+           "column_privileges": {"table": ["UPDATE", "REFERENCES"],
+                                 "view": ["UPDATE", "REFERENCES"]},
+           "grant_option": true, "granted_by": true
          },
-         "requires": {"inspect": "verified", "mutate": "owner"}
+         "requires": {"inspect": "verified", "mutate": "verified"}
        }
+
+    The grant vocabulary is referenced, not listed: ``system_privileges``,
+    ``privileges`` (object kind to privileges) and ``grantable_kinds`` are
+    the existing ``options.json`` dialect keys. Only column-level privileges
+    are declared, because they differ per engine and no other file holds
+    them. Roster columns are added once the providers' resource attributes
+    are verified; they are not guessed. Implemented 2026-11-25 for Firebird,
+    MySQL and PostgreSQL, with ``"principals": []`` for SQLite and DuckDB.
 
     Differences the first slice must express without code:
 

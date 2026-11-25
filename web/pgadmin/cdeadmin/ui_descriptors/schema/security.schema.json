@@ -1,0 +1,220 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cdeadmin.ui-security.v1",
+  "title": "Principals and grants an engine exposes to the Security Manager tool",
+  "description": "Declares only what no other descriptor holds: which kinds are principals, where they live, how the roster looks, and the shape of the grant model. Every kind, form field and option source is referenced by id and resolved against the engine's capabilities.json, forms/ and options.json by the validator; nothing is restated. An engine with no principals declares an empty list and a reason, and the tool is not offered (design Decision 5 and Decision 21).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "engine",
+    "principals"
+  ],
+  "properties": {
+    "schema": {
+      "const": "cdeadmin.ui-security.v1"
+    },
+    "engine": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string",
+      "description": "required when principals is empty: why the engine has no principals"
+    },
+    "principals": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/principal"
+      }
+    },
+    "membership": {
+      "$ref": "#/$defs/membership"
+    },
+    "grants": {
+      "$ref": "#/$defs/grants"
+    },
+    "requires": {
+      "$ref": "#/$defs/requires"
+    }
+  },
+  "$defs": {
+    "principal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "label",
+        "plural_label",
+        "scope"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "resource kind in capabilities.json whose family is 'role'; its form is the editor"
+        },
+        "label": {
+          "type": "string",
+          "description": "singular name shown to the user (Role, User, Login)"
+        },
+        "plural_label": {
+          "type": "string"
+        },
+        "scope": {
+          "enum": [
+            "server",
+            "database"
+          ],
+          "description": "where the principal lives: server-wide or inside one database"
+        },
+        "identity": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          },
+          "description": "form field ids that together identify the principal, in display order (MySQL: name, host). Default: the kind form's name field"
+        },
+        "variant": {
+          "$ref": "#/$defs/variant"
+        },
+        "roster": {
+          "$ref": "#/$defs/roster"
+        }
+      }
+    },
+    "variant": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "field_id",
+        "value"
+      ],
+      "description": "selects the variant of a form shared by several kinds (Firebird, MySQL and MariaDB use one role form for user, role and grant)",
+      "properties": {
+        "field_id": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      }
+    },
+    "roster": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "columns": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          },
+          "description": "attributes of the listed resource shown as columns; the first is the principal's name"
+        },
+        "search": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "attributes the filter box matches"
+        }
+      }
+    },
+    "membership": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind"
+      ],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "description": "principal kind a principal can be a member of"
+        },
+        "admin_option": {
+          "type": "boolean"
+        },
+        "default_role": {
+          "type": "boolean",
+          "description": "a membership can be marked as the member's default role"
+        },
+        "inherit_option": {
+          "type": "boolean"
+        },
+        "set_option": {
+          "type": "boolean"
+        }
+      }
+    },
+    "grants": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "grant_kind"
+      ],
+      "properties": {
+        "grant_kind": {
+          "type": "string",
+          "description": "kind in capabilities.json that carries the grant and revoke operations"
+        },
+        "system_privileges": {
+          "type": "string",
+          "description": "options.json dialect key listing the system or global privileges; absent when the engine has none as grants"
+        },
+        "object_privileges": {
+          "type": "string",
+          "description": "options.json dialect key: a map from object kind to the privileges grantable on it"
+        },
+        "grantable_kinds": {
+          "type": "string",
+          "description": "options.json dialect key: object kinds that can be granted on"
+        },
+        "column_privileges": {
+          "type": "object",
+          "description": "object kind to the privileges that accept a column list; absent when the engine grants only on whole objects",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "grant_option": {
+          "type": "boolean",
+          "description": "a grant can carry the option to grant it onward"
+        },
+        "granted_by": {
+          "type": "boolean",
+          "description": "a grant can name a different grantor (Firebird GRANTED BY)"
+        },
+        "default_privileges": {
+          "type": "string",
+          "description": "kind in capabilities.json holding default privileges, when the engine has them"
+        }
+      }
+    },
+    "requires": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "inspect": {
+          "enum": [
+            "verified",
+            "owner",
+            "available"
+          ]
+        },
+        "mutate": {
+          "enum": [
+            "verified",
+            "owner",
+            "available"
+          ]
+        }
+      }
+    }
+  }
+}
