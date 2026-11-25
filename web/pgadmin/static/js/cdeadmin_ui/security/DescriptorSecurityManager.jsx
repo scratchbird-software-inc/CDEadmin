@@ -96,17 +96,25 @@ export default function DescriptorSecurityManager({
 
   const security = state.bundle?.security;
   const principals = useMemo(
-    () => (security?.principals || []).filter((principal) => principal.scope === scope),
+    () => (security?.principals || []).filter((item) => item.scope === scope),
     [security, scope]);
-  const principal = principals.find((item) => item.kind === activeKind) || principals[0];
+  // A kind merged into another has no roster of its own; it only adds a create action.
+  const rostered = useMemo(() => principals.filter((item) => !item.roster?.merged_into), [principals]);
+  const principal = rostered.find((item) => item.kind === activeKind) || rostered[0];
   const kind = principal?.kind;
+  const creators = useMemo(() => (principal
+    ? [principal, ...principals.filter((item) => item.roster?.merged_into === principal.kind)] : []),
+  [principal, principals]);
 
   const roster = useMemo(() => {
     if(!principal) return [];
     const needle = filter.trim().toLowerCase();
     return state.resources
       .filter((resource) => resource.resource_kind === principal.kind)
-      .map((resource) => ({resource, label: principalLabel(principal, resource)}))
+      .map((resource) => ({resource, label: principalLabel(principal, resource),
+        marks: (principal.roster?.markers || [])
+          .filter((marker) => resourceNative(resource)?.[marker.field] === marker.equals)
+          .map((marker) => gettext(marker.label))}))
       .filter(({label}) => !needle || label.toLowerCase().includes(needle))
       .sort((a, b) => a.label.localeCompare(b.label));
   }, [state.resources, principal, filter]);
@@ -118,11 +126,20 @@ export default function DescriptorSecurityManager({
 
   const membershipOperations = useMemo(() => {
     const membership = security?.membership;
-    if(!membership || membership.kind !== kind) return [];
+    const reachable = membership && (membership.kind === kind
+      || principals.some((item) => item.kind === membership.kind && item.roster?.merged_into === kind));
+    if(!reachable) return [];
     return (state.bundle?.kinds?.[membership.kind]?.operations || [])
       .filter((op) => op.menu?.category === 'security' && op.available !== false)
       .sort((a, b) => (a.menu?.order ?? 0) - (b.menu?.order ?? 0));
-  }, [security, kind, state.bundle]);
+  }, [security, kind, principals, state.bundle]);
+
+  // Membership operations target the membership kind's own resource; when its roster is merged
+  // into the selected kind they are the same account listed under that kind.
+  const membershipTarget = selected && security?.membership && security.membership.kind !== kind
+    ? state.resources.find((resource) => resource.resource_kind === security.membership.kind
+      && resource.display_name === selected.display_name) || null
+    : selected;
 
   const applied = useCallback(() => {
     setDialog(null);
@@ -140,46 +157,50 @@ export default function DescriptorSecurityManager({
       || gettext('This engine has no %s principals.', scope === 'database' ? gettext('database') : gettext('server'))} />;
   }
 
-  const create = () => setSelection({mode: 'create'});
+  const creating = selection?.mode === 'create'
+    ? creators.find((item) => item.kind === selection.kind) || principal : null;
   return <Box component="section" aria-label={gettext('Security Manager')}
     sx={{display: 'flex', height: '100%', minHeight: 0}}>
     <Box component="nav" aria-label={gettext('Principals')}
       sx={{width: 300, flex: 'none', display: 'flex', flexDirection: 'column', gap: 1, p: 1, overflow: 'auto'}}>
       {endpointLabel && <Box sx={{fontWeight: 600}}>{endpointLabel}</Box>}
-      {principals.length > 1 && <Box role="group" aria-label={gettext('Principal kind')} sx={{display: 'flex', gap: 1}}>
-        {principals.map((item) => <Button key={item.kind} intent={item.kind === kind ? 'primary' : 'neutral'}
+      {rostered.length > 1 && <Box role="group" aria-label={gettext('Principal kind')} sx={{display: 'flex', gap: 1}}>
+        {rostered.map((item) => <Button key={item.kind} intent={item.kind === kind ? 'primary' : 'neutral'}
           aria-pressed={item.kind === kind}
           onClick={() => { setActiveKind(item.kind); setSelection(null); setFilter(''); }}>
           {gettext(item.plural_label)}
         </Button>)}
       </Box>}
-      <Button intent="primary" onClick={create}>{gettext('New %s', gettext(principal.label).toLowerCase())}</Button>
+      {creators.map((item) => <Button key={item.kind} intent="primary"
+        onClick={() => setSelection({mode: 'create', kind: item.kind})}>{gettext('New %s', gettext(item.label).toLowerCase())}</Button>)}
       <TextField label={gettext('Filter')} size="small" value={filter}
         onChange={(event) => setFilter(event.target.value)} />
       {roster.length === 0
         ? <Box sx={{fontSize: '0.8125rem'}}>{gettext('No %s found.', gettext(principal.plural_label).toLowerCase())}</Box>
         : <Box component="ul" aria-label={gettext(principal.plural_label)} sx={{listStyle: 'none', m: 0, p: 0}}>
-          {roster.map(({resource, label}) => <li key={resource.resource_id}>
+          {roster.map(({resource, label, marks}) => <li key={resource.resource_id}>
             <Button intent={selected?.resource_id === resource.resource_id ? 'primary' : 'neutral'}
               aria-current={selected?.resource_id === resource.resource_id ? 'true' : undefined}
-              onClick={() => setSelection({mode: 'alter', id: resource.resource_id})}>{label}</Button>
+              onClick={() => setSelection({mode: 'alter', id: resource.resource_id})}>
+              {label}{marks.length > 0 && <Box component="span" sx={{ml: 1, fontSize: '0.75rem', opacity: 0.8}}>{marks.join(', ')}</Box>}
+            </Button>
           </li>)}
         </Box>}
     </Box>
     <Box sx={{flex: 1, minWidth: 0, overflow: 'auto'}}>
       {!selection && <EmptyState message={gettext('Select a %s or create one.', gettext(principal.label).toLowerCase())} />}
-      {selection?.mode === 'create' && <ProviderObjectEditorHost key={`create:${kind}`}
-        api={api} endpointUrl={endpointUrl} engine={engine} version={version} resourceKind={kind}
+      {creating && <ProviderObjectEditorHost key={`create:${creating.kind}`}
+        api={api} endpointUrl={endpointUrl} engine={engine} version={version} resourceKind={creating.kind}
         databaseTargetId={databaseTargetId || undefined} mode="create"
-        initialRecord={principal.variant ? {[principal.variant.field_id]: principal.variant.value} : {}}
+        initialRecord={creating.variant ? {[creating.variant.field_id]: creating.variant.value} : {}}
         onAuthRequired={onAuthRequired} onClose={() => setSelection(null)} onApplied={() => { setSelection(null); applied(); }} />}
       {selected && <Box>
         <Box sx={{display: 'flex', gap: 1, p: 1, flexWrap: 'wrap'}}>
-          {membershipOperations.map((operation) => <Button key={operation.operation_id} intent="neutral"
-            onClick={() => setDialog({operation, target: selected, calls: visualAdminCalls(post, {
-              resourceKind: selected.resource_kind, operationId: operation.operation_id, target: selected})})}>{gettext(operation.title)}</Button>)}
+          {membershipTarget && membershipOperations.map((operation) => <Button key={operation.operation_id} intent="neutral"
+            onClick={() => setDialog({operation, target: membershipTarget, calls: visualAdminCalls(post, {
+              resourceKind: membershipTarget.resource_kind, operationId: operation.operation_id, target: membershipTarget})})}>{gettext(operation.title)}</Button>)}
         </Box>
-        {security.membership?.listing && <Memberships listing={security.membership.listing} resource={selected} />}
+        {security.membership?.listing && membershipTarget && <Memberships listing={security.membership.listing} resource={membershipTarget} />}
         <ProviderObjectEditorHost key={`alter:${selected.resource_id}`}
           api={api} endpointUrl={endpointUrl} engine={engine} version={version}
           resourceId={selected.resource_id} resourceKind={kind} displayName={selected.display_name}

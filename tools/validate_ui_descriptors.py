@@ -196,6 +196,14 @@ def check_security_descriptor(engine, engine_dir, caps, schemas, errors):
                 errors.append(f"{rel}: {kind} variant field {variant['field_id']!r} is not in {form_rel}")
             elif variant["value"] not in values:
                 errors.append(f"{rel}: {kind} variant value {variant['value']!r} is not an option of {variant['field_id']}")
+    for principal in principals:
+        target = (principal.get("roster") or {}).get("merged_into")
+        if target is not None and (target not in seen or target == principal.get("kind")):
+            errors.append(f"{rel}: {principal.get('kind')} roster is merged into {target!r}, which is not another declared principal")
+        elif target is not None and any((p.get("roster") or {}).get("merged_into") for p in principals if p.get("kind") == target):
+            errors.append(f"{rel}: {principal.get('kind')} roster is merged into {target!r}, which is itself merged")
+        elif target is not None and next(p for p in principals if p.get("kind") == target).get("scope") != principal.get("scope"):
+            errors.append(f"{rel}: {principal.get('kind')} roster is merged into {target!r} of another scope")
     membership = doc.get("membership")
     if membership and membership["kind"] not in seen:
         errors.append(f"{rel}: membership kind {membership['kind']!r} is not a declared principal")

@@ -1573,3 +1573,16 @@ Findings:
 MySQL stays ``draft`` until that decision, a ``membership.listing`` and non-table
 grant listings are declared. MariaDB, PostgreSQL and Firebird 5 (network)
 containers are also running and are not yet used.
+
+Decision 21: MySQL accounts roster (2026-11-25, owner decision)
+---------------------------------------------------------------
+
+MySQL keeps one account catalog and does not record whether an account was
+created as a role, so the manager shows one **Accounts** roster. ``security.json``
+gained two roster keys: ``markers`` (labels shown when a native field the engine
+reports has a given value; MySQL declares Locked and Used as a role) and
+``merged_into`` (a kind whose resources are listed in another kind's roster and
+which adds only its create action; MySQL's ``role`` is merged into ``user``, so
+"New role" remains). Membership operations still target the role-kind resource of
+the selected account. No heuristic claims an account is a role. MySQL stays
+``draft`` (membership listing and non-table grant listings remain).

@@ -164,3 +164,38 @@ describe('SecurityManagerSurface', () => {
     expect(await screen.findByTestId('legacy-manager')).toBeInTheDocument();
   });
 });
+
+describe('DescriptorSecurityManager with one account catalog (MySQL)', () => {
+  const account = (name, extra = {}) => user(name, {name, host: '%', ...extra});
+  const asRole = (name) => ({resource_kind: 'role', resource_id: `role:${name}@%`, display_name: `${name}@%`, native: {name, host: '%'}});
+  beforeEach(() => { resetDescriptorClient(); mockEditor.mockClear(); });
+
+  it('shows one Accounts roster, marks what the server reports, and offers both creations', async () => {
+    const items = [account('app', {account_locked: 'N', role_usage_observed: false}),
+      account('reader', {account_locked: 'Y', role_usage_observed: true}), asRole('reader')];
+    const {api} = makeApi('mysql', items.map((item) => (item.resource_kind === 'user'
+      ? {...item, display_name: `${item.display_name}@%`} : item)));
+    mount({api, engine: 'mysql', scope: 'server'});
+    expect(await screen.findByRole('button', {name: /^reader@%/})).toHaveTextContent('Locked, Used as a role');
+    expect(screen.getByRole('button', {name: /^app@%/})).not.toHaveTextContent('Locked');
+    // The role listing is not a second roster.
+    expect(screen.getAllByRole('listitem')).toHaveLength(2);
+    expect(screen.queryByRole('group', {name: 'Principal kind'})).not.toBeInTheDocument();
+    expect(screen.getByRole('button', {name: 'New account'})).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', {name: 'New role'}));
+    await waitFor(() => expect(screen.getByTestId('editor').textContent).toBe('create:role:'));
+    expect(mockEditor.mock.calls.at(-1)[0].initialRecord).toEqual({variant: 'role'});
+  });
+
+  it('runs a role operation against the role resource of the selected account', async () => {
+    const {api, posts} = makeApi('mysql', [{...account('reader'), display_name: 'reader@%'}, asRole('reader')]);
+    mount({api, engine: 'mysql', scope: 'server'});
+    fireEvent.click(await screen.findByRole('button', {name: /^reader@%/}));
+    fireEvent.click(await screen.findByRole('button', {name: 'Grant role membership'}));
+    fireEvent.change(await screen.findByRole('textbox', {name: /Recipient user/}), {target: {value: 'x'}});
+    fireEvent.click(await screen.findByRole('button', {name: 'Preview'}));
+    await waitFor(() => expect(posts.some((p) => p.action === 'visual_admin_plan')).toBe(true));
+    expect(posts.find((p) => p.action === 'visual_admin_plan').request)
+      .toMatchObject({resource_kind: 'role', operation_id: 'grant', target_resource: {resource_id: 'role:reader@%'}});
+  });
+});

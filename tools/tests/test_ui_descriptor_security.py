@@ -87,7 +87,7 @@ def test_the_same_concept_is_named_per_engine_without_a_shared_lowest_denominato
     assert labels['postgresql'] == {'role': ('Role', 'server')}
     # Firebird users are server-wide while its roles live in each database.
     assert labels['firebird'] == {'user': ('User', 'server'), 'role': ('Role', 'database')}
-    assert labels['mysql']['user'] == ('User', 'server')
+    assert labels['mysql'] == {'user': ('Account', 'server'), 'role': ('Role', 'server')}
 
 
 def test_features_are_declared_only_where_the_engine_supports_them():
@@ -245,3 +245,23 @@ def test_mysql_declares_a_composite_listing_without_privilege_codes():
     listing = doc['grants']['listing']
     assert listing['object_fields'] == ['database', 'table_name']
     assert 'privilege_codes' not in listing
+
+
+def test_mysql_has_one_account_roster_with_role_creation_merged_into_it():
+    doc = json.loads((DESCRIPTORS / 'mysql' / 'security.json').read_text(encoding='utf-8'))
+    account, role = doc['principals']
+    assert account['label'] == 'Account' and 'merged_into' not in (account.get('roster') or {})
+    assert role['roster'] == {'merged_into': 'user'}
+    assert {m['field'] for m in account['roster']['markers']} == {'account_locked', 'role_usage_observed'}
+
+
+def test_a_merged_roster_must_name_another_principal_of_the_same_scope(engine_copy):
+    def mutate(doc):
+        doc['principals'][1]['roster'] = {'merged_into': 'wizard'}
+    assert any("merged into 'wizard'" in e for e in check(engine_copy('mysql', mutate)))
+
+
+def test_a_roster_cannot_merge_into_a_principal_that_is_itself_merged(engine_copy):
+    def mutate(doc):
+        doc['principals'][0]['roster'] = {'merged_into': 'role'}
+    assert any('itself merged' in e for e in check(engine_copy('mysql', mutate)))

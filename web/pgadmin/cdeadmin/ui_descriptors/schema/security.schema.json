@@ -127,6 +127,35 @@
             "type": "string"
           },
           "description": "attributes the filter box matches"
+        },
+        "merged_into": {
+          "type": "string",
+          "description": "kind of another principal whose roster lists this kind's resources too, for engines that keep one account catalog (MySQL accounts are users and roles alike). This kind then adds only a create action, and no roster or switcher entry of its own"
+        },
+        "markers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "label",
+              "field",
+              "equals"
+            ],
+            "properties": {
+              "label": {
+                "type": "string"
+              },
+              "field": {
+                "type": "string",
+                "description": "native field of the listed resource"
+              },
+              "equals": {
+                "description": "the value that earns the marker"
+              }
+            }
+          },
+          "description": "labels shown beside a roster row when a native field of the resource has the given value; only facts the engine reports belong here"
         }
       }
     },

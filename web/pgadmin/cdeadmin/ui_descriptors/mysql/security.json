@@ -2,12 +2,12 @@
   "schema": "cdeadmin.ui-security.v1",
   "engine": "mysql",
   "status": "draft",
-  "notes": "Accounts and roles are both identified by name and host. One role form serves user, role and grant through its variant select. The previous manager compiler also allowed REFERENCES on view columns, which this engine's privilege list does not offer; it is not declared here. Grant listing: the provider's privilege rows are keyed by database, table and optionally column, with the grantee as one account string and privilege names stored directly. The listing reads table-scoped rows only; database, routine and global grants are not keyed by table_name and are not yet listed, and the grant operation's separate user and host grid is not prefilled from a row. The grant listing and operations are not verified against a live server (none is available), so status stays draft.",
+  "notes": "Accounts and roles are both identified by name and host, and the server keeps one catalog for both: it does not record whether an account was created as a role, so the manager shows one Accounts roster, marks accounts the server reports as locked or used as a role, and offers New role as a creation action. One role form serves user, role and grant through its variant select. The previous manager compiler also allowed REFERENCES on view columns, which this engine's privilege list does not offer; it is not declared here. Grant listing: the provider's privilege rows are keyed by database, table and optionally column, with the grantee as one account string and privilege names stored directly. The listing reads table-scoped rows only; database, routine and global grants are not keyed by table_name and are not yet listed, and the grant operation's separate user and host grid is not prefilled from a row. The grant listing and operations are not verified against a live server (none is available), so status stays draft.",
   "principals": [
     {
       "kind": "user",
-      "label": "User",
-      "plural_label": "Users",
+      "label": "Account",
+      "plural_label": "Accounts",
       "scope": "server",
       "identity": [
         "name",
@@ -16,6 +16,20 @@
       "variant": {
         "field_id": "variant",
         "value": "user"
+      },
+      "roster": {
+        "markers": [
+          {
+            "label": "Locked",
+            "field": "account_locked",
+            "equals": "Y"
+          },
+          {
+            "label": "Used as a role",
+            "field": "role_usage_observed",
+            "equals": true
+          }
+        ]
       }
     },
     {
@@ -30,6 +44,9 @@
       "variant": {
         "field_id": "variant",
         "value": "role"
+      },
+      "roster": {
+        "merged_into": "user"
       }
     }
   ],
