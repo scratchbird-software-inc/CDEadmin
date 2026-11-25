@@ -1543,3 +1543,33 @@ global grants are not keyed by ``table_name``); the grant operation's user/host
 grid is not prefilled from a row; nothing was verified against a MySQL or MariaDB
 server because none is available here. Lint counts are unchanged (engine_prop 135,
 security_ui 22).
+
+Decision 21: MySQL live round trip (2026-11-25)
+-----------------------------------------------
+
+``tools/tests/test_ui_descriptor_security_mysql_live.py`` drives the declared
+MySQL operations through the provider on the demo MySQL 9.7.0 container
+(``cdeadmin-demo-mysql``, root credentials read from the container, disposable
+accounts dropped afterwards). Verified against the server: role grant with admin
+option and revoke (``mysql.role_edges``), the provider's ``member_of`` listing,
+table privilege grant with a column list and grant option, the listing's
+``database``/``table_name``/``column_name`` fields, and revoke. Privilege review
+needs MySQL Shell's grammar library (``CDEADMIN_MYSQL_PARSER_LIBRARY``); without
+it that test is skipped.
+
+Findings:
+
+* Revoking ``SELECT`` and ``UPDATE`` leaves the grant option behind as ``USAGE``
+  (grantable); it is removed only by revoking ``GRANT OPTION``. A grants view must
+  show that row, and the listing does not yet declare how.
+* The provider lists every account under both ``user`` and ``role``
+  (``named_account_role_alias``, ``create_origin_not_attested``): MySQL does not
+  record whether an account was created as a role. A Roles roster built from the
+  descriptor would show every user. Open decision: either declare a roster rule
+  (for example locked accounts, or accounts seen in ``role_edges``), accepting that
+  a heuristic is not attested by the engine, or show one account roster with a role
+  marker. Not decided here.
+
+MySQL stays ``draft`` until that decision, a ``membership.listing`` and non-table
+grant listings are declared. MariaDB, PostgreSQL and Firebird 5 (network)
+containers are also running and are not yet used.
