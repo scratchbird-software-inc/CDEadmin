@@ -1793,6 +1793,14 @@ Once 1, 2 and 3 are decided, phase 0 can start immediately; nothing in phases 0 
     are verified; they are not guessed. Implemented 2026-11-25 for Firebird,
     MySQL and PostgreSQL, with ``"principals": []`` for SQLite and DuckDB.
 
+    *Status 2026-11-25.* Firebird is served end to end (``status`` ``complete``):
+    the descriptor-driven manager and object grants view, the four membership and
+    grant operations verified live, and the legacy Firebird code removed. MySQL and
+    PostgreSQL are ``draft``: PostgreSQL still needs a ``privilege`` operation
+    (gap (ii)) and MySQL's operations have not been round-tripped through the new
+    manager. Details and what was not carried over are in
+    ``ui_unification_status.rst``.
+
     Differences the first slice must express without code:
 
     - *PostgreSQL:* one principal kind (``role``), scope server; membership

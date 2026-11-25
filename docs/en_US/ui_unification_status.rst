@@ -1449,3 +1449,75 @@ operations and forms (not yet exercised against a live engine):
   and are ported, not deleted, with each engine.
 
 Next: Firebird end to end, starting with the missing operations above.
+
+Decision 21: Firebird end to end (2026-11-25)
+---------------------------------------------
+
+Firebird is the first engine served by the descriptor-driven Security Manager
+(``security.json`` status ``complete``). MySQL and PostgreSQL stay ``draft`` and
+on the previous manager; the shell chooses by that status, never by engine name.
+
+What changed:
+
+- **Operations.** ``role`` grant and revoke (membership) and ``privilege`` grant
+  and revoke are declared in Firebird's ``operations.json`` (SR-F-031136 to
+  031139), drafted from the provider's own form contract. Verified live on an
+  embedded Firebird 5 engine by
+  ``tools/tests/test_ui_descriptor_security_firebird_live.py`` (15 tests:
+  membership with admin option, role in role, default role, revoking only the
+  admin option, column-level ``UPDATE`` with grant option, exact-name revoke
+  confirmation, refusals, injection, role create with system privileges read
+  back, database DDL grant, and the stored privilege codes and grantee types
+  that ``grants.listing`` relies on).
+- **Manager and grants view.** ``DescriptorSecurityManager`` lists the
+  principals the descriptor declares for the scope and opens one in the
+  role-family editor; ``DescriptorObjectGrants`` lists grants on one object
+  through ``grants.listing`` and grants and revokes through the declared
+  operations with the object fixed (``OperationDialog`` gained ``fixedValues``).
+  Neither has an engine branch. A failure to list principals or grants is shown
+  as an error, never as an empty list.
+- **Legacy host.** ``security_authority.py`` lost all Firebird code (2,662 to
+  2,061 lines): the constants, both collectors, the Services-API wrapper and every
+  branch in the compilers. Its six methods now refuse any engine whose descriptor
+  is ``complete``. The legacy UI components lost their Firebird branches.
+- **Services API users.** The legacy host managed server users through the
+  Services API when no database is registered. The provider had no such path, so
+  it was added (``users.compile_service_operation``, plan, validate and apply).
+  A field the Services API cannot carry (plugin, tags, comment, active) is
+  refused, not dropped. **Not verified against a real server**: this environment
+  has client libraries only and the embedded runtime has no security database, so
+  ``tools/tests/test_firebird_service_users.py`` uses a fake service manager, as
+  the legacy test did.
+
+Defects found in committed code and fixed:
+
+- ``providers/firebird/provider.py`` used ``users``, ``uuid`` and ``copy``
+  without importing them, so every Firebird user create or alter that set a name
+  part, tag or comment raised ``NameError``. A static undefined-name test now
+  guards the Firebird provider modules.
+- ``_prepare_visual_admin_call`` accepted an explicit ``null`` database target
+  as server scope; restored to a refusal (the sentinel is the explicit form).
+- The catalog loader used by the editors (``loadEndpointResources``) hides
+  provider failures as an empty list; the new components list resources without
+  hiding errors.
+
+Lint, before and after this change: ``engine_prop_branches_in_ui_code``
+153 to 135, ``security_ui_engine_branches`` 40 to 22 (the remainder is the
+MySQL and PostgreSQL branches in the previous components). JSON controls 299,
+MUI imports 177, ``engine_literal_branches_in_ui_code`` 111, panels 113 and menu
+branches 13 are unchanged.
+
+Not carried over, deliberately recorded:
+
+- **Non-administrator visibility.** The legacy host reported a limited view
+  (the session's own account, ``can_manage_users`` false) for a Firebird
+  non-administrator. The provider lists what the session can read and the manager
+  shows an error if the listing fails; there is no separate "limited" state, and
+  it could not be tested live here (no security database).
+- **Many grants in one review.** The grants view runs one reviewed operation at a
+  time. The workspace's ordered bulk apply (``apply_visual_admin_bulk``) could
+  batch them; that is Decision 21 gap (ii) and is not wired.
+- **Roster columns** remain undeclared until the providers' resource attributes
+  are verified, so the roster shows names only.
+- ``test_firebird_embedded_contracts`` has two failures that predate this change
+  (they fail on a clean checkout of the committed baseline too).

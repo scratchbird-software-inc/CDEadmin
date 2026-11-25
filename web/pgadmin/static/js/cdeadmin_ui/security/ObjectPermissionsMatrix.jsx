@@ -33,17 +33,6 @@ const DEFAULT_PRIVILEGES_BY_KIND = Object.freeze({
   database: ['CONNECT', 'CREATE', 'TEMPORARY'],
 });
 
-const FIREBIRD_PRIV_CODE_MAP = Object.freeze({
-  S: 'SELECT',
-  I: 'INSERT',
-  U: 'UPDATE',
-  D: 'DELETE',
-  R: 'REFERENCES',
-  X: 'EXECUTE',
-  G: 'USAGE',
-  M: 'MEMBERSHIP',
-});
-
 function resolveCsrfHeaders() {
   if (typeof window === 'undefined') return {};
   const headerName =
@@ -131,17 +120,13 @@ export function normalizeFallbackNativePrivileges(rawPrivileges, objectKind = 't
     const host = row.host || row.grantee_host || null;
     const granteeKind = String(
       row.grantee_kind ||
-      (grantee.toUpperCase() === 'PUBLIC'
-        ? 'special'
-        : row.user_type === 13
-          ? 'role'
-          : 'user')
+      (grantee.toUpperCase() === 'PUBLIC' ? 'special' : 'user')
     ).toLowerCase();
     const grantor = String(row.grantor ?? row.rdb$grantor ?? '').trim();
     const rawPriv = String(
       row.privilege ?? row.privilege_type ?? row.type ?? ''
     ).trim().toUpperCase();
-    const privName = FIREBIRD_PRIV_CODE_MAP[rawPriv] || rawPriv;
+    const privName = rawPriv;
     if (!privName) return;
     const grantOpt = Boolean(
       row.grant_option ||
@@ -189,7 +174,7 @@ function buildClientPreviewSql({engine, objectKind, schema, objectName, changes}
   const q = engine === 'mysql' || engine === 'mariadb' ? '`' : '"';
   const quoteIdent = (v) => `${q}${String(v || '').replaceAll(q, q + q)}${q}`;
   const qualified =
-    schema && engine !== 'firebird'
+    schema
       ? `${quoteIdent(schema)}.${quoteIdent(objectName)}`
       : quoteIdent(objectName);
   const kindKeyword =

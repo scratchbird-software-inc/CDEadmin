@@ -37,35 +37,6 @@ _SERVER_SCOPE_SENTINEL = 'cdeadmin-server-scope'
 
 EMBEDDED_UNSUPPORTED_ENGINES = frozenset({'sqlite', 'duckdb'})
 
-FIREBIRD_SYSTEM_PRIVILEGES = (
-    'USER_MANAGEMENT',
-    'READ_RAW_PAGES',
-    'CREATE_USER_TYPES',
-    'USE_NBACKUP_UTILITY',
-    'CHANGE_SHUTDOWN_MODE',
-    'TRACE_ANY_ATTACHMENT',
-    'MONITOR_ANY_ATTACHMENT',
-    'ACCESS_SHUTDOWN_DATABASE',
-    'CREATE_DATABASE',
-    'DROP_DATABASE',
-    'USE_GBAK_UTILITY',
-    'USE_GSTAT_UTILITY',
-    'USE_GFIX_UTILITY',
-    'IGNORE_DB_TRIGGERS',
-    'CHANGE_HEADER_SETTINGS',
-    'SELECT_ANY_OBJECT_IN_DATABASE',
-    'ACCESS_ANY_OBJECT_IN_DATABASE',
-    'MODIFY_ANY_OBJECT_IN_DATABASE',
-    'CHANGE_MAPPING_RULES',
-    'USE_GRANTED_BY_CLAUSE',
-    'GRANT_REVOKE_ON_ANY_OBJECT',
-    'GRANT_REVOKE_ANY_DDL_RIGHT',
-    'CREATE_PRIVILEGED_ROLES',
-    'GET_DBCRYPT_INFO',
-    'MODIFY_EXT_CONN_POOL',
-    'REPLICATE_INTO_DATABASE',
-    'PROFILE_ANY_ATTACHMENT',
-)
 
 POSTGRESQL_SYSTEM_PRIVILEGES = (
     'SUPERUSER',
@@ -125,15 +96,6 @@ OBJECT_GRANT_PRIVILEGES: dict[str, dict[str, tuple[str, ...]]] = {
         'schema': ('USAGE', 'CREATE'),
         'database': ('CREATE', 'CONNECT', 'TEMPORARY'),
     },
-    'firebird': {
-        'table': ('SELECT', 'INSERT', 'UPDATE', 'DELETE', 'REFERENCES'),
-        'view': ('SELECT', 'INSERT', 'UPDATE', 'DELETE', 'REFERENCES'),
-        'procedure': ('EXECUTE',),
-        'function': ('EXECUTE',),
-        'package': ('EXECUTE',),
-        'sequence': ('USAGE',),
-        'database': ('CREATE', 'ALTER', 'DROP'),
-    },
     'mysql': {
         'database': (
             'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'CREATE', 'DROP',
@@ -191,10 +153,6 @@ COLUMN_PRIVILEGE_SUPPORT: dict[str, dict[str, frozenset[str]]] = {
         'table': frozenset({'SELECT', 'INSERT', 'UPDATE', 'REFERENCES'}),
         'view': frozenset({'SELECT', 'INSERT', 'UPDATE', 'REFERENCES'}),
     },
-    'firebird': {
-        'table': frozenset({'UPDATE', 'REFERENCES'}),
-        'view': frozenset({'UPDATE', 'REFERENCES'}),
-    },
     'mysql': {
         'table': frozenset({'SELECT', 'INSERT', 'UPDATE', 'REFERENCES'}),
         'view': frozenset({'SELECT', 'INSERT', 'UPDATE', 'REFERENCES'}),
@@ -218,8 +176,6 @@ def _dialect_family(engine: str) -> str:
         return 'mysql'
     if eng == 'mariadb':
         return 'mariadb'
-    if eng == 'firebird':
-        return 'firebird'
     return eng
 
 
@@ -234,7 +190,7 @@ def _require_non_empty_text(value: Any, label: str, max_len: int = 255) -> str:
 def quote_identifier(ident: Any, engine: str, label: str = 'identifier') -> str:
     """Strictly quote a SQL identifier for the target engine dialect."""
     fam = _dialect_family(engine)
-    max_len = 63 if fam == 'firebird' else 128
+    max_len = 128
     raw = _require_non_empty_text(ident, label, max_len=max_len)
     if fam in {'mysql', 'mariadb'}:
         if '\n' in raw or '\r' in raw:
@@ -261,7 +217,7 @@ def quote_literal(value: Any, engine: str, label: str = 'literal') -> str:
             .replace('\r', '\\r')
         )
         return "'" + escaped + "'"
-    # Firebird standard SQL literal
+    # Standard SQL literal
     return "'" + value.replace("'", "''") + "'"
 
 
@@ -308,27 +264,6 @@ def _is_permission_denied_error(exc: Exception) -> bool:
     return False
 
 
-def _decode_firebird_role_privs(raw_value: Any) -> list[str]:
-    if not raw_value:
-        return []
-    if isinstance(raw_value, (bytes, bytearray, memoryview)):
-        buf = bytes(raw_value)
-    elif isinstance(raw_value, str):
-        try:
-            buf = bytes.fromhex(raw_value)
-        except ValueError:
-            buf = raw_value.encode('latin1', errors='ignore')
-    else:
-        return []
-    found = []
-    for bit_index, priv_name in enumerate(FIREBIRD_SYSTEM_PRIVILEGES, start=1):
-        byte_idx = bit_index // 8
-        bit_mask = 1 << (bit_index % 8)
-        if byte_idx < len(buf) and (buf[byte_idx] & bit_mask):
-            found.append(priv_name)
-    return found
-
-
 def compile_principal_plan(
     engine: str,
     principal_kind: str,
@@ -361,171 +296,9 @@ def compile_principal_plan(
         prev_stmts.append(exec_sql if prev_sql is None else prev_sql)
 
     # ------------------------------------------------------------------
-    # Firebird 5
-    # ------------------------------------------------------------------
-    if fam == 'firebird':
-        if kind == 'user':
-            raw_name = draft_map.get('name') if op == 'create' else (target_map.get('name') or draft_map.get('name'))
-            q_user = quote_identifier(raw_name, 'firebird', 'user name')
-            plugin = (
-                draft_map.get('plugin')
-                if op == 'create'
-                else (target_map.get('plugin') or draft_map.get('plugin'))
-            )
-            plugin_sql = (
-                ' USING PLUGIN ' + quote_identifier(str(plugin).strip(), 'firebird', 'plugin')
-                if isinstance(plugin, str) and plugin.strip()
-                else ''
-            )
-            if op == 'drop':
-                emit(f'DROP USER {q_user}{plugin_sql}')
-            else:
-                exec_clauses: list[str] = []
-                prev_clauses: list[str] = []
-                pwd = draft_map.get('password')
-                if op == 'create':
-                    if not isinstance(pwd, str) or not pwd:
-                        raise SecurityAuthorityError('Firebird CREATE USER requires a non-empty password')
-                    exec_clauses.append('PASSWORD ' + quote_literal(pwd, 'firebird', 'password'))
-                    prev_clauses.append("PASSWORD '<redacted>'")
-                elif isinstance(pwd, str) and pwd != '':
-                    exec_clauses.append('PASSWORD ' + quote_literal(pwd, 'firebird', 'password'))
-                    prev_clauses.append("PASSWORD '<redacted>'")
-
-                for field_key, kw in (
-                    ('first_name', 'FIRSTNAME'),
-                    ('middle_name', 'MIDDLENAME'),
-                    ('last_name', 'LASTNAME'),
-                ):
-                    if field_key in draft_map and draft_map[field_key] is not None:
-                        val_str = str(draft_map[field_key])
-                        if op == 'create' and val_str == '':
-                            continue
-                        q_val = quote_literal(val_str, 'firebird', field_key)
-                        exec_clauses.append(f'{kw} {q_val}')
-                        prev_clauses.append(f'{kw} {q_val}')
-
-                if op == 'create':
-                    if draft_map.get('is_admin'):
-                        exec_clauses.append('GRANT ADMIN ROLE')
-                        prev_clauses.append('GRANT ADMIN ROLE')
-                    act = 'ACTIVE' if draft_map.get('active', True) else 'INACTIVE'
-                    exec_clauses.append(act)
-                    prev_clauses.append(act)
-                else:
-                    if 'is_admin' in draft_map and draft_map['is_admin'] is not None:
-                        adm_kw = 'GRANT ADMIN ROLE' if draft_map['is_admin'] else 'REVOKE ADMIN ROLE'
-                        exec_clauses.append(adm_kw)
-                        prev_clauses.append(adm_kw)
-                    if 'active' in draft_map and draft_map['active'] is not None:
-                        act_kw = 'ACTIVE' if draft_map['active'] else 'INACTIVE'
-                        exec_clauses.append(act_kw)
-                        prev_clauses.append(act_kw)
-
-                tags = draft_map.get('tags')
-                if isinstance(tags, list) and tags:
-                    tag_parts: list[str] = []
-                    for tag in tags:
-                        if not isinstance(tag, Mapping):
-                            raise SecurityAuthorityError('Each Firebird user tag must be an object')
-                        tname = str(tag.get('name') or '').strip()
-                        if not tname or any(ch in tname for ch in '\r\n='):
-                            raise SecurityAuthorityError('Invalid Firebird tag name')
-                        qt = quote_identifier(tname, 'firebird', 'tag name')
-                        if tag.get('drop'):
-                            tag_parts.append(f'DROP {qt}')
-                        else:
-                            tval = str(tag.get('value') or '')
-                            if '\r' in tval or '\n' in tval:
-                                raise SecurityAuthorityError('Firebird tag values cannot contain CR or LF')
-                            tag_parts.append(f"{qt} = {quote_literal(tval, 'firebird', 'tag value')}")
-                    if tag_parts:
-                        tag_clause = 'TAGS (' + ', '.join(tag_parts) + ')'
-                        exec_clauses.append(tag_clause)
-                        prev_clauses.append(tag_clause)
-
-                if exec_clauses:
-                    verb = 'CREATE USER' if op == 'create' else 'ALTER USER'
-                    emit(
-                        f"{verb} {q_user} {' '.join(exec_clauses)}{plugin_sql}",
-                        f"{verb} {q_user} {' '.join(prev_clauses)}{plugin_sql}",
-                    )
-
-                if 'comment' in draft_map and (op == 'alter' or draft_map.get('comment')):
-                    cval = draft_map.get('comment')
-                    rhs = 'NULL' if cval in (None, '') else quote_literal(str(cval), 'firebird', 'comment')
-                    emit(f'COMMENT ON USER {q_user}{plugin_sql} IS {rhs}')
-
-                for rev_role in draft_map.get('revoke_roles') or ():
-                    rname = rev_role.get('role') if isinstance(rev_role, Mapping) else rev_role
-                    qr = quote_identifier(rname, 'firebird', 'role')
-                    emit(f'REVOKE {qr} FROM USER {q_user}')
-
-                for gr in draft_map.get('grant_roles') or ():
-                    rname = gr.get('role') if isinstance(gr, Mapping) else gr
-                    admin_opt = bool(gr.get('admin_option')) if isinstance(gr, Mapping) else False
-                    def_opt = bool(gr.get('default_role')) if isinstance(gr, Mapping) else False
-                    qr = quote_identifier(rname, 'firebird', 'role')
-                    default_kw = 'DEFAULT ' if def_opt else ''
-                    adm_kw = ' WITH ADMIN OPTION' if admin_opt else ''
-                    emit(f'GRANT {default_kw}{qr} TO USER {q_user}{adm_kw}')
-        else:
-            raw_name = draft_map.get('name') if op == 'create' else (target_map.get('name') or draft_map.get('name'))
-            q_role = quote_identifier(raw_name, 'firebird', 'role name')
-            if op == 'drop':
-                emit(f'DROP ROLE {q_role}')
-            else:
-                sys_privs = draft_map.get('system_privileges')
-                priv_clause = ''
-                if isinstance(sys_privs, list):
-                    cleaned_privs = []
-                    for sp in sys_privs:
-                        sp_up = str(sp or '').strip().upper()
-                        if sp_up not in FIREBIRD_SYSTEM_PRIVILEGES:
-                            raise SecurityAuthorityError(f'Unsupported Firebird system privilege: {sp!r}')
-                        cleaned_privs.append(sp_up)
-                    if cleaned_privs:
-                        priv_clause = ' SET SYSTEM PRIVILEGES TO ' + ', '.join(cleaned_privs)
-                    elif op == 'alter':
-                        priv_clause = ' DROP SYSTEM PRIVILEGES'
-                if op == 'create':
-                    emit(f'CREATE ROLE {q_role}{priv_clause}')
-                elif priv_clause:
-                    emit(f'ALTER ROLE {q_role}{priv_clause}')
-
-                if 'comment' in draft_map and (op == 'alter' or draft_map.get('comment')):
-                    cval = draft_map.get('comment')
-                    rhs = 'NULL' if cval in (None, '') else quote_literal(str(cval), 'firebird', 'comment')
-                    emit(f'COMMENT ON ROLE {q_role} IS {rhs}')
-
-                for rev_m in draft_map.get('revoke_members') or ():
-                    mname = rev_m.get('principal', rev_m.get('name')) if isinstance(rev_m, Mapping) else rev_m
-                    mkind = (
-                        str(rev_m.get('principal_type') or 'USER').upper()
-                        if isinstance(rev_m, Mapping) else 'USER'
-                    )
-                    if mkind not in {'USER', 'ROLE'}:
-                        mkind = 'USER'
-                    qm = quote_identifier(mname, 'firebird', 'member')
-                    emit(f'REVOKE {q_role} FROM {mkind} {qm}')
-
-                for gm in draft_map.get('grant_members') or ():
-                    mname = gm.get('principal', gm.get('name')) if isinstance(gm, Mapping) else gm
-                    mkind = (
-                        str(gm.get('principal_type') or 'USER').upper()
-                        if isinstance(gm, Mapping) else 'USER'
-                    )
-                    if mkind not in {'USER', 'ROLE'}:
-                        mkind = 'USER'
-                    adm = bool(gm.get('admin_option')) if isinstance(gm, Mapping) else False
-                    qm = quote_identifier(mname, 'firebird', 'member')
-                    adm_kw = ' WITH ADMIN OPTION' if adm else ''
-                    emit(f'GRANT {q_role} TO {mkind} {qm}{adm_kw}')
-
-    # ------------------------------------------------------------------
     # PostgreSQL / CockroachDB / YugabyteDB
     # ------------------------------------------------------------------
-    elif fam == 'postgresql':
+    if fam == 'postgresql':
         raw_name = draft_map.get('name') if op == 'create' else (target_map.get('name') or draft_map.get('name'))
         q_role = quote_identifier(raw_name, engine, 'role name')
         if op == 'drop':
@@ -895,12 +668,6 @@ def compile_object_grants_plan(
         priv_items = [f'{p}{col_suffix}' for p in privs]
         priv_sql = ', '.join(priv_items)
 
-        if fam == 'firebird' and kind == 'database':
-            # Firebird DDL database syntax: GRANT ALTER DATABASE TO USER "x"
-            verb = 'GRANT' if action == 'grant' else 'REVOKE'
-            prep = 'TO' if action == 'grant' else 'FROM'
-            statements.append(f'{verb} {priv_sql} DATABASE {prep} {grantee_sql}')
-            continue
 
         if action == 'grant':
             wgo = ' WITH GRANT OPTION' if grant_opt else ''
@@ -951,12 +718,6 @@ def _compile_object_target_clause(
             kw = kind.upper()
             sig = f'({routine_signature})' if isinstance(routine_signature, str) else ''
             return f'{kw} {qualified}{sig}'
-    if fam == 'firebird':
-        if kind == 'database':
-            return 'DATABASE'
-        q_obj = quote_identifier(object_name, 'firebird', 'object_name')
-        fb_kw = 'TABLE' if kind in {'table', 'view'} else kind.upper()
-        return f'{fb_kw} {q_obj}'
     if fam in {'mysql', 'mariadb'}:
         if kind in {'database', 'schema'}:
             db_ident = quote_identifier(object_name or schema, engine, 'database')
@@ -980,12 +741,9 @@ def _compile_grantee_clause(
 ) -> str:
     g_name = _require_non_empty_text(grantee, 'grantee')
     g_kind = str(grantee_kind or 'role').strip().lower()
-    if fam in {'postgresql', 'firebird'}:
+    if fam == 'postgresql':
         if g_kind == 'special' or g_name.upper() == 'PUBLIC':
             return 'PUBLIC'
-        if fam == 'firebird':
-            fb_prefix = 'ROLE' if g_kind == 'role' else 'USER'
-            return f"{fb_prefix} {quote_identifier(g_name, 'firebird', 'grantee')}"
         return quote_identifier(g_name, engine, 'grantee')
     if fam == 'mariadb' and g_kind == 'role' and not grantee_host and '@' not in g_name:
         return quote_identifier(g_name, engine, 'grantee role')
@@ -1051,6 +809,26 @@ def normalize_grants_matrix(
 # --------------------------------------------------------------------------
 # SecurityAuthorityHost
 # --------------------------------------------------------------------------
+
+
+def _administered_by_provider(engine_id: str) -> bool:
+    """True when the engine's security.json is complete, so its principals and grants
+    are managed through its provider operations (Security Manager, object grants view)
+    and this endpoint must not also write to it (design Decision 21)."""
+    from pgadmin.cdeadmin.ui_descriptors import UIDescriptorError, UIDescriptorService
+    try:
+        bundle = UIDescriptorService().engine(str(engine_id or '').strip().lower())
+    except UIDescriptorError:
+        return False
+    return (bundle.get('security') or {}).get('status') == 'complete'
+
+
+def _refuse_provider_managed(engine_id: str) -> None:
+    if _administered_by_provider(engine_id):
+        raise SecurityAuthorityError(
+            f'{engine_id} security is administered through its provider operations '
+            '(the Security Manager and each object\'s grants view), not this endpoint'
+        )
 
 
 def _actor_user_id() -> int:
@@ -1211,113 +989,26 @@ class SecurityAuthorityHost:
         provider = binding.instance
         route = dict(endpoint['route'])
         raw_conn = None
-        if info['engine_id'] == 'firebird' and not (route.get('database') or '').strip():
-            ep_model = getattr(server, 'endpoint_profile', None)
-            targets = sorted(
-                list(getattr(ep_model, 'database_targets', ()) or ()),
-                key=lambda t: (not bool(getattr(t, 'active', False)), str(getattr(t, 'id', ''))),
-            )
-            for target in targets:
-                t_id = getattr(target, 'id', None)
-                if not t_id:
-                    continue
-                try:
-                    t_ctx, t_ep, _ = ep_service.workspace(server, database_target_id=t_id)
-                    t_binding = ep_service.provider_registry.resolve(t_ctx)
-                    t_provider = t_binding.instance
-                    t_route = dict(t_ep['route'])
-                    if (t_route.get('database') or '').strip():
-                        raw_conn = t_provider.client._connect({'route': t_route})
-                        context = t_ctx
-                        provider = t_provider
-                        route = t_route
-                        break
-                except Exception:
-                    continue
-            if raw_conn is None:
-                for cand in provider._resolve_server_security_database_candidates(route):
-                    try:
-                        cand_route = {**route, 'database': cand}
-                        raw_conn = provider.client._connect({'route': cand_route})
-                        route = cand_route
-                        break
-                    except Exception:
-                        continue
-            if raw_conn is None:
-                svc_route = {k: v for k, v in route.items() if k != 'database'}
-                raw_conn = provider.client._connect({'route': svc_route})
-                route = svc_route
-        else:
-            raw_conn = provider.client._connect({'route': route})
+        raw_conn = provider.client._connect({'route': route})
         try:
             if info['engine_id'] in {'mysql', 'mariadb', 'tidb', 'dolt'}:
                 try:
                     raw_conn.autocommit = True
                 except Exception:
                     pass
-            if (
-                info['engine_id'] == 'firebird'
-                and not callable(getattr(raw_conn, 'cursor', None))
-                and hasattr(raw_conn, 'user')
-            ):
-                yield self._wrap_firebird_service_connection(raw_conn, route)
-            else:
-                yield self._wrap_dbapi_connection(raw_conn, info['engine_id'], write=write)
+            yield self._wrap_dbapi_connection(raw_conn, info['engine_id'], write=write)
             if write and self.workspace_service is not None:
                 try:
                     self.workspace_service.resource_service.invalidate(context)
                 except Exception:
                     pass
         finally:
-            if not write and info['engine_id'] == 'firebird':
-                try:
-                    tx = getattr(raw_conn, 'main_transaction', None)
-                    if tx is not None and tx.is_active() is True:
-                        raw_conn.rollback()
-                except Exception:
-                    pass
             forget = getattr(provider.client, '_forget_and_close', None)
             if callable(forget):
                 forget(raw_conn)
             else:
                 raw_conn.close()
 
-    @staticmethod
-    def _wrap_firebird_service_connection(srv_conn: Any, route: Mapping[str, Any]):
-        """Adapt a Firebird Services Manager (`service_mgr`) handle when no `.fdb` target exists."""
-        eff_user = str(route.get('user') or 'SYSDBA').strip()
-        eff_role = str(route.get('role') or '').strip()
-
-        def svc_query_fn(sql: str, params: tuple | list = ()) -> list[dict[str, Any]]:
-            upper_sql = sql.upper()
-            if 'FROM RDB$DATABASE' in upper_sql:
-                return [{'u': eff_user, 'r': eff_role}]
-            if 'FROM SEC$USERS' in upper_sql:
-                out = []
-                for uinfo in srv_conn.user.get_all() or ():
-                    uname = str(getattr(uinfo, 'user_name', '') or '').strip()
-                    if not uname:
-                        continue
-                    out.append({
-                        'uname': uname,
-                        'plugin': None,
-                        'first_name': getattr(uinfo, 'first_name', None) or '',
-                        'middle_name': getattr(uinfo, 'middle_name', None) or '',
-                        'last_name': getattr(uinfo, 'last_name', None) or '',
-                        'active': True,
-                        'is_admin': bool(getattr(uinfo, 'admin', False)),
-                        'description': '',
-                    })
-                return out
-            return []
-
-        def svc_exec_fn(_statements: list[str]) -> None:
-            raise SecurityAuthorityError(
-                'Direct SQL DCL requires an attached database; use Services Manager user lifecycle.'
-            )
-
-        svc_exec_fn._firebird_service_conn = srv_conn  # type: ignore[attr-defined]
-        return svc_query_fn, svc_exec_fn
 
     @staticmethod
     def _wrap_dbapi_connection(raw_conn: Any, engine_id: str, *, write: bool = False):
@@ -1353,7 +1044,7 @@ class SecurityAuthorityHost:
             try:
                 for stmt in statements:
                     cur.execute(stmt)
-                if write and engine_id in {'firebird', 'postgresql', 'cockroachdb', 'yugabytedb'}:
+                if write and engine_id in {'postgresql', 'cockroachdb', 'yugabytedb'}:
                     commit = getattr(raw_conn, 'commit', None)
                     if callable(commit):
                         commit()
@@ -1375,6 +1066,7 @@ class SecurityAuthorityHost:
     # ------------------------------------------------------------------
     def get_principals(self, sid: int, database_target_id: str | None, scope: str) -> dict[str, Any]:
         info = self._resolve_target_info(sid)
+        _refuse_provider_managed(info['engine_id'])
         engine_id = info['engine_id']
         fam = _dialect_family(engine_id)
         norm_scope = 'database' if scope == 'database' else 'server'
@@ -1400,184 +1092,12 @@ class SecurityAuthorityHost:
             }
 
         with self._open_connection(info, database_target_id, write=False) as (query_fn, _exec_fn):
-            if fam == 'firebird':
-                return self._collect_firebird_principals(info, query_fn, norm_scope)
             if fam == 'postgresql':
                 return self._collect_postgresql_principals(engine_id, query_fn, norm_scope)
             if fam in {'mysql', 'mariadb'}:
                 return self._collect_mysql_family_principals(engine_id, fam == 'mariadb', query_fn, norm_scope)
         raise SecurityAuthorityError(f'Unsupported engine: {engine_id}')
 
-    def _collect_firebird_principals(
-        self, info: Mapping[str, Any], query_fn: Callable, scope: str
-    ) -> dict[str, Any]:
-        embedded = info.get('route_kind') == 'embedded_file'
-        eff_rows = query_fn('SELECT TRIM(TRAILING FROM CURRENT_USER) AS u, TRIM(TRAILING FROM CURRENT_ROLE) AS r FROM RDB$DATABASE')
-        effective_user = str(eff_rows[0]['u']).strip() if eff_rows else ''
-        effective_role = str(eff_rows[0]['r']).strip() if eff_rows else ''
-        is_dba = effective_user.upper() == 'SYSDBA' or effective_role.upper() == 'RDB$ADMIN'
-
-        visibility_state = 'full'
-        visibility_message = ''
-
-        # Read role memberships from RDB$USER_PRIVILEGES
-        user_memberships: dict[str, list[dict[str, Any]]] = {}
-        role_members: dict[str, list[dict[str, Any]]] = {}
-        role_member_of: dict[str, list[dict[str, Any]]] = {}
-        try:
-            m_rows = query_fn(
-                "SELECT TRIM(TRAILING FROM RDB$USER) AS grantee, "
-                "TRIM(TRAILING FROM RDB$RELATION_NAME) AS role_name, "
-                "TRIM(TRAILING FROM RDB$FIELD_NAME) AS def_flag, "
-                "RDB$GRANT_OPTION AS grant_opt, RDB$USER_TYPE AS utype "
-                "FROM RDB$USER_PRIVILEGES "
-                "WHERE RDB$PRIVILEGE = 'M' AND RDB$OBJECT_TYPE = 13 "
-                "ORDER BY 1, 2"
-            )
-            for mr in m_rows:
-                grantee = str(mr.get('grantee') or '').strip()
-                rname = str(mr.get('role_name') or '').strip()
-                adm = bool(mr.get('grant_opt') in (1, 2))
-                is_def = bool(str(mr.get('def_flag') or '').strip())
-                utype = mr.get('utype')
-                entry = {
-                    'role': rname,
-                    'admin_option': adm,
-                    'default_role': is_def,
-                    'inherit_option': True,
-                    'set_option': True,
-                }
-                if utype == 13:
-                    role_member_of.setdefault(grantee, []).append(entry)
-                    role_members.setdefault(rname, []).append({
-                        'principal': grantee,
-                        'principal_type': 'role',
-                        'admin_option': adm,
-                    })
-                else:
-                    user_memberships.setdefault(grantee, []).append(entry)
-                    role_members.setdefault(rname, []).append({
-                        'principal': grantee,
-                        'principal_type': 'user',
-                        'admin_option': adm,
-                    })
-        except Exception:
-            pass
-
-        users_out: list[dict[str, Any]] = []
-        if not embedded:
-            attr_map: dict[tuple[str, str], list[dict[str, str]]] = {}
-            try:
-                for ar in query_fn(
-                    'SELECT TRIM(TRAILING FROM SEC$USER_NAME) AS u, '
-                    'TRIM(TRAILING FROM SEC$PLUGIN) AS p, '
-                    'TRIM(TRAILING FROM SEC$KEY) AS k, SEC$VALUE AS v '
-                    'FROM SEC$USER_ATTRIBUTES ORDER BY 1, 2, 3'
-                ):
-                    uk = (str(ar.get('u') or '').strip(), str(ar.get('p') or '').strip())
-                    attr_map.setdefault(uk, []).append({
-                        'name': str(ar.get('k') or '').strip(),
-                        'value': str(ar.get('v') or ''),
-                    })
-            except Exception:
-                pass
-            try:
-                u_rows = query_fn(
-                    'SELECT TRIM(TRAILING FROM SEC$USER_NAME) AS uname, '
-                    'TRIM(TRAILING FROM SEC$PLUGIN) AS plugin, '
-                    'SEC$FIRST_NAME AS first_name, SEC$MIDDLE_NAME AS middle_name, '
-                    'SEC$LAST_NAME AS last_name, SEC$ACTIVE AS active, '
-                    'SEC$ADMIN AS is_admin, SEC$DESCRIPTION AS description '
-                    'FROM SEC$USERS ORDER BY 1, 2'
-                )
-                for ur in u_rows:
-                    uname = str(ur.get('uname') or '').strip()
-                    plug = str(ur.get('plugin') or '').strip() or None
-                    adm = bool(ur.get('is_admin'))
-                    if uname.upper() == effective_user.upper() and adm:
-                        is_dba = True
-                    tags = attr_map.get((uname, plug or ''), [])
-                    users_out.append({
-                        'id': f'{uname}:{plug}' if plug else uname,
-                        'name': uname,
-                        'host': None,
-                        'plugin': plug,
-                        'active': True if ur.get('active') is None else bool(ur.get('active')),
-                        'locked': False if ur.get('active') is None else not bool(ur.get('active')),
-                        'is_admin': adm,
-                        'first_name': str(ur.get('first_name') or ''),
-                        'middle_name': str(ur.get('middle_name') or ''),
-                        'last_name': str(ur.get('last_name') or ''),
-                        'valid_until': None,
-                        'connection_limit': -1,
-                        'comment': str(ur.get('description') or ''),
-                        'attributes': {t['name']: t['value'] for t in tags},
-                        'tags': tags,
-                        'member_of': user_memberships.get(uname, []),
-                        'system_privileges': ['RDB$ADMIN'] if adm else [],
-                    })
-                if not is_dba:
-                    visibility_state = 'limited'
-                    visibility_message = (
-                        'Non-administrator Firebird sessions only observe their own SEC$USERS account.'
-                    )
-            except Exception as exc:
-                if _is_permission_denied_error(exc):
-                    visibility_state = 'denied'
-                    visibility_message = 'Current session is not authorized to read SEC$USERS.'
-                else:
-                    visibility_state = 'limited'
-                    visibility_message = f'SEC$USERS is unavailable in this attachment ({type(exc).__name__}).'
-
-        roles_out: list[dict[str, Any]] = []
-        try:
-            r_rows = query_fn(
-                'SELECT TRIM(TRAILING FROM RDB$ROLE_NAME) AS rname, '
-                'TRIM(TRAILING FROM RDB$OWNER_NAME) AS owner_name, '
-                'RDB$DESCRIPTION AS description, RDB$SYSTEM_PRIVILEGES AS sys_privs, '
-                'COALESCE(RDB$SYSTEM_FLAG, 0) AS sys_flag '
-                'FROM RDB$ROLES ORDER BY 1'
-            )
-            for rr in r_rows:
-                rname = str(rr.get('rname') or '').strip()
-                if int(rr.get('sys_flag') or 0) != 0 and rname.upper() != 'RDB$ADMIN':
-                    continue
-                sys_p = _decode_firebird_role_privs(rr.get('sys_privs'))
-                roles_out.append({
-                    'id': rname,
-                    'name': rname,
-                    'host': None,
-                    'can_login': False,
-                    'is_admin': rname.upper() == 'RDB$ADMIN',
-                    'owner': str(rr.get('owner_name') or '').strip(),
-                    'comment': str(rr.get('description') or ''),
-                    'members': role_members.get(rname, []),
-                    'member_of': role_member_of.get(rname, []),
-                    'system_privileges': sys_p,
-                })
-        except Exception as exc:
-            if _is_permission_denied_error(exc):
-                visibility_state = 'denied'
-                visibility_message = 'Current session is not authorized to read RDB$ROLES.'
-
-        return {
-            'engine': 'firebird',
-            'scope': scope,
-            'supported': True,
-            'capabilities': {
-                'effective_user': effective_user,
-                'can_manage_users': bool(is_dba and not embedded),
-                'can_manage_roles': True,
-                'can_grant': True,
-                'users_at_server_scope': not embedded,
-                'roles_at_server_scope': False,
-                'visibility_state': visibility_state,
-                'visibility_message': visibility_message,
-            },
-            'users': users_out,
-            'roles': roles_out,
-            'available_system_privileges': list(FIREBIRD_SYSTEM_PRIVILEGES),
-        }
 
     def _collect_postgresql_principals(
         self, engine_id: str, query_fn: Callable, scope: str
@@ -1971,6 +1491,7 @@ class SecurityAuthorityHost:
     def plan_principal(self, body: Mapping[str, Any]) -> dict[str, Any]:
         sid = int(body.get('sid') or 0)
         info = self._resolve_target_info(sid)
+        _refuse_provider_managed(info['engine_id'])
         compiled = compile_principal_plan(
             info['engine_id'],
             str(body.get('principal_kind') or 'role'),
@@ -1987,6 +1508,7 @@ class SecurityAuthorityHost:
     def apply_principal(self, body: Mapping[str, Any]) -> dict[str, Any]:
         sid = int(body.get('sid') or 0)
         info = self._resolve_target_info(sid)
+        _refuse_provider_managed(info['engine_id'])
         compiled = compile_principal_plan(
             info['engine_id'],
             str(body.get('principal_kind') or 'role'),
@@ -1995,39 +1517,10 @@ class SecurityAuthorityHost:
             body.get('draft'),
         )
         db_target = body.get('database_target_id')
-        if body.get('scope') == 'server' and info['engine_id'] != 'firebird':
+        if body.get('scope') == 'server':
             db_target = None
         with self._open_connection(info, db_target, write=True) as (_query_fn, exec_fn):
-            svc_conn = getattr(exec_fn, '_firebird_service_conn', None)
-            if svc_conn is not None and str(body.get('principal_kind') or 'user').lower() == 'user':
-                op = str(body.get('operation') or 'create').lower()
-                draft = body.get('draft') or {}
-                target = body.get('target') or {}
-                uname = str((target.get('name') if op != 'create' else draft.get('name')) or '').strip()
-                if op == 'create':
-                    svc_conn.user.add(
-                        user_name=uname,
-                        password=str(draft.get('password') or ''),
-                        first_name=draft.get('first_name') or None,
-                        middle_name=draft.get('middle_name') or None,
-                        last_name=draft.get('last_name') or None,
-                        admin=bool(draft.get('is_admin', False)),
-                    )
-                elif op == 'alter':
-                    svc_conn.user.update(
-                        uname,
-                        password=draft.get('password') or None,
-                        first_name=draft.get('first_name') if 'first_name' in draft else None,
-                        middle_name=draft.get('middle_name') if 'middle_name' in draft else None,
-                        last_name=draft.get('last_name') if 'last_name' in draft else None,
-                        admin=bool(draft['is_admin']) if 'is_admin' in draft else None,
-                    )
-                elif op == 'drop':
-                    svc_conn.user.delete(uname)
-                else:
-                    raise SecurityAuthorityError(f'Unsupported operation: {op}')
-            else:
-                exec_fn(compiled['exec_statements'])
+            exec_fn(compiled['exec_statements'])
         return {
             'applied': True,
             'preview_sql': compiled['preview_sql'],
@@ -2040,6 +1533,7 @@ class SecurityAuthorityHost:
     def get_object_grants(self, params: Mapping[str, Any]) -> dict[str, Any]:
         sid = int(params.get('sid') or 0)
         info = self._resolve_target_info(sid)
+        _refuse_provider_managed(info['engine_id'])
         engine_id = info['engine_id']
         fam = _dialect_family(engine_id)
         obj_kind = str(params.get('object_kind') or 'table').strip().lower()
@@ -2086,10 +1580,6 @@ class SecurityAuthorityHost:
         supports_col_privs = bool(COLUMN_PRIVILEGE_SUPPORT.get(fam, {}).get(obj_kind))
 
         with self._open_connection(info, db_target, write=False) as (query_fn, _exec_fn):
-            if fam == 'firebird':
-                return self._collect_firebird_object_grants(
-                    info, query_fn, obj_kind, schema, obj_name, supported_privs, supports_col_privs
-                )
             if fam == 'postgresql':
                 return self._collect_postgresql_object_grants(
                     engine_id, query_fn, obj_kind, schema, obj_name, supported_privs, supports_col_privs
@@ -2100,98 +1590,6 @@ class SecurityAuthorityHost:
                 )
         raise SecurityAuthorityError(f'Unsupported engine: {engine_id}')
 
-    def _collect_firebird_object_grants(
-        self,
-        info: Mapping[str, Any],
-        query_fn: Callable,
-        obj_kind: str,
-        schema: str | None,
-        obj_name: str,
-        supported_privs: list[str],
-        supports_col_privs: bool,
-    ) -> dict[str, Any]:
-        columns: list[str] = []
-        if obj_kind in {'table', 'view'} and obj_name:
-            try:
-                c_rows = query_fn(
-                    'SELECT TRIM(TRAILING FROM RDB$FIELD_NAME) AS cname '
-                    'FROM RDB$RELATION_FIELDS WHERE TRIM(TRAILING FROM RDB$RELATION_NAME) = ? '
-                    'ORDER BY RDB$FIELD_POSITION',
-                    (obj_name,),
-                )
-                columns = [str(r['cname']).strip() for r in c_rows if r.get('cname')]
-            except Exception:
-                pass
-
-        principals: list[dict[str, Any]] = [{'name': 'PUBLIC', 'kind': 'special'}]
-        if info.get('route_kind') != 'embedded_file':
-            try:
-                for ur in query_fn('SELECT DISTINCT TRIM(TRAILING FROM SEC$USER_NAME) AS u FROM SEC$USERS ORDER BY 1'):
-                    if ur.get('u'):
-                        principals.append({'name': str(ur['u']).strip(), 'kind': 'user'})
-            except Exception:
-                pass
-        try:
-            for rr in query_fn('SELECT TRIM(TRAILING FROM RDB$ROLE_NAME) AS r FROM RDB$ROLES WHERE COALESCE(RDB$SYSTEM_FLAG, 0) = 0 ORDER BY 1'):
-                if rr.get('r'):
-                    principals.append({'name': str(rr['r']).strip(), 'kind': 'role'})
-        except Exception:
-            pass
-
-        fb_priv_map = {
-            'S': 'SELECT', 'I': 'INSERT', 'U': 'UPDATE',
-            'D': 'DELETE', 'R': 'REFERENCES', 'X': 'EXECUTE', 'G': 'USAGE',
-        }
-        fb_obj_type = {
-            'table': 0, 'view': 0, 'procedure': 5, 'function': 15,
-            'package': 18, 'sequence': 14, 'database': 21,
-        }.get(obj_kind, 0)
-        target_rel = 'SQL$DATABASE' if obj_kind == 'database' else obj_name
-
-        raw_grants: list[dict[str, Any]] = []
-        g_rows = query_fn(
-            'SELECT TRIM(TRAILING FROM RDB$USER) AS grantee, '
-            'TRIM(TRAILING FROM RDB$FIELD_NAME) AS fname, '
-            'TRIM(TRAILING FROM RDB$PRIVILEGE) AS priv, '
-            'TRIM(TRAILING FROM RDB$GRANTOR) AS grantor, '
-            'RDB$GRANT_OPTION AS gopt, RDB$USER_TYPE AS utype '
-            'FROM RDB$USER_PRIVILEGES '
-            'WHERE TRIM(TRAILING FROM RDB$RELATION_NAME) = ? AND RDB$OBJECT_TYPE = ? '
-            'ORDER BY 1, 3',
-            (target_rel, fb_obj_type),
-        )
-        for gr in g_rows:
-            code = str(gr.get('priv') or '').strip().upper()
-            pname = fb_priv_map.get(code, code)
-            grantee = str(gr.get('grantee') or '').strip()
-            utype = gr.get('utype')
-            g_kind = 'special' if grantee.upper() == 'PUBLIC' else ('role' if utype == 13 else 'user')
-            col_name = str(gr.get('fname') or '').strip() or None
-            raw_grants.append({
-                'grantee': grantee,
-                'grantee_kind': g_kind,
-                'grantee_host': None,
-                'grantor': str(gr.get('grantor') or '').strip(),
-                'privilege': pname,
-                'grant_option': bool(gr.get('gopt') in (1, 2)),
-                'column': col_name,
-            })
-
-        return {
-            'engine': 'firebird',
-            'supported': True,
-            'object': {'kind': obj_kind, 'schema': None, 'name': obj_name},
-            'capabilities': {
-                'can_edit': True,
-                'reason': '',
-                'supported_privileges': supported_privs,
-                'supports_grant_option': obj_kind != 'database',
-                'supports_column_privileges': supports_col_privs,
-                'columns': columns,
-            },
-            'principals': principals,
-            'grants': normalize_grants_matrix(raw_grants, supported_privs),
-        }
 
     def _collect_postgresql_object_grants(
         self,
@@ -2478,6 +1876,7 @@ class SecurityAuthorityHost:
     def plan_object_grants(self, body: Mapping[str, Any]) -> dict[str, Any]:
         sid = int(body.get('sid') or 0)
         info = self._resolve_target_info(sid)
+        _refuse_provider_managed(info['engine_id'])
         return compile_object_grants_plan(
             info['engine_id'],
             str(body.get('object_kind') or 'table'),
@@ -2490,6 +1889,7 @@ class SecurityAuthorityHost:
     def apply_object_grants(self, body: Mapping[str, Any]) -> dict[str, Any]:
         sid = int(body.get('sid') or 0)
         info = self._resolve_target_info(sid)
+        _refuse_provider_managed(info['engine_id'])
         compiled = compile_object_grants_plan(
             info['engine_id'],
             str(body.get('object_kind') or 'table'),

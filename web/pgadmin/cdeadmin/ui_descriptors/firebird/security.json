@@ -75,7 +75,30 @@
       ]
     },
     "grant_option": true,
-    "granted_by": true
+    "granted_by": true,
+    "listing": {
+      "object_field": "object_name",
+      "grantee_field": "grantee",
+      "grantee_kind_field": "user_type",
+      "grantee_kinds": {
+        "8": "USER",
+        "13": "ROLE"
+      },
+      "privilege_field": "privilege",
+      "privilege_codes": {
+        "S": "SELECT",
+        "I": "INSERT",
+        "U": "UPDATE",
+        "D": "DELETE",
+        "R": "REFERENCES",
+        "X": "EXECUTE",
+        "G": "USAGE"
+      },
+      "column_field": "field",
+      "grant_option_field": "grant_option",
+      "grant_option_equals": 1,
+      "grantor_field": "grantor"
+    }
   },
   "requires": {
     "inspect": "verified",

@@ -16,7 +16,7 @@ import {Checkbox, Select} from '../primitives/Choice';
 import {ScratchScrollArea} from '../base/ScratchScrollArea';
 import {Dialog} from '../overlays/Dialog';
 import UnifiedDataGrid from '../data/UnifiedDataGrid';
-import ObjectPermissionsMatrix from '../security/ObjectPermissionsMatrix';
+import ObjectPermissionsMatrix from '../security/ObjectGrantsSurface';
 import {extractNodeQueryParams} from './ObjectDashboardSurface';
 
 const NON_GRANT_ENGINES = new Set(['sqlite', 'duckdb']);

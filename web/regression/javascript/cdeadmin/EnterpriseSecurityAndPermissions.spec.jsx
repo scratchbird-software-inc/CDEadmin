@@ -9,10 +9,10 @@
 
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import Theme from 'sources/Theme';
+import PrincipalSecurityManager from '../../../pgadmin/static/js/cdeadmin_ui/security/PrincipalSecurityManager';
 import ObjectPermissionsMatrix, {
   computeGrantChanges,
 } from '../../../pgadmin/static/js/cdeadmin_ui/security/ObjectPermissionsMatrix';
-import PrincipalSecurityManager from '../../../pgadmin/static/js/cdeadmin_ui/security/PrincipalSecurityManager';
 import {buildNavigatorSelectionConfig} from '../../../pgadmin/static/js/BrowserComponent';
 
 describe('Enterprise Security Manager, Per-Object Permissions Matrix & Standard TiB Sections', () => {
@@ -224,45 +224,21 @@ describe('Enterprise Security Manager, Per-Object Permissions Matrix & Standard 
     });
   });
 
-  describe('PrincipalSecurityManager', () => {
-    it('loads server-level Firebird users, displays current attributes/memberships, and previews redacted SQL', async () => {
+  describe('PrincipalSecurityManager (engines whose security descriptor is still a draft)', () => {
+    it('loads MySQL accounts, opens the requested one and previews its redacted SQL', async () => {
       const fetchMock = jest.fn(async (url) => {
         if (String(url).includes('/cdeadmin/api/security/principal/plan')) {
-          return {
-            ok: true,
-            json: async () => ({
-              preview_sql: 'ALTER USER "ANALYST" INACTIVE;',
-            }),
-          };
+          return {ok: true, json: async () => ({preview_sql: 'ALTER USER `app`@`%` ACCOUNT LOCK;'})};
         }
         return {
           ok: true,
           json: async () => ({
-            engine: 'firebird',
-            capabilities: {
-              effective_user: 'SYSDBA',
-              can_manage_users: true,
-              can_manage_roles: false,
-            },
+            engine: 'mysql',
+            capabilities: {effective_user: 'root', can_manage_users: true, can_manage_roles: true},
             users: [
-              {
-                id: 'user:SYSDBA',
-                name: 'SYSDBA',
-                plugin: 'Srp',
-                active: true,
-                is_admin: true,
-              },
-              {
-                id: 'user:ANALYST',
-                name: 'ANALYST',
-                plugin: 'Srp',
-                active: true,
-                is_admin: false,
-                first_name: 'Ada',
-                last_name: 'Lovelace',
-                attributes: [{key: 'dept', value: 'finance'}],
-                member_of: [],
-              },
+              {id: 'user:root@localhost', name: 'root', host: 'localhost', plugin: 'caching_sha2_password', locked: false},
+              {id: 'user:app@%', name: 'app', host: '%', plugin: 'caching_sha2_password', locked: false,
+                comment: 'API worker', member_of: []},
             ],
             roles: [],
           }),
@@ -273,27 +249,25 @@ describe('Enterprise Security Manager, Per-Object Permissions Matrix & Standard 
       render(
         <Theme>
           <PrincipalSecurityManager
-            instanceId="sec-fb-srv"
+            instanceId="sec-my-srv"
             sid={1}
-            engine="firebird"
+            engine="mysql"
             scope="server"
             initialKind="user"
-            initialPrincipalId="user:ANALYST"
-            endpointLabel="Firebird 5.0 on localhost"
+            initialPrincipalId="user:app@%"
+            endpointLabel="MySQL 9.7 on localhost"
             fetchImpl={fetchMock}
           />
         </Theme>
       );
 
       await waitFor(() => {
-        expect(screen.getByDisplayValue('Ada')).toBeInTheDocument();
+        expect(screen.getByDisplayValue('API worker')).toBeInTheDocument();
       });
 
       fireEvent.click(screen.getByText('Preview SQL'));
       await waitFor(() => {
-        expect(
-          screen.getByText('ALTER USER "ANALYST" INACTIVE;')
-        ).toBeInTheDocument();
+        expect(screen.getByText('ALTER USER `app`@`%` ACCOUNT LOCK;')).toBeInTheDocument();
       });
     });
   });

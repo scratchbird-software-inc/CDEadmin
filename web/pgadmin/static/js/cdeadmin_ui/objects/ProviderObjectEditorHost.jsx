@@ -23,7 +23,7 @@ import {EmptyState} from '../feedback/EmptyState';
 import {Banner, ValidationMessage} from '../feedback/Indicators';
 import {ProgressOverlay} from '../feedback/ProgressOverlay';
 import ObjectEditor from './ObjectEditor';
-import ObjectPermissionsMatrix from '../security/ObjectPermissionsMatrix';
+import ObjectPermissionsMatrix from '../security/ObjectGrantsSurface';
 import {DescriptorClient, visualAdminCalls} from './DescriptorClient';
 import {buildOptionContext, kindForm, editorAvailable, versionSupportNotice, nativeEditorForm, nativeInitialValues} from './descriptors';
 import {Stack} from '../primitives/Layout';
@@ -280,6 +280,8 @@ export default function ProviderObjectEditorHost({api, endpointUrl, engine, vers
     cde_database_target_id: databaseTargetId,
     cde_resource_id: resourceId || resource?.resource_id,
     cde_resource_kind: resourceKind,
+    cde_workspace_url: endpointUrl,
+    verified_runtime_version: version,
     _id: resourceId || resource?.resource_id,
     label: displayName || resource?.display_name || resourceKind,
   };

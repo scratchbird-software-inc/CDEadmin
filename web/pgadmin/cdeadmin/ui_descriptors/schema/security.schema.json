@@ -242,6 +242,58 @@
         "default_privileges": {
           "type": "string",
           "description": "kind in capabilities.json holding default privileges, when the engine has them"
+        },
+        "listing": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "object_field",
+            "grantee_field",
+            "privilege_field",
+            "privilege_codes"
+          ],
+          "description": "how to read the grants on one object from the provider's grant_kind resources: which native field names the object, grantee, privilege and so on, and what each stored privilege code means",
+          "properties": {
+            "object_field": {
+              "type": "string",
+              "description": "native field holding the granted object's name"
+            },
+            "grantee_field": {
+              "type": "string"
+            },
+            "grantee_kind_field": {
+              "type": "string"
+            },
+            "grantee_kinds": {
+              "type": "object",
+              "description": "stored grantee type code to the provider's grantee kind value",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "privilege_field": {
+              "type": "string"
+            },
+            "privilege_codes": {
+              "type": "object",
+              "description": "stored privilege code to privilege name; a row whose code is not listed (memberships, DDL grants) is not an object grant",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "column_field": {
+              "type": "string"
+            },
+            "grant_option_field": {
+              "type": "string"
+            },
+            "grant_option_equals": {
+              "description": "the stored value that means the grant carries the grant option"
+            },
+            "grantor_field": {
+              "type": "string"
+            }
+          }
         }
       }
     },

@@ -16,7 +16,7 @@ import getApiInstance from '../../static/js/api_instance';
 import FormReference from '../../static/js/cdeadmin_ui/navigation/FormReference';
 import {resolveSectionIconKey} from '../../static/js/cdeadmin_ui/icons/registry';
 import {useProjectInstanceScope} from '../../static/js/cdeadmin_ui/shell/ProjectShell';
-import ObjectPermissionsMatrix from '../../static/js/cdeadmin_ui/security/ObjectPermissionsMatrix';
+import ObjectPermissionsMatrix from '../../static/js/cdeadmin_ui/security/ObjectGrantsSurface';
 import {isObjectPermissionsSupported} from '../../static/js/cdeadmin_ui/surfaces/ObjectPropertiesInspector';
 import {promptEndpointVerification} from '../../browser/static/js/ProviderObjectEditor';
 

@@ -462,43 +462,7 @@ def test_postgresql_cluster_role_password_redaction_and_acl_parsers():
 # ---------------------------------------------------------------------------
 
 
-def test_compile_principal_plan_across_firebird_postgresql_mysql_and_mariadb():
-    # Firebird user & role with system privileges
-    fb_u = compile_principal_plan(
-        'firebird',
-        'user',
-        'create',
-        None,
-        {
-            'name': 'ALICE',
-            'password': ' secret123 ',
-            'plugin': 'Srp',
-            'first_name': 'Alice',
-            'is_admin': False,
-            'tags': [{'name': 'team', 'value': 'ops'}],
-            'grant_roles': [{'role': 'CDEADMIN_OPERATOR', 'admin_option': True, 'default_role': True}],
-        },
-    )
-    assert '<redacted>' in fb_u['preview_sql']
-    assert 'secret123' not in fb_u['preview_sql']
-    assert any('secret123' in s for s in fb_u['exec_statements'])
-    assert 'GRANT DEFAULT "CDEADMIN_OPERATOR" TO USER "ALICE" WITH ADMIN OPTION' in fb_u['preview_sql']
-
-    fb_r = compile_principal_plan(
-        'firebird',
-        'role',
-        'create',
-        None,
-        {
-            'name': 'AUDITOR_ROLE',
-            'system_privileges': ['MONITOR_ANY_ATTACHMENT', 'TRACE_ANY_ATTACHMENT'],
-            'comment': 'Diagnostics role',
-            'grant_members': [{'principal': 'ALICE', 'principal_type': 'user', 'admin_option': False}],
-        },
-    )
-    assert 'CREATE ROLE "AUDITOR_ROLE" SET SYSTEM PRIVILEGES TO MONITOR_ANY_ATTACHMENT, TRACE_ANY_ATTACHMENT' in fb_r['preview_sql']
-    assert 'GRANT "AUDITOR_ROLE" TO USER "ALICE"' in fb_r['preview_sql']
-
+def test_compile_principal_plan_across_postgresql_mysql_and_mariadb():
     # PostgreSQL role create + alter
     pg_p = compile_principal_plan(
         'postgresql',
@@ -589,36 +553,6 @@ def test_compile_object_grants_and_strict_sql_injection_rejection():
         'REVOKE GRANT OPTION FOR DELETE ON TABLE "service"."customers" FROM "app_role"',
     ]
 
-    # Firebird table and database DDL grant
-    fb_g = compile_object_grants_plan(
-        'firebird',
-        'table',
-        None,
-        'INVOICES',
-        [
-            {
-                'action': 'grant',
-                'grantee': 'CDEADMIN_OPERATOR',
-                'grantee_kind': 'role',
-                'privileges': ['UPDATE'],
-                'columns': ['STATUS'],
-                'grant_option': False,
-            }
-        ],
-    )
-    assert fb_g['statements'] == [
-        'GRANT UPDATE ("STATUS") ON TABLE "INVOICES" TO ROLE "CDEADMIN_OPERATOR"'
-    ]
-
-    fb_db = compile_object_grants_plan(
-        'firebird',
-        'database',
-        None,
-        'app.fdb',
-        [{'action': 'grant', 'grantee': 'ALICE', 'grantee_kind': 'user', 'privileges': ['ALTER']}],
-    )
-    assert fb_db['statements'] == ['GRANT ALTER DATABASE TO USER "ALICE"']
-
     # MariaDB sequence & MySQL routine grants
     maria_seq = compile_object_grants_plan(
         'mariadb',
@@ -651,14 +585,6 @@ def test_compile_object_grants_and_strict_sql_injection_rejection():
         quote_identifier('bad\nident', 'mysql')
     with pytest.raises(SecurityAuthorityError):
         quote_literal('nul\x00byte', 'postgresql')
-    with pytest.raises(SecurityAuthorityError):
-        compile_object_grants_plan(
-            'firebird',
-            'table',
-            None,
-            'INVOICES',
-            [{'action': 'grant', 'grantee': 'ALICE', 'grantee_kind': 'user', 'privileges': ['SELECT'], 'columns': ['ID']}],
-        )
     with pytest.raises(SecurityAuthorityError):
         compile_principal_plan(
             'postgresql',
@@ -755,89 +681,7 @@ def test_flask_security_endpoints_sqlite_duckdb_and_four_sql_engines_roundtrip()
         )
         assert bad_plan.status_code == 400
 
-    # 2. Firebird 5 round-trip
-    fb_executed: list[str] = []
-
-    def fb_handler(sql: str, params: tuple):
-        if 'FROM RDB$DATABASE' in sql:
-            return ('u', 'r'), [('SYSDBA', 'NONE')]
-        if "RDB$PRIVILEGE = 'M'" in sql:
-            return ('grantee', 'role_name', 'def_flag', 'grant_opt', 'utype'), [
-                ('SYSDBA', 'CDEADMIN_OPERATOR', 'D', 1, 8)
-            ]
-        if 'FROM SEC$USER_ATTRIBUTES' in sql:
-            return ('u', 'p', 'k', 'v'), [('SYSDBA', 'Srp', 'env', 'prod')]
-        if 'FROM SEC$USERS' in sql:
-            if 'DISTINCT' in sql:
-                return ('u',), [('SYSDBA',)]
-            return (
-                'uname', 'plugin', 'first_name', 'middle_name',
-                'last_name', 'active', 'is_admin', 'description',
-            ), [('SYSDBA', 'Srp', 'System', '', 'Admin', True, True, 'DBA account')]
-        if 'FROM RDB$ROLES' in sql:
-            if 'RDB$SYSTEM_FLAG' in sql and 'sys_privs' not in sql:
-                return ('r',), [('CDEADMIN_OPERATOR',)]
-            return ('rname', 'owner_name', 'description', 'sys_privs', 'sys_flag'), [
-                ('CDEADMIN_OPERATOR', 'SYSDBA', 'Ops role', b'\x02\x00\x00\x00\x00\x00\x00\x00', 0)
-            ]
-        if 'FROM RDB$RELATION_FIELDS' in sql:
-            return ('cname',), [('ID',), ('AMOUNT',)]
-        if 'FROM RDB$USER_PRIVILEGES' in sql:
-            return ('grantee', 'fname', 'priv', 'grantor', 'gopt', 'utype'), [
-                ('CDEADMIN_OPERATOR', None, 'S', 'SYSDBA', 0, 13),
-                ('CDEADMIN_OPERATOR', 'AMOUNT', 'U', 'SYSDBA', 1, 13),
-            ]
-        return (), []
-
-    host.register_test_server(
-        201, 'firebird', lambda _db: _FakeConnection(fb_handler, fb_executed), route_kind='network'
-    )
-
-    fb_p = client.get('/cdeadmin/api/security/principals?sid=201&scope=server').get_json()
-    assert fb_p['supported'] is True
-    assert fb_p['capabilities']['users_at_server_scope'] is True
-    assert fb_p['capabilities']['roles_at_server_scope'] is False
-    assert fb_p['users'][0]['name'] == 'SYSDBA'
-    assert fb_p['users'][0]['attributes'] == {'env': 'prod'}
-    assert fb_p['roles'][0]['name'] == 'CDEADMIN_OPERATOR'
-    assert 'USER_MANAGEMENT' in fb_p['roles'][0]['system_privileges']
-
-    fb_plan = client.post(
-        '/cdeadmin/api/security/principal/plan',
-        json={
-            'sid': 201,
-            'scope': 'server',
-            'principal_kind': 'user',
-            'operation': 'create',
-            'draft': {'name': 'NEW_FB_USER', 'password': 'RawPassword!1', 'plugin': 'Srp'},
-        },
-    ).get_json()
-    assert '<redacted>' in fb_plan['preview_sql']
-    assert 'RawPassword!1' not in fb_plan['preview_sql']
-
-    fb_apply = client.post(
-        '/cdeadmin/api/security/principal/apply',
-        json={
-            'sid': 201,
-            'scope': 'server',
-            'principal_kind': 'user',
-            'operation': 'create',
-            'draft': {'name': 'NEW_FB_USER', 'password': 'RawPassword!1', 'plugin': 'Srp'},
-        },
-    ).get_json()
-    assert fb_apply['applied'] is True
-    assert any("PASSWORD 'RawPassword!1'" in s for s in fb_executed)
-
-    fb_og = client.get(
-        '/cdeadmin/api/security/object_grants?sid=201&object_kind=table&object_name=LEDGER'
-    ).get_json()
-    assert fb_og['capabilities']['columns'] == ['ID', 'AMOUNT']
-    op_grant = fb_og['grants'][0]
-    assert op_grant['grantee'] == 'CDEADMIN_OPERATOR'
-    assert op_grant['privileges']['SELECT']['granted'] is True
-    assert op_grant['privileges']['UPDATE']['columns'] == ['AMOUNT']
-
-    # 3. PostgreSQL 18 round-trip
+    # 2. PostgreSQL 18 round-trip
     pg_executed: list[str] = []
 
     def pg_handler(sql: str, params: tuple):
@@ -956,7 +800,7 @@ def test_flask_security_endpoints_sqlite_duckdb_and_four_sql_engines_roundtrip()
     assert maria_p['users'][0]['member_of'][0]['default_role'] is True
 
 
-def test_non_dba_graceful_degradation_across_mysql_postgresql_and_firebird():
+def test_non_dba_graceful_degradation_across_mysql_and_postgresql():
     app, host = _build_test_security_app()
     client = app.test_client()
 
@@ -997,24 +841,6 @@ def test_non_dba_graceful_degradation_across_mysql_postgresql_and_firebird():
     body_pg = res_pg.get_json()
     assert body_pg['capabilities']['visibility_state'] == 'limited'
     assert body_pg['capabilities']['can_manage_roles'] is False
-
-    # Firebird non-admin user -> HTTP 200 visibility_state='limited'
-    def fb_non_dba(sql: str, params: tuple):
-        if 'FROM RDB$DATABASE' in sql:
-            return ('u', 'r'), [('ALICE', 'NONE')]
-        if 'FROM SEC$USERS' in sql:
-            return (
-                'uname', 'plugin', 'first_name', 'middle_name',
-                'last_name', 'active', 'is_admin', 'description',
-            ), [('ALICE', 'Srp', 'Alice', '', '', True, False, '')]
-        return (), []
-
-    host.register_test_server(303, 'firebird', lambda _db: _FakeConnection(fb_non_dba, []), route_kind='network')
-    res_fb = client.get('/cdeadmin/api/security/principals?sid=303&scope=server')
-    assert res_fb.status_code == 200
-    body_fb = res_fb.get_json()
-    assert body_fb['capabilities']['visibility_state'] == 'limited'
-    assert body_fb['capabilities']['can_manage_users'] is False
 
 
 def test_object_dashboard_properties_surfaces_normalized_permissions(monkeypatch, tmp_path):
@@ -1102,279 +928,46 @@ def test_object_dashboard_properties_surfaces_normalized_permissions(monkeypatch
     assert any(sec['id'] == 'privileges' for sec in payload['sections'])
 
 
-def test_live_firebird_embedded_role_and_object_grants_roundtrip(tmp_path):
-    """Execute real Firebird 5 DCL via `/cdeadmin/api/security` against a temporary database."""
-    fbd = _load_firebird_driver(tmp_path / 'fb_locks')
-    fdb_file = tmp_path / 'live_security_verify.fdb'
+def test_an_engine_administered_through_its_provider_is_refused_by_every_legacy_endpoint():
+    """Decision 21: security.json status complete means one writer, the provider's operations.
 
-    conn = fbd.create_database(str(fdb_file), user='SYSDBA', charset='UTF8')
-    try:
-        cur = conn.cursor()
-        cur.execute(
-            'CREATE TABLE "CUSTOMERS" ("CUSTOMER_ID" INTEGER NOT NULL PRIMARY KEY, "NAME" VARCHAR(80), "REGION" VARCHAR(40))'
-        )
-        conn.commit()
-        cur.close()
-    finally:
-        conn.close()
-
+    The refusal follows the descriptor, not an engine name, on all six host methods
+    and over HTTP; an engine whose descriptor is still a draft stays on this path.
+    """
     app, host = _build_test_security_app()
-    host.register_test_server(
-        401,
-        'firebird',
-        lambda _db: fbd.connect(str(fdb_file), user='SYSDBA', charset='UTF8'),
-        route_kind='embedded_file',
-    )
     client = app.test_client()
+    host.register_test_server(601, 'firebird', route_kind='network')
+    host.register_test_server(602, 'postgresql', route_kind='network')
+    for sid, status in ((601, 'complete'), (602, 'draft')):
+        assert UIDescriptorService().engine(host._resolve_target_info(sid)['engine_id'])['security']['status'] == status
 
-    # 1. Create a real SQL ROLE with system privileges and comment on live Firebird 5
-    apply_role = client.post(
-        '/cdeadmin/api/security/principal/apply',
-        json={
-            'sid': 401,
-            'scope': 'database',
-            'principal_kind': 'role',
-            'operation': 'create',
-            'draft': {
-                'name': 'CDEADMIN_OPERATOR',
-                'system_privileges': ['MONITOR_ANY_ATTACHMENT'],
-                'comment': 'Live verified role',
-            },
-        },
+    calls = (
+        lambda: host.get_principals(601, None, 'server'),
+        lambda: host.plan_principal({'sid': 601, 'principal_kind': 'role', 'operation': 'create', 'draft': {'name': 'x'}}),
+        lambda: host.apply_principal({'sid': 601, 'principal_kind': 'role', 'operation': 'create', 'draft': {'name': 'x'}}),
+        lambda: host.get_object_grants({'sid': 601, 'object_kind': 'table', 'object_name': 'T'}),
+        lambda: host.plan_object_grants({'sid': 601, 'object_kind': 'table', 'object_name': 'T', 'changes': []}),
+        lambda: host.apply_object_grants({'sid': 601, 'object_kind': 'table', 'object_name': 'T', 'changes': []}),
     )
-    assert apply_role.status_code == 200
-    assert apply_role.get_json()['applied'] is True
+    for call in calls:
+        with pytest.raises(SecurityAuthorityError, match='administered through its provider operations'):
+            call()
 
-    principals = client.get('/cdeadmin/api/security/principals?sid=401&scope=database').get_json()
-    created_role = next(r for r in principals['roles'] if r['name'] == 'CDEADMIN_OPERATOR')
-    assert created_role['comment'] == 'Live verified role'
-    assert 'MONITOR_ANY_ATTACHMENT' in created_role['system_privileges']
-
-    # 2. Apply real GRANT SELECT + column UPDATE ("REGION") on CUSTOMERS to ROLE CDEADMIN_OPERATOR
-    apply_grant = client.post(
-        '/cdeadmin/api/security/object_grants/apply',
-        json={
-            'sid': 401,
-            'object_kind': 'table',
-            'object_name': 'CUSTOMERS',
-            'changes': [
-                {
-                    'action': 'grant',
-                    'grantee': 'CDEADMIN_OPERATOR',
-                    'grantee_kind': 'role',
-                    'privileges': ['SELECT'],
-                    'grant_option': True,
-                },
-                {
-                    'action': 'grant',
-                    'grantee': 'CDEADMIN_OPERATOR',
-                    'grantee_kind': 'role',
-                    'privileges': ['UPDATE'],
-                    'columns': ['REGION'],
-                },
-            ],
-        },
-    )
-    assert apply_grant.status_code == 200
-    assert apply_grant.get_json()['applied'] is True
-
-    grants_view = client.get(
-        '/cdeadmin/api/security/object_grants?sid=401&object_kind=table&object_name=CUSTOMERS'
-    ).get_json()
-    assert grants_view['capabilities']['columns'] == ['CUSTOMER_ID', 'NAME', 'REGION']
-    op_row = next(g for g in grants_view['grants'] if g['grantee'] == 'CDEADMIN_OPERATOR')
-    assert op_row['privileges']['SELECT']['granted'] is True
-    assert op_row['privileges']['SELECT']['grant_option'] is True
-    assert op_row['privileges']['UPDATE']['columns'] == ['REGION']
-
-    # 3. Granular REVOKE SELECT on CUSTOMERS from ROLE CDEADMIN_OPERATOR
-    revoke_res = client.post(
-        '/cdeadmin/api/security/object_grants/apply',
-        json={
-            'sid': 401,
-            'object_kind': 'table',
-            'object_name': 'CUSTOMERS',
-            'changes': [
-                {
-                    'action': 'revoke',
-                    'grantee': 'CDEADMIN_OPERATOR',
-                    'grantee_kind': 'role',
-                    'privileges': ['SELECT'],
-                }
-            ],
-        },
-    )
-    assert revoke_res.status_code == 200
-    after_revoke = client.get(
-        '/cdeadmin/api/security/object_grants?sid=401&object_kind=table&object_name=CUSTOMERS'
-    ).get_json()
-    op_after = next(g for g in after_revoke['grants'] if g['grantee'] == 'CDEADMIN_OPERATOR')
-    assert op_after['privileges']['SELECT']['granted'] is False
-    assert op_after['privileges']['UPDATE']['columns'] == ['REGION']
+    refused = client.get('/cdeadmin/api/security/principals?sid=601&scope=server')
+    assert refused.status_code == 400
+    assert 'provider operations' in refused.get_json()['error']
+    # A draft engine is not refused by the guard (it fails later for want of a connection, not by policy).
+    with pytest.raises(Exception) as excinfo:
+        host.get_principals(602, None, 'server')
+    assert 'provider operations' not in str(excinfo.value)
 
 
-def test_firebird_network_server_scope_avoids_remote_security_db_and_supports_service_mgr_fallback():
-    """Network Firebird server scope must never attach remotely to `security.db` (GDS 335544352)."""
-    connected_routes: list[dict] = []
-
-    class _FakeUserInfo:
-        def __init__(self, user_name: str, admin: bool = False):
-            self.user_name = user_name
-            self.first_name = 'System'
-            self.middle_name = ''
-            self.last_name = 'Admin'
-            self.admin = admin
-
-    class _FakeServiceUserMgr:
-        def __init__(self):
-            self.added = []
-            self.deleted = []
-
-        def get_all(self):
-            return [_FakeUserInfo('SYSDBA', admin=True)]
-
-        def add(self, **kwargs):
-            self.added.append(kwargs)
-
-        def update(self, *args, **kwargs):
-            pass
-
-        def delete(self, uname):
-            self.deleted.append(uname)
-
-    class _FakeServiceConn:
-        def __init__(self):
-            self.user = _FakeServiceUserMgr()
-
-        def close(self):
-            pass
-
-    svc_conn = _FakeServiceConn()
-
-    class _FakeProviderClient:
-        def _connect(self, payload):
-            r = dict(payload.get('route') or {})
-            connected_routes.append(r)
-            if r.get('database') == 'security.db':
-                raise RuntimeError('Firebird connection failed (DatabaseError); Firebird status codes: 335544352')
-            if r.get('database') == '/var/lib/firebird/data/cdeadmin_demo.fdb':
-                def _fb_handler(sql: str, _params: tuple = ()):
-                    up = sql.upper()
-                    if 'FROM RDB$DATABASE' in up:
-                        return ('u', 'r'), [('SYSDBA', 'RDB$ADMIN')]
-                    if 'FROM SEC$USERS' in up:
-                        return (
-                            'uname', 'plugin', 'first_name', 'middle_name',
-                            'last_name', 'active', 'is_admin', 'description',
-                        ), [('SYSDBA', 'Srp', '', '', '', True, True, '')]
-                    return (), []
-
-                return _FakeConnection(_fb_handler, [])
-            return svc_conn
-
-        def _forget_and_close(self, conn):
-            pass
-
-    class _FakeProvider:
-        attachment_mode = 'network'
-        client = _FakeProviderClient()
-
-        def _resolve_server_security_database_candidates(self, route):
-            return []
-
-    fake_provider = _FakeProvider()
-
-    class _FakeEndpointService:
-        def __init__(self, target_db: str | None):
-            self.target_db = target_db
-            self.provider_registry = SimpleNamespace(
-                resolve=lambda _ctx: SimpleNamespace(instance=fake_provider)
-            )
-
-        def workspace(self, server, database_target_id=Ellipsis):
-            if database_target_id == 'dbt-1' and self.target_db:
-                return (
-                    'ctx-db',
-                    {'route': {'host': '127.0.0.1', 'port': 53050, 'user': 'SYSDBA', 'database': self.target_db}},
-                    {},
-                )
-            return (
-                'ctx-srv',
-                {'route': {'host': '127.0.0.1', 'port': 53050, 'user': 'SYSDBA'}},
-                {},
-            )
-
-    app = Flask(__name__)
-    app.config['SERVER_MODE'] = False
-
-    # Case 1: Network server with an active `.fdb` target attaches to that `.fdb` and reads SEC$USERS
-    ws_with_db = SimpleNamespace(
-        endpoint_service=_FakeEndpointService('/var/lib/firebird/data/cdeadmin_demo.fdb'),
-        resource_service=SimpleNamespace(invalidate=lambda _ctx: None),
-    )
-    host_db = init_security_authority(app, workspace_service=ws_with_db)
-    srv_with_db = SimpleNamespace(
-        id=1,
-        name='localhost',
-        host='127.0.0.1',
-        port=53050,
-        username='SYSDBA',
-        maintenance_db='',
-        endpoint_profile=SimpleNamespace(
-            profile_id='firebird',
-            database_targets=[SimpleNamespace(id='dbt-1', database='/var/lib/firebird/data/cdeadmin_demo.fdb', active=True)],
-        ),
-    )
-    host_db._resolve_target_info = lambda sid: {
-        'sid': sid,
-        'server': srv_with_db,
-        'engine_id': 'firebird',
-        'workflow': 'provider',
-        'route_kind': 'network',
-    }
-    with app.app_context():
-        res = host_db.get_principals(1, None, 'server')
-    assert [u['name'] for u in res['users']] == ['SYSDBA']
-    assert res['users'][0]['plugin'] == 'Srp'
-    assert all(r.get('database') != 'security.db' for r in connected_routes)
-
-    # Case 2: Network server with zero `.fdb` targets falls back to Firebird Services Manager
-    connected_routes.clear()
-    app2 = Flask(__name__)
-    app2.config['SERVER_MODE'] = False
-    ws_zero_db = SimpleNamespace(
-        endpoint_service=_FakeEndpointService(None),
-        resource_service=SimpleNamespace(invalidate=lambda _ctx: None),
-    )
-    host_svc = init_security_authority(app2, workspace_service=ws_zero_db)
-    srv_zero_db = SimpleNamespace(
-        id=2,
-        name='empty-fb',
-        host='127.0.0.1',
-        port=53050,
-        username='SYSDBA',
-        maintenance_db='',
-        endpoint_profile=SimpleNamespace(profile_id='firebird', database_targets=[]),
-    )
-    host_svc._resolve_target_info = lambda sid: {
-        'sid': sid,
-        'server': srv_zero_db,
-        'engine_id': 'firebird',
-        'workflow': 'provider',
-        'route_kind': 'network',
-    }
-    with app2.app_context():
-        res_svc = host_svc.get_principals(2, None, 'server')
-        host_svc.apply_principal({
-            'sid': 2,
-            'scope': 'server',
-            'principal_kind': 'user',
-            'operation': 'create',
-            'draft': {'name': 'SVC_USER', 'password': 'Strong!Password9', 'is_admin': False},
-        })
-    assert [u['name'] for u in res_svc['users']] == ['SYSDBA']
-    assert svc_conn.user.added[0]['user_name'] == 'SVC_USER'
-    assert all(r.get('database') != 'security.db' for r in connected_routes)
+def test_the_legacy_compilers_no_longer_know_firebird():
+    with pytest.raises(SecurityAuthorityError):
+        compile_principal_plan('firebird', 'role', 'create', None, {'name': 'AUDITOR'})
+    with pytest.raises(SecurityAuthorityError):
+        compile_object_grants_plan('firebird', 'table', None, 'T1',
+                                   [{'action': 'grant', 'grantee': 'A', 'privileges': ['SELECT']}])
 
 
 def test_security_routes_return_401_credential_required_when_endpoint_unverified():

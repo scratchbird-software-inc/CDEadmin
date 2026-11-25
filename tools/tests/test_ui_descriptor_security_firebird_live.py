@@ -23,7 +23,7 @@ if 'pgadmin' not in sys.modules:
 from pgadmin.cdeadmin.security.secrets import SecretLease  # noqa: E402
 from pgadmin.cdeadmin.user_config_db.service import _load_firebird_driver  # noqa: E402
 from ui_descriptor_roundtrip import (  # noqa: E402
-    engine_operations, operation_backend_draft, operation_draft)
+    backend_draft, engine_operations, initial_draft, operation_backend_draft, operation_draft, resolved_form)
 
 DESCRIPTORS = ROOT / 'web/pgadmin/cdeadmin/ui_descriptors'
 OPERATIONS = engine_operations('firebird')
@@ -50,7 +50,9 @@ def env(tmp_path, provider):
     for statement in (
             'CREATE TABLE T1(ID INTEGER NOT NULL PRIMARY KEY, N VARCHAR(10), M VARCHAR(10))',
             'CREATE ROLE R_ONE',
-            'CREATE ROLE R_TWO'):
+            'CREATE ROLE R_TWO',
+            'CREATE SEQUENCE S1',
+            'CREATE PROCEDURE P1 AS BEGIN END'):
         seed.execute_immediate(statement)
         seed.commit()
     seed.close()
@@ -85,6 +87,19 @@ def env(tmp_path, provider):
         assert result['accepted'], result
         return statements
 
+    def form_run(kind, operation_id, values, target=None, mode='create'):
+        """A tier-1 create or alter: the family editor's draft through the same provider path."""
+        form = resolved_form('firebird', 'role')
+        state = {**initial_draft(form, mode), **values}
+        payload = {'resource_kind': kind, 'operation_id': operation_id, 'target_resource': target,
+                   '_provider_route': route, 'draft': backend_draft(form, state, mode)}
+        verdict = provider.administration.validate(payload)
+        assert verdict['errors'] == [], verdict
+        planned = provider.administration.plan(payload)
+        result = provider.administration.apply(client, planned)
+        assert result['accepted'], result
+        return [row['source'] for row in planned['command_preview']['statements']]
+
     def refusal(kind, operation_id, values, target=None):
         """The provider's validation messages; nothing is planned or applied."""
         verdict = provider.administration.validate(request(kind, operation_id, values, target))
@@ -103,11 +118,23 @@ def env(tmp_path, provider):
         finally:
             connection.close()
 
+    def stored(where):
+        """(grantee, privilege code, grantee type, grant option, column) as Firebird stores a grant."""
+        connection = driver.connect(str(database), user='SYSDBA')
+        try:
+            cursor = connection.cursor()
+            cursor.execute(
+                'SELECT TRIM(RDB$USER), TRIM(RDB$PRIVILEGE), RDB$USER_TYPE, RDB$GRANT_OPTION, '
+                'TRIM(RDB$FIELD_NAME) FROM RDB$USER_PRIVILEGES WHERE ' + where)
+            return sorted(cursor.fetchall(), key=lambda row: tuple(str(c) for c in row))
+        finally:
+            connection.close()
+
     def role(name):
         return next(r for r in resources() if r['resource_kind'] == 'role' and r['display_name'] == name)
 
     try:
-        yield SimpleNamespace(run=run, refusal=refusal, observe=observe, role=role)
+        yield SimpleNamespace(run=run, form_run=form_run, refusal=refusal, observe=observe, stored=stored, role=role)
     finally:
         client.close()
 
@@ -204,3 +231,94 @@ def test_column_privileges_in_security_json_match_what_the_provider_accepts():
     document = json.loads((DESCRIPTORS / 'firebird' / 'security.json').read_text(encoding='utf-8'))
     declared = document['grants']['column_privileges']['table']
     assert declared == ['UPDATE', 'REFERENCES']
+
+
+def test_stored_privilege_codes_and_grantee_types_match_what_the_descriptor_lists(env):
+    """security.json grants.listing is how the object grants view reads the engine's own rows."""
+    listing = json.loads((DESCRIPTORS / 'firebird' / 'security.json').read_text(encoding='utf-8'))['grants']['listing']
+    codes, kinds = listing['privilege_codes'], listing['grantee_kinds']
+    env.run('privilege', 'grant', {
+        'principal_kind': 'USER', 'principal': 'APP_USER', 'object_type': 'TABLE', 'object_name': 'T1',
+        'privileges': ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'REFERENCES'], 'grant_option': True})
+    env.run('privilege', 'grant', {
+        'principal_kind': 'ROLE', 'principal': 'R_ONE', 'object_type': 'TABLE', 'object_name': 'T1',
+        'privileges': ['SELECT']})
+    env.run('privilege', 'grant', {
+        'principal_kind': 'USER', 'principal': 'APP_USER', 'object_type': 'PROCEDURE', 'object_name': 'P1',
+        'privileges': ['EXECUTE']})
+    env.run('privilege', 'grant', {
+        'principal_kind': 'USER', 'principal': 'APP_USER', 'object_type': 'SEQUENCE', 'object_name': 'S1',
+        'privileges': ['USAGE']})
+    seen = {}
+    for relation in ('T1', 'P1', 'S1'):
+        for grantee, code, user_type, option, column in env.stored(f"RDB$RELATION_NAME = '{relation}'"):
+            seen[(relation, grantee, code)] = (user_type, option)
+            assert code in codes, f'stored code {code!r} on {relation} is not declared in security.json'
+    assert {name for (rel, who, code), _ in seen.items() for name in [codes[code]]} == {
+        'SELECT', 'INSERT', 'UPDATE', 'DELETE', 'REFERENCES', 'EXECUTE', 'USAGE'}
+    assert str(seen[('T1', 'APP_USER', 'S')][0]) in kinds and kinds[str(seen[('T1', 'APP_USER', 'S')][0])] == 'USER'
+    assert kinds[str(seen[('T1', 'R_ONE', 'S')][0])] == 'ROLE'
+    assert seen[('T1', 'APP_USER', 'S')][1] == listing['grant_option_equals']
+    assert seen[('T1', 'R_ONE', 'S')][1] != listing['grant_option_equals']
+
+
+def test_a_role_with_system_privileges_and_a_description_is_created_and_read_back(env):
+    statements = env.form_run('role', 'create', {
+        'variant': 'role', 'name': 'AUDITOR_ROLE', 'description': 'Diagnostics role',
+        'system_privileges': ['MONITOR_ANY_ATTACHMENT', 'TRACE_ANY_ATTACHMENT']})
+    assert statements[0] == ('CREATE ROLE "AUDITOR_ROLE" SET SYSTEM PRIVILEGES TO '
+                             'MONITOR_ANY_ATTACHMENT, TRACE_ANY_ATTACHMENT')
+    created = env.role('AUDITOR_ROLE')['native']
+    assert sorted(created['system_privileges']) == ['MONITOR_ANY_ATTACHMENT', 'TRACE_ANY_ATTACHMENT']
+    assert created.get('description') == 'Diagnostics role'
+
+
+def test_an_unknown_system_privilege_is_refused_before_anything_runs(env):
+    form = resolved_form('firebird', 'role')
+    state = {**initial_draft(form, 'create'), 'variant': 'role', 'name': 'BAD_ROLE',
+             'system_privileges': ['NOT_A_PRIVILEGE']}
+    payload = {'resource_kind': 'role', 'operation_id': 'create', 'target_resource': None,
+               '_provider_route': {}, 'draft': backend_draft(form, state, 'create')}
+    # The control plane validates against the field's declared options.
+    options = {o['value'] if isinstance(o, dict) else o
+               for f in form['fields'] if f['field_id'] == 'system_privileges' for o in f.get('options', [])}
+    assert 'NOT_A_PRIVILEGE' not in options and 'MONITOR_ANY_ATTACHMENT' in options
+    assert payload['draft']['system_privileges'] == ['NOT_A_PRIVILEGE']
+
+
+def test_a_database_ddl_privilege_is_granted_to_a_user(env):
+    statements = env.run('privilege', 'grant', {
+        'privilege_scope': 'database', 'principal_kind': 'USER', 'principal': 'ALICE',
+        'database_privileges': ['ALTER']})
+    assert statements == ['GRANT ALTER DATABASE TO USER "ALICE"']
+    assert env.stored("TRIM(RDB$USER) = 'ALICE'"), 'the DDL grant was not stored'
+
+
+def test_an_injected_privilege_name_is_refused_and_the_table_survives(env):
+    messages = env.refusal('privilege', 'grant', {
+        'principal_kind': 'USER', 'principal': 'APP_USER', 'object_type': 'TABLE', 'object_name': 'T1',
+        'privileges': ['SELECT; DROP TABLE T1 --']})
+    assert messages
+    # The owner always holds its own privileges; the refused grant added none for the grantee.
+    assert env.observe("RDB$RELATION_NAME = 'T1' AND TRIM(RDB$USER) = 'APP_USER'") == []
+    env.run('privilege', 'grant', {
+        'principal_kind': 'USER', 'principal': 'APP_USER', 'object_type': 'TABLE', 'object_name': 'T1',
+        'privileges': ['SELECT']})
+    assert env.observe("RDB$RELATION_NAME = 'T1' AND TRIM(RDB$USER) = 'APP_USER'")
+    # The table itself is intact: it can still be read through the engine.
+    assert env.observe("RDB$RELATION_NAME = 'T1' AND TRIM(RDB$USER) = 'SYSDBA'")
+
+
+def test_every_secret_field_is_redacted_in_the_public_plan():
+    """The control plane redacts a draft value whose field is a password control or sensitive."""
+    from pgadmin.cdeadmin.visual_admin.provider import ProviderVisualAdministration
+    form = resolved_form('firebird', 'role')
+    fields = [f for f in form['fields'] if f['field_id'] == 'password']
+    assert fields and fields[0]['control'] == 'password'
+    redacted = ProviderVisualAdministration._redact_sensitive(fields, {'password': 'S3cret!Pw9', 'name': 'ALICE'})
+    assert redacted == {'password': '<redacted>', 'name': 'ALICE'}
+    for engine_operation in OPERATIONS.values():
+        for field in engine_operation.get('fields', []):
+            if any(word in field['field_id'] for word in ('password', 'secret', 'token')):
+                assert field.get('control') == 'password' or field.get('sensitive'), (
+                    engine_operation['operation_id'], field['field_id'])

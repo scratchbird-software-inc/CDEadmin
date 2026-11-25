@@ -1,5 +1,6 @@
 """Firebird 5.0.4 semantic provider."""
 
+import copy
 import ctypes
 import hashlib
 import inspect
@@ -7,6 +8,7 @@ import json
 import os
 import re
 import threading
+import uuid
 import weakref
 from collections.abc import Mapping
 from contextlib import ExitStack, nullcontext, contextmanager
@@ -31,7 +33,7 @@ from . import columns, mappings, character_metadata, external_functions
 from . import packages, configuration
 from . import (
     blob_filters, object_privileges, shadows, database_storage,
-    database_encryption, shadow_activation, limbo, views,
+    database_encryption, shadow_activation, limbo, views, users,
 )
 from .backup_guid import normalize_backup_guid
 from .backup_level import normalize_backup_level
@@ -740,8 +742,27 @@ class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
                     raise
                 raise
 
+    def _service_user_request(self, request):
+        """True when a user change has no database to attach to and must use the
+        Services API: a network server with no registered database target."""
+        route = request.get('_provider_route') or request.get('route') or {}
+        return (
+            self.attachment_mode != 'embedded'
+            and request.get('resource_kind') == 'user'
+            and request.get('operation_id') in {'create', 'alter', 'drop'}
+            and isinstance(route, Mapping)
+            and not (route.get('database') or '').strip()
+        )
+
     def validate_visual_admin(self, request):
         request = self._with_server_security_route(_mapping(request))
+        if self._service_user_request(request):
+            try:
+                users.compile_service_operation(
+                    request['operation_id'], request.get('draft') or {}, request.get('target_resource'))
+                return {'errors': []}
+            except RelationalClientError as exc:
+                return {'errors': [{'field_id': None, 'code': 'invalid_user', 'message': str(exc)}]}
         if (
             request.get('resource_kind') == 'user'
             and request.get('operation_id') in {'create', 'alter'}
@@ -760,6 +781,26 @@ class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
     def plan_visual_admin(self, request):
         request = self._with_server_security_route(_mapping(request))
         with self._grid_session_guard(request):
+            if self._service_user_request(request):
+                compiled = users.compile_service_operation(
+                    request['operation_id'], request.get('draft') or {}, request.get('target_resource'))
+                plan_id = str(uuid.uuid4())
+                planned = {
+                    'plan_id': plan_id,
+                    'command_preview': {
+                        'language': 'firebird-services',
+                        'statements': [{'source': compiled['preview']}],
+                        'statement': compiled['preview'],
+                    },
+                    'provider_payload': {
+                        'firebird_service_user': compiled['service_call'],
+                        'route': copy.deepcopy(request.get('_provider_route') or {}),
+                    },
+                    'warnings': [],
+                }
+                self._custom_user_plans = getattr(self, '_custom_user_plans', {})
+                self._custom_user_plans[plan_id] = planned
+                return {k: v for k, v in planned.items() if k != 'provider_payload'}
             if (
                 request.get('resource_kind') == 'user'
                 and request.get('operation_id') in {'create', 'alter'}
@@ -805,6 +846,14 @@ class FirebirdProvider(NativeEditorProvider, ActualEnginePilotProvider):
             if plan_id and plan_id in custom_plans:
                 planned = custom_plans.pop(plan_id)
                 payload = planned['provider_payload']
+                if 'firebird_service_user' in payload:
+                    route = {k: v for k, v in payload['route'].items() if k != 'database'}
+                    conn = self.client._connect({'route': route})
+                    try:
+                        users.apply_service_call(conn, payload['firebird_service_user'])
+                    finally:
+                        self.client._forget_and_close(conn)
+                    return {'accepted': True, 'plan_id': plan_id}
                 conn = self.client._connect({'route': payload['route']})
                 try:
                     cur = conn.cursor()

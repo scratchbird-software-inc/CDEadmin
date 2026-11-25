@@ -230,6 +230,79 @@ def compile_lifecycle_operation(operation, draft, target=None):
     }
 
 
+SERVICE_FIELDS = frozenset({
+    'name', 'password', 'first_name', 'middle_name', 'last_name', 'administrator',
+})
+
+
+def compile_service_operation(operation, draft, target=None):
+    """Compile a user change for the Services API, used when the server has no
+    database to attach to (a fresh server before any database is registered).
+
+    The Services API manages only the name, password, first/middle/last name and
+    the administrator flag. A field it cannot carry is refused here, never
+    dropped, so the user is not told a plugin, tag or comment was applied.
+    """
+    if operation not in {'create', 'alter', 'drop'} or not isinstance(draft, Mapping):
+        raise RelationalClientError('Unknown Firebird user operation')
+    merged = dict(draft)
+    for nested_key in ('options', 'changes'):
+        if isinstance(merged.get(nested_key), Mapping):
+            nested = dict(merged.pop(nested_key))
+            nested.update(merged)
+            merged = nested
+    name = merged.get('name') if operation == 'create' else (
+        (target or {}).get('display_name') or merged.get('name'))
+    if not isinstance(name, str) or not name.strip():
+        raise RelationalClientError('A Firebird user needs a name')
+    quoted = identifier(name)
+    meaningful = {key for key, value in merged.items()
+                  if key not in {'name', 'confirmation'} and value not in (None, '', [], {}, False)}
+    unsupported = meaningful - SERVICE_FIELDS
+    if operation != 'drop' and unsupported:
+        raise RelationalClientError(
+            'The Firebird Services API manages only the name, password, first, '
+            'middle and last name and administrator flag; register a database '
+            'to set ' + ', '.join(sorted(unsupported)))
+    call = {'operation': operation, 'user_name': name}
+    preview = ''
+    if operation == 'create':
+        if not merged.get('password'):
+            raise RelationalClientError('Firebird CREATE USER requires a non-empty password')
+        call['password'] = str(merged['password'])
+        preview = f'ADD USER {quoted} PASSWORD <redacted>'
+    elif operation == 'alter':
+        if not meaningful - {'name'}:
+            raise RelationalClientError('user alteration has no changes')
+        if merged.get('password'):
+            call['password'] = str(merged['password'])
+        preview = f'UPDATE USER {quoted}' + (' PASSWORD <redacted>' if call.get('password') else '')
+    else:
+        preview = f'DELETE USER {quoted}'
+    for field in ('first_name', 'middle_name', 'last_name'):
+        if field in merged and operation != 'drop':
+            call[field] = merged[field] or None
+    if 'administrator' in merged and operation != 'drop':
+        call['admin'] = bool(merged['administrator'])
+    return {'service_call': call,
+            'preview': 'SERVICES API ' + preview}
+
+
+def apply_service_call(connection, call):
+    """Run one compiled Services API user call on a service-manager handle."""
+    users = getattr(connection, 'user', None)
+    if users is None:
+        raise RelationalClientError('The Firebird service manager is unavailable')
+    operation = call['operation']
+    options = {key: call[key] for key in ('first_name', 'middle_name', 'last_name', 'admin') if key in call}
+    if operation == 'create':
+        users.add(user_name=call['user_name'], password=call['password'], **options)
+    elif operation == 'alter':
+        users.update(call['user_name'], password=call.get('password'), **options)
+    else:
+        users.delete(call['user_name'])
+
+
 def form(operation, field):
     if not isinstance(operation, str) or operation not in OPERATIONS:
         raise RelationalClientError('Unknown Firebird user replacement form')

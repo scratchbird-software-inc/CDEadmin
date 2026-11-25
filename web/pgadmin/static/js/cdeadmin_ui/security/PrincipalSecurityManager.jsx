@@ -46,19 +46,6 @@ const DEFAULT_SYSTEM_PRIVS_BY_ENGINE = Object.freeze({
   ],
   cockroachdb: ['ADMIN', 'CREATEDB', 'CREATEROLE', 'CONTROLJOB', 'VIEWACTIVITY'],
   yugabytedb: ['SUPERUSER', 'CREATEDB', 'CREATEROLE', 'INHERIT', 'LOGIN', 'REPLICATION', 'BYPASSRLS'],
-  firebird: [
-    'RDB$ADMIN',
-    'CREATE DATABASE',
-    'CREATE TABLE',
-    'CREATE VIEW',
-    'CREATE PROCEDURE',
-    'CREATE FUNCTION',
-    'CREATE PACKAGE',
-    'CREATE GENERATOR',
-    'USE_NBACKUP_UTILITY',
-    'USE_GSTAT_UTILITY',
-    'MONITOR_ANY_ATTACHMENT',
-  ],
   mysql: [
     'SELECT',
     'INSERT',
@@ -109,7 +96,7 @@ function createBlankDraft(kind = 'user', engine = 'postgresql') {
     host: isMysql && kind === 'user' ? '%' : '',
     password: '',
     confirmPassword: '',
-    plugin: engine === 'firebird' ? 'Srp' : '',
+    plugin: '',
     active: true,
     locked: false,
     can_login: kind === 'user',
@@ -172,19 +159,6 @@ function buildFallbackPreviewSql({engine, kind, mode, baseline, draft}) {
       if (Number(draft.connection_limit) >= 0) opts.push(`CONNECTION LIMIT ${Number(draft.connection_limit)}`);
       if (draft.valid_until) opts.push(`VALID UNTIL '${draft.valid_until}'`);
       stmts.push(`CREATE ROLE ${ident}${opts.length ? ' WITH ' + opts.join(' ') : ''};`);
-    } else if (engine === 'firebird') {
-      if (kind === 'role') {
-        stmts.push(`CREATE ROLE ${ident};`);
-      } else {
-        const parts = [`CREATE USER ${ident} PASSWORD '<redacted>'`];
-        if (draft.first_name) parts.push(`FIRSTNAME '${draft.first_name.replaceAll('\'', '\'\'')}'`);
-        if (draft.middle_name) parts.push(`MIDDLENAME '${draft.middle_name.replaceAll('\'', '\'\'')}'`);
-        if (draft.last_name) parts.push(`LASTNAME '${draft.last_name.replaceAll('\'', '\'\'')}'`);
-        parts.push(draft.active ? 'ACTIVE' : 'INACTIVE');
-        if (draft.is_admin) parts.push('GRANT ADMIN ROLE');
-        if (draft.plugin) parts.push(`USING PLUGIN ${qi(draft.plugin)}`);
-        stmts.push(`${parts.join(' ')};`);
-      }
     } else if (isMysql) {
       if (kind === 'role') {
         stmts.push(`CREATE ROLE ${qi(name)};`);
@@ -197,16 +171,11 @@ function buildFallbackPreviewSql({engine, kind, mode, baseline, draft}) {
     }
   } else {
     if (draft.password) {
-      if (engine === 'firebird') {
-        stmts.push(`ALTER USER ${ident} PASSWORD '<redacted>';`);
-      } else if (isMysql) {
+      if (isMysql) {
         stmts.push(`ALTER USER ${ident} IDENTIFIED BY '<redacted>';`);
       } else {
         stmts.push(`ALTER ROLE ${ident} WITH PASSWORD '<redacted>';`);
       }
-    }
-    if (baseline && draft.active !== baseline.active && engine === 'firebird' && kind === 'user') {
-      stmts.push(`ALTER USER ${ident} ${draft.active ? 'ACTIVE' : 'INACTIVE'};`);
     }
     if (baseline && draft.locked !== baseline.locked && isMysql && kind === 'user') {
       stmts.push(`ALTER USER ${ident} ${draft.locked ? 'ACCOUNT LOCK' : 'ACCOUNT UNLOCK'};`);
@@ -261,7 +230,7 @@ export default function PrincipalSecurityManager({
     can_manage_roles: true,
     can_grant: true,
     users_at_server_scope: true,
-    roles_at_server_scope: engine !== 'firebird',
+    roles_at_server_scope: true,
     visibility_state: 'full',
     visibility_message: '',
   });
@@ -275,11 +244,8 @@ export default function PrincipalSecurityManager({
     if (engine === 'postgresql' || engine === 'cockroachdb' || engine === 'yugabytedb') {
       return 'role';
     }
-    if (engine === 'firebird' && scope === 'database') {
-      return 'role';
-    }
     return initialKind || 'user';
-  }, [engine, initialKind, scope]);
+  }, [engine, initialKind]);
 
   const [activeKind, setActiveKind] = useState(defaultKind);
   const [selectedId, setSelectedId] = useState(initialPrincipalId || null);
@@ -291,8 +257,6 @@ export default function PrincipalSecurityManager({
   const [previewSql, setPreviewSql] = useState('');
   const [statusMessage, setStatusMessage] = useState(null);
   const [errorMessage, setErrorMessage] = useState(null);
-  const [newTagKey, setNewTagKey] = useState('');
-  const [newTagVal, setNewTagVal] = useState('');
   const [newMemberInput, setNewMemberInput] = useState('');
   const [inspectObjectKind, setInspectObjectKind] = useState('table');
   const [inspectObjectSchema, setInspectObjectSchema] = useState('');
@@ -511,10 +475,6 @@ export default function PrincipalSecurityManager({
       setErrorMessage(gettext('Password and confirmation do not match.'));
       return;
     }
-    if (mode === 'create' && engine === 'firebird' && activeKind === 'user' && !draft.password) {
-      setErrorMessage(gettext('Firebird user creation requires an initial password.'));
-      return;
-    }
     setSaving(true);
     setErrorMessage(null);
     setStatusMessage(null);
@@ -669,8 +629,8 @@ export default function PrincipalSecurityManager({
 
   const isUnifiedRoleEngine = ['postgresql', 'cockroachdb', 'yugabytedb'].includes(engine);
   const isMysqlFamily = ['mysql', 'mariadb', 'tidb', 'dolt'].includes(engine);
-  const showUsersTab = !isUnifiedRoleEngine && !(engine === 'firebird' && scope === 'database' && users.length === 0);
-  const showRolesTab = !(engine === 'firebird' && scope === 'server' && roles.length === 0);
+  const showUsersTab = !isUnifiedRoleEngine;
+  const showRolesTab = true;
 
   const rosterItems = activeKind === 'role' || isUnifiedRoleEngine ? roles : users;
   const filteredRoster = rosterItems.filter((item) => {
@@ -1104,11 +1064,11 @@ export default function PrincipalSecurityManager({
                         />
                       </>
                     )}
-                    {(engine === 'firebird' || isMysqlFamily) && activeKind === 'user' && (
+                    {isMysqlFamily && activeKind === 'user' && (
                       <TextField
                         label={gettext('Authentication Plugin')}
                         value={draft.plugin}
-                        placeholder={engine === 'firebird' ? 'Srp' : 'caching_sha2_password'}
+                        placeholder="caching_sha2_password"
                         disabled={!canEditCurrentKind}
                         onChange={(e) => setDraft((p) => ({...p, plugin: e.target.value}))}
                       />
@@ -1135,34 +1095,6 @@ export default function PrincipalSecurityManager({
                     )}
                   </div>
 
-                  {engine === 'firebird' && activeKind === 'user' && (
-                    <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-                        gap: 12,
-                      }}
-                    >
-                      <TextField
-                        label={gettext('First Name')}
-                        value={draft.first_name}
-                        disabled={!canEditCurrentKind}
-                        onChange={(e) => setDraft((p) => ({...p, first_name: e.target.value}))}
-                      />
-                      <TextField
-                        label={gettext('Middle Name')}
-                        value={draft.middle_name}
-                        disabled={!canEditCurrentKind}
-                        onChange={(e) => setDraft((p) => ({...p, middle_name: e.target.value}))}
-                      />
-                      <TextField
-                        label={gettext('Last Name')}
-                        value={draft.last_name}
-                        disabled={!canEditCurrentKind}
-                        onChange={(e) => setDraft((p) => ({...p, last_name: e.target.value}))}
-                      />
-                    </div>
-                  )}
 
                   <div style={{display: 'flex', gap: 20, flexWrap: 'wrap'}}>
                     {isUnifiedRoleEngine && (
@@ -1172,22 +1104,6 @@ export default function PrincipalSecurityManager({
                         disabled={!canEditCurrentKind}
                         onChange={(val) => setDraft((p) => ({...p, can_login: Boolean(val)}))}
                       />
-                    )}
-                    {engine === 'firebird' && activeKind === 'user' && (
-                      <>
-                        <Switch
-                          label={gettext('Account Active')}
-                          checked={Boolean(draft.active)}
-                          disabled={!canEditCurrentKind}
-                          onChange={(val) => setDraft((p) => ({...p, active: Boolean(val)}))}
-                        />
-                        <Switch
-                          label={gettext('Server Administrator (ADMIN ROLE)')}
-                          checked={Boolean(draft.is_admin)}
-                          disabled={!canEditCurrentKind}
-                          onChange={(val) => setDraft((p) => ({...p, is_admin: Boolean(val)}))}
-                        />
-                      </>
                     )}
                     {isMysqlFamily && activeKind === 'user' && (
                       <Switch
@@ -1206,71 +1122,6 @@ export default function PrincipalSecurityManager({
                     onChange={(e) => setDraft((p) => ({...p, comment: e.target.value}))}
                   />
 
-                  {engine === 'firebird' && activeKind === 'user' && (
-                    <div
-                      style={{
-                        border: '1px solid var(--sr-border-default)',
-                        borderRadius: 8,
-                        padding: 12,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: 8,
-                      }}
-                    >
-                      <div style={{fontWeight: 600, fontSize: '0.82rem'}}>
-                        {gettext('User Attribute Tags (SEC$USER_ATTRIBUTES)')}
-                      </div>
-                      {(draft.tags || []).map((t, idx) => (
-                        <div key={`${t.name}-${idx}`} style={{display: 'flex', gap: 8, alignItems: 'center'}}>
-                          <Badge tone="neutral" label={t.name} />
-                          <span style={{fontSize: '0.8rem', flex: 1}}>{t.value}</span>
-                          {canEditCurrentKind && (
-                            <Button
-                              size="small"
-                              intent="danger"
-                              onClick={() =>
-                                setDraft((p) => ({
-                                  ...p,
-                                  tags: p.tags.filter((_, i) => i !== idx),
-                                }))
-                              }
-                            >
-                              {gettext('Remove')}
-                            </Button>
-                          )}
-                        </div>
-                      ))}
-                      {canEditCurrentKind && (
-                        <div style={{display: 'flex', gap: 8, alignItems: 'flex-end'}}>
-                          <TextField
-                            label={gettext('Tag Key')}
-                            value={newTagKey}
-                            onChange={(e) => setNewTagKey(e.target.value)}
-                          />
-                          <TextField
-                            label={gettext('Tag Value')}
-                            value={newTagVal}
-                            onChange={(e) => setNewTagVal(e.target.value)}
-                          />
-                          <Button
-                            size="small"
-                            intent="secondary"
-                            disabled={!newTagKey.trim()}
-                            onClick={() => {
-                              setDraft((p) => ({
-                                ...p,
-                                tags: [...(p.tags || []), {name: newTagKey.trim(), value: newTagVal}],
-                              }));
-                              setNewTagKey('');
-                              setNewTagVal('');
-                            }}
-                          >
-                            {gettext('+ Add Tag')}
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </>
               )}
 
@@ -1313,7 +1164,7 @@ export default function PrincipalSecurityManager({
                               <th style={{padding: '7px 10px', textAlign: 'center'}}>{gettext('Set')}</th>
                             </>
                           )}
-                          {(isMysqlFamily || engine === 'firebird') && (
+                          {isMysqlFamily && (
                             <th style={{padding: '7px 10px', textAlign: 'center'}}>{gettext('Default Role')}</th>
                           )}
                         </tr>
@@ -1380,7 +1231,7 @@ export default function PrincipalSecurityManager({
                                       </td>
                                     </>
                                   )}
-                                  {(isMysqlFamily || engine === 'firebird') && (
+                                  {isMysqlFamily && (
                                     <td style={{padding: '7px 10px', textAlign: 'center'}}>
                                       <Checkbox
                                         checked={Boolean(entry?.default_role)}
@@ -1563,16 +1414,14 @@ export default function PrincipalSecurityManager({
                         onChange={(v) => setInspectObjectKind(v)}
                       />
                     </div>
-                    {engine !== 'firebird' && (
-                      <div style={{width: 150}}>
-                        <TextField
-                          label={gettext('Schema (optional)')}
-                          placeholder="public"
-                          value={inspectObjectSchema}
-                          onChange={(e) => setInspectObjectSchema(e.target.value)}
-                        />
-                      </div>
-                    )}
+                    <div style={{width: 150}}>
+                      <TextField
+                        label={gettext('Schema (optional)')}
+                        placeholder="public"
+                        value={inspectObjectSchema}
+                        onChange={(e) => setInspectObjectSchema(e.target.value)}
+                      />
+                    </div>
                     <div style={{flex: '1 1 180px'}}>
                       <TextField
                         label={gettext('Object Name')}

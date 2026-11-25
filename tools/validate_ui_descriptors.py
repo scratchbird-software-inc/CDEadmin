@@ -213,6 +213,12 @@ def check_security_descriptor(engine, engine_dir, caps, schemas, errors):
         if key in grants and grants[key] not in dialect:
             errors.append(f"{rel}: grants.{key} reads dialect.{grants[key]} which options.json does not define")
     object_privileges = dialect.get(grants.get("object_privileges"), {})
+    listing = grants.get("listing")
+    if listing:
+        grantable = {name for names in object_privileges.values() for name in names}
+        for code, name in listing["privilege_codes"].items():
+            if name not in grantable:
+                errors.append(f"{rel}: listing code {code!r} means {name!r}, which object_privileges does not list")
     for object_kind, privileges in (grants.get("column_privileges") or {}).items():
         allowed = set(object_privileges.get(object_kind, []))
         if object_kind not in object_privileges:
