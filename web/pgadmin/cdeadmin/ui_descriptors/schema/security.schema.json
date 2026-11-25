@@ -418,7 +418,7 @@
             },
             "grantee_template": {
               "type": "string",
-              "description": "how the selected principal is spelled in a grant row's grantee field, from its identity fields in braces (MySQL: '{name}'@'{host}'). Default: the first identity field alone"
+              "description": "how the selected principal is spelled in a grant row's grantee field, from native fields of the listed principal, in braces (MySQL: '{user}'@'{host}'). Default: the first identity field alone"
             },
             "held": {
               "type": "boolean",

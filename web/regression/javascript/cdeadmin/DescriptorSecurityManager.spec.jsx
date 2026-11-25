@@ -136,7 +136,7 @@ describe('DescriptorSecurityManager', () => {
 });
 
 describe('SecurityManagerSurface', () => {
-  const legacyProps = {engine: 'mysql', sid: 3, scope: 'server', instanceId: 'x'};
+  const legacyProps = {engine: 'postgresql', sid: 3, scope: 'server', instanceId: 'x'};
   beforeEach(() => { resetDescriptorClient(); mockEditor.mockClear(); mockLegacy.mockClear(); });
 
   it('serves an engine whose security descriptor is complete with the descriptor-driven manager', async () => {
@@ -147,10 +147,10 @@ describe('SecurityManagerSurface', () => {
   });
 
   it('keeps an engine whose descriptor is still a draft on the previous manager', async () => {
-    const {api} = makeApi('mysql', []);
+    const {api} = makeApi('postgresql', []);
     render(<Theme><SecurityManagerSurface api={api} endpointUrl="/ws/1" {...legacyProps} /></Theme>);
     expect(await screen.findByTestId('legacy-manager')).toBeInTheDocument();
-    expect(mockLegacy.mock.calls[0][0]).toMatchObject({sid: 3, engine: 'mysql'});
+    expect(mockLegacy.mock.calls[0][0]).toMatchObject({sid: 3, engine: 'postgresql'});
   });
 
   it('falls back to the previous manager when no endpoint is known', () => {
@@ -203,8 +203,9 @@ describe('DescriptorSecurityManager with one account catalog (MySQL)', () => {
 
 describe('DescriptorSecurityManager membership and held grants (MySQL)', () => {
   beforeEach(() => { resetDescriptorClient(); mockEditor.mockClear(); });
+  // As the MySQL provider reports an account: user and host, no name.
   const account = {resource_kind: 'user', resource_id: 'user:app@%', display_name: 'app@%', native: {
-    name: 'app', host: '%',
+    user: 'app', host: '%',
     member_of: [{role: 'reader@%', user: 'reader', host: '%', admin_option: true, default_role: true}]}};
   const roleRow = {resource_kind: 'role', resource_id: 'role:app@%', display_name: 'app@%', native: {
     name: 'app', host: '%', members: [{principal: 'x@%', user: 'x', host: '%', admin_option: false}]}};

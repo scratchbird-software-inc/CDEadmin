@@ -768,11 +768,12 @@ def test_flask_security_endpoints_sqlite_duckdb_and_four_sql_engines_roundtrip()
     host.register_test_server(
         203, 'mysql', lambda _db: _FakeConnection(my_handler, my_executed)
     )
-    my_p = client.get('/cdeadmin/api/security/principals?sid=203&scope=server').get_json()
-    assert my_p['supported'] is True
-    assert any(r['name'] == 'app_role' for r in my_p['roles'])
-    root_user = next(u for u in my_p['users'] if u['name'] == 'root')
-    assert root_user['member_of'][0]['default_role'] is True
+    # MySQL principals are administered through its provider operations (design Decision 21): this
+    # endpoint refuses them rather than writing to the same accounts. MariaDB, which has no descriptor
+    # of its own, still uses this host.
+    refused = client.get('/cdeadmin/api/security/principals?sid=203&scope=server')
+    assert refused.status_code == 400
+    assert 'provider operations' in str(refused.get_json())
 
     maria_executed: list[str] = []
 
@@ -800,28 +801,14 @@ def test_flask_security_endpoints_sqlite_duckdb_and_four_sql_engines_roundtrip()
     assert maria_p['users'][0]['member_of'][0]['default_role'] is True
 
 
-def test_non_dba_graceful_degradation_across_mysql_and_postgresql():
+def test_non_dba_graceful_degradation_for_postgresql():
     app, host = _build_test_security_app()
     client = app.test_client()
 
-    # MySQL 1142 SELECT command denied on mysql.user -> HTTP 200 visibility_state='denied'
-    class MySQL1142Error(Exception):
-        errno = 1142
-
-    def mysql_non_dba(sql: str, params: tuple):
-        if 'CURRENT_USER()' in sql:
-            return ('cu',), [('readonly@10.0.0.5',)]
-        if 'FROM mysql.user' in sql:
-            raise MySQL1142Error("SELECT command denied to user 'readonly'@'10.0.0.5' for table 'user'")
-        return (), []
-
-    host.register_test_server(301, 'mysql', lambda _db: _FakeConnection(mysql_non_dba, []))
-    res_my = client.get('/cdeadmin/api/security/principals?sid=301&scope=server')
-    assert res_my.status_code == 200
-    body_my = res_my.get_json()
-    assert body_my['capabilities']['visibility_state'] == 'denied'
-    assert '1142' in body_my['capabilities']['visibility_message']
-    assert body_my['capabilities']['can_manage_users'] is False
+    # MySQL is served by its provider; this endpoint refuses it (the denied-visibility state it used to
+    # report is the server's own answer, shown by the Security Manager).
+    host.register_test_server(301, 'mysql', lambda _db: _FakeConnection(lambda sql, params: ((), []), []))
+    assert client.get('/cdeadmin/api/security/principals?sid=301&scope=server').status_code == 400
 
     # PostgreSQL non-superuser -> HTTP 200 visibility_state='limited'
     def pg_non_dba(sql: str, params: tuple):

@@ -212,8 +212,11 @@ def test_the_declared_listing_finds_every_scope_the_server_reports(env):
     security = _security()
     listing = security['grants']['listing']
     names = env.names
-    account = security['grants']['listing']['grantee_template'].format(name=names.member, host='%')
+    account = security['grants']['listing']['grantee_template'].format(user=names.member, host='%')
     assert account == f"'{names.member}'@'%'"
+    # ...and the template reads the fields the provider's account resource really carries.
+    resource = next(r for r in env.listed('user') if r['resource_id'] == f'user:{names.member}@%')
+    assert (resource['native']['user'], resource['native']['host']) == (names.member, '%')
     routine = f'sr_p_{env.tag}'
     for statement in (f'CREATE PROCEDURE `{SCHEMA}`.`{routine}`() BEGIN END',
                       f'GRANT PROCESS ON *.* TO `{names.member}`@`%`',

@@ -1663,3 +1663,41 @@ provider as MySQL, no descriptor yet) was not run; many reviews in one apply
 (``apply_visual_admin_bulk``) is not wired, although one Firebird or MySQL review
 already takes several privileges and several grantees. MySQL stays ``draft``.
 Lint counts unchanged (engine_prop 135, security_ui 22).
+
+Decision 21: MySQL browser click-through, principals complete (2026-11-25)
+--------------------------------------------------------------------------
+
+The descriptor-driven Security Manager was driven in headless Chrome (Playwright)
+against a locally run app (isolated data directory, nothing of the owner's
+configuration touched) connected to the demo MySQL 9.7.0 container. Verified in the
+browser: Manage Users & Roles opens the new manager; one Accounts roster with
+Locked and Used-as-a-role markers; New account and New role; Roles held and Members
+tables; Privileges held (database-scope grants with grant option); Grant and Revoke
+role membership dialogs show the provider plan as SQL and, on Run, change
+``mysql.role_edges`` and refresh the Members table; New role previews
+``CREATE ROLE`` and, on Apply, creates a locked role that appears in the roster.
+
+Defect found and fixed by the click-through: the held-grants grantee template read
+a native ``name`` field that MySQL accounts do not carry (they report ``user`` and
+``host``), so no account showed any held grants. The template is now
+``'{user}'@'{host}'`` and the unit tests use the provider's real account shape.
+
+Result: MySQL ``security.json`` ``status`` is **complete** (principals and
+membership); ``grants.status`` stays **draft**, so object grants keep the previous
+matrix. The legacy host refuses MySQL principal endpoints; its MySQL-principal
+tests were retired (MariaDB, TiDB and Dolt still use that host and its code, so
+the legacy MySQL-family code is not deleted yet).
+
+Not verified in the browser: the per-object grants view (tree navigation to a
+table was unreliable under automation), account alteration, and privilege
+grant/revoke dialogs. Open finding: a non-administrator MySQL account sees an empty
+Accounts roster with no explanation (``mysql.user`` is unreadable, no accounts or
+roles are listed, only its own privileges), where the old host reported a
+"denied" state. The provider's listing does not report that the account catalog
+was unreadable, so the manager cannot say so; this needs a provider observation and
+a descriptor key. Performance note: the first listing after a cold start takes
+longer, and a refresh after creating a role can lag by seconds.
+
+The MySQL Shell grammar library (``CDEADMIN_MYSQL_PARSER_LIBRARY``) is required for
+create/alter review and for privilege operations; without it the editor reports
+``native_review_refused``.

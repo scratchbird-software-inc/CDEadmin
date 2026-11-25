@@ -226,7 +226,7 @@ describe('MySQL-shaped grants: scope-keyed rows, account strings and the declare
 
   it('lists everything an account holds, global grants included, by its spelled grantee', () => {
     const security = loadEngineBundle('mysql').security;
-    const grantee = granteeSpelling(security, security.principals[0], {display_name: 'app@%', native: {name: 'app', host: '%'}});
+    const grantee = granteeSpelling(security, security.principals[0], {display_name: 'app@%', native: {user: 'app', host: '%'}});
     expect(grantee).toBe('\'app\'@\'%\'');
     const held = heldRows(security.grants, RESOURCES, grantee, 'user');
     expect(held.map((r) => `${r.scope}:${r.object}:${r.privilege}`)).toEqual([

@@ -1,8 +1,8 @@
 {
   "schema": "cdeadmin.ui-security.v1",
   "engine": "mysql",
-  "status": "draft",
-  "notes": "Accounts and roles are both identified by name and host, and the server keeps one catalog for both: it does not record whether an account was created as a role, so the manager shows one Accounts roster, marks accounts the server reports as locked or used as a role, and offers New role as a creation action. One role form serves user, role and grant through its variant select. The previous manager compiler also allowed REFERENCES on view columns, which this engine's privilege list does not offer; it is not declared here. Grants are keyed by scope: the listing reads database, table or column, and routine rows by the kind of object viewed, and the Accounts view shows every grant the selected account holds, global ones included. A grantee is one account string, so the grant dialog's user and host grid is filled by splitting it. Verified live against MySQL 9.7.0 (see ui_unification_status.rst); status stays draft pending the owner's go-ahead.",
+  "status": "complete",
+  "notes": "Accounts and roles are both identified by name and host, and the server keeps one catalog for both: it does not record whether an account was created as a role, so the manager shows one Accounts roster, marks accounts the server reports as locked or used as a role, and offers New role as a creation action. One role form serves user, role and grant through its variant select. The previous manager compiler also allowed REFERENCES on view columns, which this engine's privilege list does not offer; it is not declared here. Grants are keyed by scope: the listing reads database, table or column, and routine rows by the kind of object viewed, and the Accounts view shows every grant the selected account holds, global ones included. A grantee is one account string, so the grant dialog's user and host grid is filled by splitting it. Verified live against MySQL 9.7.0 (see ui_unification_status.rst); Principals and membership are complete (clicked through in a browser against MySQL 9.7.0); object grants stay draft until the per-object grants view has been clicked through.",
   "principals": [
     {
       "kind": "user",
@@ -167,7 +167,7 @@
         }
       },
       "grantee_field": "grantee",
-      "grantee_template": "'{name}'@'{host}'",
+      "grantee_template": "'{user}'@'{host}'",
       "privilege_field": "privilege",
       "column_field": "column_name",
       "grant_option_field": "is_grantable",
