@@ -1686,3 +1686,158 @@ Once 1, 2 and 3 are decided, phase 0 can start immediately; nothing in phases 0 
     Decided 2026-11-04: fields declare ``empty_as_null``, which sends ``null`` for an
     empty value (the backend then leaves it unset); set on the MySQL-wire ``failover``
     and TLS list fields. The forms are ``complete``.
+
+21. Principal and grant management across engines (owner direction,
+    2026-11-25; **proposed, awaiting owner ruling**). Engines name and run the
+    same thing differently: PostgreSQL has one object (a role, with or without
+    ``LOGIN``); MySQL and MariaDB have ``user@host`` accounts plus roles;
+    Firebird has server-wide users in a security database plus per-database
+    roles; SQLite and DuckDB have neither (Decision 5). The rule is to reuse one
+    surface and one set of forms, surface everything an engine natively
+    supports, and offer nothing it does not. Absent concepts are hidden, not
+    disabled.
+
+    *Finding (2026-11-25).* The Security Manager tool
+    (``cdeadmin_ui/security/PrincipalSecurityManager.jsx``,
+    ``ObjectPermissionsMatrix.jsx``) and ``workspace/security_authority.py``
+    are a second implementation beside the one this document already
+    specifies. Every engine declares its principal kinds in the ``role``
+    family (``user``, ``role``, ``privilege`` with tiered operations in
+    ``capabilities.json``, forms in ``forms/role.form.json``, option lists in
+    ``options.json``). The manager ignores those and carries its own:
+
+    - about 39 ``engine ===`` / ``isMysql*`` branches in the two JSX files and
+      its own hard-coded field set and system-privilege lists
+      (``DEFAULT_SYSTEM_PRIVS_BY_ENGINE``);
+    - per-family roster collectors (Firebird, PostgreSQL, MySQL family) and
+      per-family SQL compilers (``compile_principal_plan``,
+      ``compile_object_grants_plan``) in ``security_authority.py``, plus its
+      own plan/apply endpoints under ``/cdeadmin/api/security``, which bypass
+      the provider operations and their reviewed SQL tab (principle 8,
+      Decision 19).
+
+    These break principles 3 and 5. The lint did not catch them because
+    ``engine_literal_branches_in_ui_code`` matches ``engine_id`` /
+    ``profile_id`` / ``languageProfile`` followed by a string literal, not the
+    ``engine`` prop or ``isMysql`` helper names used here.
+
+    *Proposal.*
+
+    a. **The manager contains no fields.** It is a tool (principle 6, opened
+       from a menu) that lists principals and opens them in the existing
+       ``role`` family editor, and shows the object-side grants view. Every
+       field, tab, option list and version gate comes from that engine's
+       ``role.form.json`` and ``options.json``. Create, alter, drop, rename,
+       grant, revoke, set-default and membership changes are the engine's
+       declared operations, run through the reviewed plan and SQL tab.
+       ``security_authority.py`` collectors and compilers, and its plan/apply
+       endpoints, are deleted per engine as that engine migrates (principle
+       11).
+
+    b. **One new descriptor per engine, ``security.json``,** declaring only
+       what no existing file holds: which kinds are principals, where they
+       live, how the roster looks, and the shape of the grant model. It
+       references existing kinds, forms and option sources by id and never
+       restates them. A new schema ``schema/security.schema.json`` and a
+       validator rule check every reference. An engine with no principals
+       declares ``"principals": []`` with a ``reason``; the manager is then
+       not offered (Decision 5 default).
+
+    c. **Names and scope are declared, not branched on.** Labels, plural
+       labels, scope and the user/role distinction come from the descriptor,
+       so PostgreSQL shows only "Role" (login is a field of it), MySQL shows
+       "User" and "Role", and Firebird shows "User" at server scope and
+       "Role" at database scope.
+
+    d. **Privilege vocabularies stay where they live.** System privileges,
+       object privileges per object kind, column and routine grants and
+       default privileges come from the existing dialect data through
+       ``options.json`` sources (Decision 19 gates apply). ``security.json``
+       names the source; it does not list privileges.
+
+    Sketch, with values taken from the current code (checked against the
+    existing ``capabilities.json`` for each engine)::
+
+       {
+         "schema": "cdeadmin.ui.security.v1",
+         "engine": "firebird",
+         "principals": [
+           {"kind": "user", "label": "User", "plural_label": "Users",
+            "scope": "server", "form": "role", "variant": "user",
+            "roster": {"columns": ["name", "plugin", "active"],
+                       "search": ["name", "plugin"]}},
+           {"kind": "role", "label": "Role", "plural_label": "Roles",
+            "scope": "database", "form": "role", "variant": "role",
+            "roster": {"columns": ["name", "owner"], "search": ["name"]}}
+         ],
+         "membership": {"kind": "role", "admin_option": true,
+                        "default_role": true},
+         "grants": {
+           "grant_kind": "privilege",
+           "system_privileges": {"option_source": "system_privileges"},
+           "object_kinds": [
+             {"kind": "table", "option_source": "table_privileges",
+              "column_level": true, "grant_option": true},
+             {"kind": "procedure", "option_source": "execute_privileges",
+              "grant_option": true}
+           ],
+           "granted_by": true
+         },
+         "requires": {"inspect": "verified", "mutate": "owner"}
+       }
+
+    Differences the first slice must express without code:
+
+    - *PostgreSQL:* one principal kind (``role``), scope server; membership
+      with admin, inherit and set options (version-gated); default
+      privileges as a ``default-privileges`` grant source; no host.
+    - *MySQL:* ``user`` identified by ``user@host`` (``identity`` lists
+      ``name`` and ``host``), ``role`` with default roles; privileges at
+      global, database, table, column and routine scope; authentication
+      plugin options, resource limits and TLS requirements stay on the
+      user form.
+    - *Firebird:* ``user`` at server scope and ``role`` at database scope
+      (``scope`` is per kind); system privileges, ``GRANTED BY`` and the
+      authentication plugin; the roster for users reads the security
+      database, which is a provider concern invisible to the descriptor.
+
+    *Gaps this proposal needs the owner to settle.*
+
+    i. **Roster source.** Default: the roster is the provider's
+       ``list_resources`` for the declared kinds (the Firebird provider
+       already returns server users this way), not a separate principals
+       endpoint. Consequence: each provider must expose ``user`` and ``role``
+       resources with a stable identity; MySQL's ``user@host`` identity
+       needs the host as a declared identity part.
+
+    ii. **Many grants in one review.** The grants matrix edits several
+        grantee-by-object cells at once. Default: it emits one reviewed plan
+        built from the provider's ``grant`` and ``revoke`` operations, one per
+        changed cell. This is the cross-operation half of Decision 9
+        (dispatch of several operations as one plan) and needs that contract;
+        until it exists the matrix applies cell by cell, each with its own SQL
+        tab, and the status page records the gap.
+
+    iii. **Not-permitted visibility.** Default: a principal the connected
+         account may not inspect is omitted and the roster states that the
+         list is partial, using the unsupported-operation disabled reasons of
+         Decision 19, instead of the manager's own ``visibility_state``.
+
+    iv. **Lint.** Extend ``engine_literal_branches_in_ui_code`` to match the
+        ``engine`` / ``engineId`` props and ``isMysql*`` style helpers in
+        ``cdeadmin_ui``, record the new baseline, and lower it as engines
+        migrate. Report before and after in each change (principle 12).
+
+    v. **Migration order.** Firebird, MySQL and PostgreSQL first, because they
+       differ most; MariaDB, the MySQL-wire engines, the PostgreSQL-wire
+       engines, then immudb and XTDB on the same schema. SQLite and DuckDB
+       declare no principals. Each engine's collectors, compilers and branches
+       are removed in its own change.
+
+    Default if not ruled: adopt (a) to (d) and (i) to (v) as written;
+    keep the current manager working for engines not yet migrated, and
+    migrate one engine per change. Not covered here and not changed: the
+    protected generated-password delivery of Decision 16, user-key
+    metadata-only inspection (Decision 10), and how a grant on one object is
+    reached from that object's own Security tab (principle 1; the matrix is
+    the same data from the grantee side).
