@@ -85,6 +85,10 @@ references everything else by id so nothing is written twice:
   and grantable kinds. `column_privileges` names the privileges that accept a
   column list (Firebird: `UPDATE`, `REFERENCES`); `grant_option`, `granted_by`
   and `default_privileges` appear only on engines that have them.
+- `status` is `complete` once the descriptor-driven manager serves the engine
+  and its provider operations are round-tripped live, otherwise `draft` (the
+  engine stays on the previous manager). The shell chooses by this value, never
+  by engine name.
 - An engine with no principals declares `"principals": []` and a `reason`;
   the tool is not offered.
 

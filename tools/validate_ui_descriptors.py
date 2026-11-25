@@ -164,6 +164,8 @@ def check_security_descriptor(engine, engine_dir, caps, schemas, errors):
             if extra in doc:
                 errors.append(f"{rel}: {extra} is declared but the engine has no principals")
         return
+    if "status" not in doc:
+        errors.append(f"{rel}: status (draft or complete) is required when principals are declared")
     options = load(engine_dir / "options.json") if (engine_dir / "options.json").exists() else {}
     dialect = options.get("dialect", {})
     seen = set()

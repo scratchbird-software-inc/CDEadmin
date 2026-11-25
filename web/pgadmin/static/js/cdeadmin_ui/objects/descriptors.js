@@ -85,7 +85,7 @@ export function formKey(family, resourceKind) {
 }
 
 /** Build the same bundle shape the server serves, from raw descriptor files. */
-export function resolveBundle({engine, families, capabilities, operations=[], navigator={}, forms={}, options={dialect: {}, catalog: {}}}) {
+export function resolveBundle({engine, families, capabilities, operations=[], navigator={}, forms={}, options={dialect: {}, catalog: {}}, security={}}) {
   const resolvedForms = {};
   for(const form of Object.values(forms)) {
     resolvedForms[formKey(form.family, (form.resource_kinds || [])[0])] = resolveForm(families[form.family], form);
@@ -105,7 +105,7 @@ export function resolveBundle({engine, families, capabilities, operations=[], na
       operations: opsByKind[kind.resource_kind] || [],
     };
   }
-  return {schema: 'cdeadmin.ui-bundle.v1', engine, capabilities, operations, navigator, options,
+  return {schema: 'cdeadmin.ui-bundle.v1', engine, capabilities, operations, navigator, options, security,
     forms: resolvedForms, kinds};
 }
 

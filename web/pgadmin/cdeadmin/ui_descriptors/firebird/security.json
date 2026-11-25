@@ -1,6 +1,7 @@
 {
   "schema": "cdeadmin.ui-security.v1",
   "engine": "firebird",
+  "status": "complete",
   "notes": "Users are server-wide (security database); roles live in each database. One role form serves user, role and grant through its variant select. Column grants accept only UPDATE and REFERENCES. Roster columns are added when the provider resources' attributes are verified.",
   "principals": [
     {

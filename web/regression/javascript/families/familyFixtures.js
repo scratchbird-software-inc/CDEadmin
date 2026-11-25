@@ -42,6 +42,8 @@ export function loadEngineBundle(engine) {
     capabilities: readJson(path.join(folder, 'capabilities.json')),
     operations: readOptional('operations.json')?.operations || [],
     navigator: readOptional('navigator.json') || {},
+    options: readOptional('options.json') || {dialect: {}, catalog: {}},
+    security: readOptional('security.json') || {},
     forms,
   });
 }

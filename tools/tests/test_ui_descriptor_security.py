@@ -190,3 +190,24 @@ def test_unknown_keys_are_refused_so_a_field_cannot_hide_in_the_descriptor(engin
         doc['principals'][0]['raw_json'] = {'anything': True}
     errors = check(engine_copy('firebird', mutate))
     assert errors, 'additionalProperties must reject undeclared keys'
+
+
+def test_a_declared_principal_list_needs_a_status(engine_copy):
+    def mutate(doc):
+        doc.pop('status')
+    errors = check(engine_copy('mysql', mutate))
+    assert any('status (draft or complete) is required' in e for e in errors), errors
+
+
+def test_status_only_takes_the_two_declared_values(engine_copy):
+    def mutate(doc):
+        doc['status'] = 'done'
+    assert check(engine_copy('mysql', mutate))
+
+
+def test_only_engines_with_live_verified_operations_are_complete():
+    states = {e: json.loads((DESCRIPTORS / e / 'security.json').read_text(encoding='utf-8')).get('status')
+              for e in FIRST_SLICE}
+    # PostgreSQL has no privilege operation yet, and MySQL's operations have not
+    # been round-tripped through the descriptor-driven manager.
+    assert states == {'firebird': 'complete', 'mysql': 'draft', 'postgresql': 'draft'}

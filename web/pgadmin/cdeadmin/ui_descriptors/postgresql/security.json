@@ -1,6 +1,7 @@
 {
   "schema": "cdeadmin.ui-security.v1",
   "engine": "postgresql",
+  "status": "draft",
   "notes": "One principal object: a role, with login as an attribute of its form. Its system attributes (SUPERUSER, CREATEDB, ...) are fields of the role form, not grants, so no system_privileges source is declared. Membership options inherit and set are provider version-gated.",
   "principals": [
     {

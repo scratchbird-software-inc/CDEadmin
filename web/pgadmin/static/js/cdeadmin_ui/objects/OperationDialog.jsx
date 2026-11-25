@@ -55,14 +55,18 @@ function validate(fields, values) {
 }
 
 export default function OperationDialog({open, operation, targetName, context={}, executionHosts=[],
-  plan, apply, onClose, onApplied}) {
+  fixedValues, plan, apply, onClose, onApplied}) {
   const localeRev = useLocaleRevision();
   const needsTypedName = operation.confirmation === 'typed_name';
   // A typed-name operation's `confirmation` field is the typed box below; the
   // draft still carries it (see `draft`), so it is not shown twice.
+  // `fixedValues` are chosen by the caller (the object a grant is opened from):
+  // they take part in visibility and in the draft but are never shown or edited.
+  const fixed = useMemo(() => fixedValues || {}, [fixedValues]);
   const fields = useMemo(() => (operation.fields || []).filter((field) =>
-    !(needsTypedName && field.field_id === 'confirmation')), [operation.fields, needsTypedName]);
-  const [values, setValues] = useState(() => initialValues(fields));
+    !(needsTypedName && field.field_id === 'confirmation') &&
+    !Object.hasOwn(fixed, field.field_id)), [operation.fields, needsTypedName, fixed]);
+  const [values, setValues] = useState(() => ({...initialValues(operation.fields || []), ...fixed}));
   const [host, setHost] = useState(executionHosts[0]?.value ?? 'local');
   const [confirmText, setConfirmText] = useState('');
   const [planState, setPlanState] = useState({status: 'idle', plan: null, error: null});
@@ -254,6 +258,7 @@ OperationDialog.propTypes = {
   targetName: PropTypes.string,
   context: PropTypes.object,
   executionHosts: PropTypes.array,
+  fixedValues: PropTypes.object,
   plan: PropTypes.func.isRequired,
   apply: PropTypes.func.isRequired,
   onClose: PropTypes.func.isRequired,

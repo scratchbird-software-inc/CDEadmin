@@ -38,6 +38,13 @@
     },
     "requires": {
       "$ref": "#/$defs/requires"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "complete"
+      ],
+      "description": "complete: the descriptor-driven Security Manager serves this engine and its provider operations are round-tripped live; draft: declared but the engine stays on the previous manager until its operations are verified. Required when principals are declared."
     }
   },
   "$defs": {

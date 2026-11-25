@@ -1,6 +1,7 @@
 {
   "schema": "cdeadmin.ui-security.v1",
   "engine": "mysql",
+  "status": "draft",
   "notes": "Accounts and roles are both identified by name and host. One role form serves user, role and grant through its variant select. The previous manager compiler also allowed REFERENCES on view columns, which this engine's privilege list does not offer; it is not declared here.",
   "principals": [
     {
