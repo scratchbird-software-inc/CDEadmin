@@ -1395,3 +1395,57 @@ with no vendored changes.
 Migration order: Firebird, MySQL, PostgreSQL, then the other engines. The
 manager moves to ``security.json`` per engine; an engine without a
 ``security.json`` stays on the legacy path until its change lands.
+
+Decision 21 progress and field-gap inventory (2026-11-25)
+---------------------------------------------------------
+
+Done: ``schema/security.schema.json``, the validator rule
+(``check_security_descriptor``), the ``security`` key of the resolved bundle,
+``security.json`` for Firebird, MySQL and PostgreSQL, and
+``"principals": []`` with a reason for SQLite and DuckDB;
+``tools/tests/test_ui_descriptor_security.py`` (27 tests) is in
+``make ui-descriptors-check``. The Security Manager UI and
+``security_authority.py`` are unchanged, so no engine branch has been removed
+yet: ``engine_prop_branches_in_ui_code`` 153 and ``security_ui_engine_branches``
+40 are still the baseline.
+
+The manager and the engines' role forms speak different vocabularies. The
+manager's draft uses ``grant_roles``, ``can_login``, ``is_admin`` and
+``valid_until``; the forms use their own field ids (PostgreSQL ``rolcanlogin``,
+``rolmembership``, ``rolvaliduntil``; Firebird ``administrator``; MySQL
+``account_lock``). The manager must read and write the form's field ids, which
+is the main work of the UI change. Gaps found by comparing the declared kinds,
+operations and forms (not yet exercised against a live engine):
+
+- **Firebird.** ``role`` declares ``grant`` and ``revoke`` and ``privilege``
+  declares ``grant`` and ``revoke``, and the provider implements them
+  (``providers/firebird/privileges.py``, ``object_privileges.py``). Neither has
+  an ``operations.json`` entry, and the role form's ``grant`` variant has no
+  fields, so role membership and object grants cannot be edited through the
+  descriptor path. Needed first: operations (or form fields) for membership
+  (member, admin option, default) and grants (grantee, object, privileges,
+  grant option, ``GRANTED BY``). Roster attributes are provider-defined and
+  still to be verified.
+- **MySQL.** Complete: ``role`` grant, revoke and set-default, ``user`` rename
+  and ``privilege`` grant and revoke have operations with fields. The design
+  document's open item remains that membership is a JSON ``members`` field
+  rather than a grid.
+- **PostgreSQL.** Membership is a form grid (``rolmembership``,
+  ``rolmembers``) and role attributes are form fields. ``privilege`` declares
+  ``grant`` and ``revoke`` but has no operation entry and no provider
+  operation of its own: object grants are written by each object's editor
+  (``databases.py`` and the other object modules) and default privileges by
+  ``default-privileges``. The grants matrix therefore needs a provider
+  operation, or must drive the per-object editors; this is the Decision 21
+  gap (ii) and must be settled before PostgreSQL's compilers can go.
+  Separately, PostgreSQL on the provider tree is opt-in per server, so the
+  inherited path must stay until its replacement is verified.
+- **Preservation.** Before any compiler is removed its properties must hold on
+  the provider path: password redaction in every plan and preview, server
+  versus database placement, per-dialect identifier and literal escaping and
+  rejection of injected input, graceful degradation for an account that cannot
+  inspect, and the live Firebird embedded role and grant roundtrip. The
+  existing tests for these are in ``tools/tests/test_security_authority.py``
+  and are ported, not deleted, with each engine.
+
+Next: Firebird end to end, starting with the missing operations above.
