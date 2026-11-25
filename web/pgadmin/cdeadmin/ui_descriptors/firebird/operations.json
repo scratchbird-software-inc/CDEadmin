@@ -1899,6 +1899,1195 @@
       ],
       "notes": "Round-tripped by tools/tests/test_ui_descriptor_operations_firebird.py against a live Firebird 5.0.4 server with admitted sample DbCrypt/KeyHolder plugins.",
       "form_reference": "SR-F-030112"
+    },
+    {
+      "operation_id": "grant",
+      "resource_kind": "role",
+      "title": "Grant role membership",
+      "menu": {
+        "category": "security",
+        "order": 30
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "member",
+          "label": "Member name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "member_kind",
+          "label": "Member type",
+          "control": "select",
+          "required": true,
+          "default": "USER",
+          "options": [
+            {
+              "value": "USER",
+              "label": "User"
+            },
+            {
+              "value": "ROLE",
+              "label": "Role"
+            }
+          ]
+        },
+        {
+          "field_id": "default_role",
+          "label": "Default role",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "help": "Makes the role effective without selecting it."
+        },
+        {
+          "field_id": "admin_option",
+          "label": "Allow delegation",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "help": "Allows the member to grant this role to others."
+        },
+        {
+          "field_id": "grantor",
+          "label": "Grantor (optional)",
+          "control": "text",
+          "required": false,
+          "help": "Uses GRANTED BY USER. Role admin permission alone does not authorize this clause; Firebird checks administrative or USE_GRANTED_BY_CLAUSE authority and the named grantor's permission."
+        }
+      ],
+      "notes": "Drafted from the provider's own grant/revoke form (privileges.py, relational_admin._compile_firebird_role). Round-tripped on a live embedded Firebird 5 engine by tools/tests/test_ui_descriptor_security_firebird_live.py (dialog draft -> validate -> plan -> apply -> RDB$USER_PRIVILEGES observed).",
+      "form_reference": "SR-F-031136"
+    },
+    {
+      "operation_id": "revoke",
+      "resource_kind": "role",
+      "title": "Revoke role membership",
+      "menu": {
+        "category": "security",
+        "order": 31
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "member",
+          "label": "Member name",
+          "control": "text",
+          "required": true
+        },
+        {
+          "field_id": "member_kind",
+          "label": "Member type",
+          "control": "select",
+          "required": true,
+          "default": "USER",
+          "options": [
+            {
+              "value": "USER",
+              "label": "User"
+            },
+            {
+              "value": "ROLE",
+              "label": "Role"
+            }
+          ]
+        },
+        {
+          "field_id": "default_role",
+          "label": "Remove default status only",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "help": "Keeps membership. Select both removal options to remove default status and delegation together."
+        },
+        {
+          "field_id": "admin_option_only",
+          "label": "Revoke admin option only",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "help": "Keeps membership. Leave both removal options unchecked to revoke membership itself."
+        },
+        {
+          "field_id": "grantor",
+          "label": "Grantor (optional)",
+          "control": "text",
+          "required": false,
+          "help": "Uses GRANTED BY USER. Role admin permission alone does not authorize this clause; Firebird checks administrative or USE_GRANTED_BY_CLAUSE authority and the named grantor's permission."
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Confirmation",
+          "control": "text",
+          "required": true
+        }
+      ],
+      "notes": "Drafted from the provider's own grant/revoke form (privileges.py, relational_admin._compile_firebird_role). Round-tripped on a live embedded Firebird 5 engine by tools/tests/test_ui_descriptor_security_firebird_live.py (dialog draft -> validate -> plan -> apply -> RDB$USER_PRIVILEGES observed).",
+      "form_reference": "SR-F-031137"
+    },
+    {
+      "operation_id": "grant",
+      "resource_kind": "privilege",
+      "title": "Grant privileges",
+      "menu": {
+        "category": "security",
+        "order": 32
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "privilege_scope",
+          "label": "Privilege scope",
+          "control": "select",
+          "required": true,
+          "default": "object",
+          "options": [
+            {
+              "value": "object",
+              "label": "Object"
+            },
+            {
+              "value": "ddl_class",
+              "label": "Ddl Class"
+            },
+            {
+              "value": "database",
+              "label": "Database"
+            }
+          ]
+        },
+        {
+          "field_id": "principal_kind",
+          "label": "Grantee kind",
+          "control": "select",
+          "required": true,
+          "default": "USER",
+          "options": [
+            {
+              "value": "USER",
+              "label": "User"
+            },
+            {
+              "value": "ROLE",
+              "label": "Role"
+            },
+            {
+              "value": "PUBLIC",
+              "label": "Public"
+            },
+            {
+              "value": "PROCEDURE",
+              "label": "Procedure"
+            },
+            {
+              "value": "FUNCTION",
+              "label": "Function"
+            },
+            {
+              "value": "PACKAGE",
+              "label": "Package"
+            },
+            {
+              "value": "TRIGGER",
+              "label": "Trigger"
+            },
+            {
+              "value": "VIEW",
+              "label": "View"
+            },
+            {
+              "value": "GROUP",
+              "label": "Group"
+            },
+            {
+              "value": "SYSTEM PRIVILEGE",
+              "label": "System Privilege"
+            }
+          ]
+        },
+        {
+          "field_id": "principal",
+          "label": "Grantee name",
+          "control": "text",
+          "required": true,
+          "visible_when": {
+            "field": "principal_kind",
+            "in": [
+              "USER",
+              "ROLE",
+              "PROCEDURE",
+              "FUNCTION",
+              "PACKAGE",
+              "TRIGGER",
+              "VIEW",
+              "GROUP",
+              "SYSTEM PRIVILEGE"
+            ]
+          }
+        },
+        {
+          "field_id": "additional_grantees",
+          "label": "Additional grantees",
+          "control": "grid",
+          "columns": [
+            {
+              "field_id": "kind",
+              "label": "Grantee kind",
+              "control": "select",
+              "required": true,
+              "default": "USER",
+              "options": [
+                {
+                  "value": "USER",
+                  "label": "User"
+                },
+                {
+                  "value": "ROLE",
+                  "label": "Role"
+                },
+                {
+                  "value": "PUBLIC",
+                  "label": "Public"
+                },
+                {
+                  "value": "PROCEDURE",
+                  "label": "Procedure"
+                },
+                {
+                  "value": "FUNCTION",
+                  "label": "Function"
+                },
+                {
+                  "value": "PACKAGE",
+                  "label": "Package"
+                },
+                {
+                  "value": "TRIGGER",
+                  "label": "Trigger"
+                },
+                {
+                  "value": "VIEW",
+                  "label": "View"
+                },
+                {
+                  "value": "GROUP",
+                  "label": "Group"
+                },
+                {
+                  "value": "SYSTEM PRIVILEGE",
+                  "label": "System Privilege"
+                }
+              ]
+            },
+            {
+              "field_id": "name",
+              "label": "Grantee name",
+              "control": "text",
+              "required": true,
+              "visible_when": {
+                "field": "kind",
+                "in": [
+                  "USER",
+                  "ROLE",
+                  "PROCEDURE",
+                  "FUNCTION",
+                  "PACKAGE",
+                  "TRIGGER",
+                  "VIEW",
+                  "GROUP",
+                  "SYSTEM PRIVILEGE"
+                ]
+              }
+            }
+          ],
+          "required": false,
+          "help": "All listed grantees are part of one native statement and receive the selected privileges."
+        },
+        {
+          "field_id": "object_type",
+          "label": "Object type",
+          "control": "select",
+          "required": true,
+          "default": "TABLE",
+          "options": [
+            {
+              "value": "TABLE",
+              "label": "Table"
+            },
+            {
+              "value": "VIEW",
+              "label": "View"
+            },
+            {
+              "value": "PROCEDURE",
+              "label": "Procedure"
+            },
+            {
+              "value": "FUNCTION",
+              "label": "Function"
+            },
+            {
+              "value": "PACKAGE",
+              "label": "Package"
+            },
+            {
+              "value": "SEQUENCE",
+              "label": "Sequence"
+            },
+            {
+              "value": "GENERATOR",
+              "label": "Generator"
+            },
+            {
+              "value": "EXCEPTION",
+              "label": "Exception"
+            }
+          ],
+          "visible_when": {
+            "field": "privilege_scope",
+            "equals": "object"
+          }
+        },
+        {
+          "field_id": "object_name",
+          "label": "Exact object name",
+          "control": "text",
+          "required": true,
+          "help": "Dots belong to the Firebird identifier; they do not name a schema.",
+          "visible_when": {
+            "field": "privilege_scope",
+            "equals": "object"
+          }
+        },
+        {
+          "field_id": "privileges",
+          "label": "Object privileges",
+          "control": "multiselect",
+          "required": true,
+          "options": [
+            {
+              "value": "SELECT",
+              "label": "Select",
+              "visible_when": {
+                "field_id": "object_type",
+                "in": [
+                  "TABLE",
+                  "VIEW"
+                ]
+              }
+            },
+            {
+              "value": "INSERT",
+              "label": "Insert",
+              "visible_when": {
+                "field_id": "object_type",
+                "in": [
+                  "TABLE",
+                  "VIEW"
+                ]
+              }
+            },
+            {
+              "value": "UPDATE",
+              "label": "Update",
+              "visible_when": {
+                "field_id": "object_type",
+                "in": [
+                  "TABLE",
+                  "VIEW"
+                ]
+              }
+            },
+            {
+              "value": "DELETE",
+              "label": "Delete",
+              "visible_when": {
+                "field_id": "object_type",
+                "in": [
+                  "TABLE",
+                  "VIEW"
+                ]
+              }
+            },
+            {
+              "value": "REFERENCES",
+              "label": "References",
+              "visible_when": {
+                "field_id": "object_type",
+                "in": [
+                  "TABLE",
+                  "VIEW"
+                ]
+              }
+            },
+            {
+              "value": "EXECUTE",
+              "label": "Execute",
+              "visible_when": {
+                "field_id": "object_type",
+                "in": [
+                  "PROCEDURE",
+                  "FUNCTION",
+                  "PACKAGE"
+                ]
+              }
+            },
+            {
+              "value": "USAGE",
+              "label": "Usage",
+              "visible_when": {
+                "field_id": "object_type",
+                "in": [
+                  "SEQUENCE",
+                  "GENERATOR",
+                  "EXCEPTION"
+                ]
+              }
+            },
+            {
+              "value": "ALL",
+              "label": "All",
+              "visible_when": {
+                "field_id": "object_type",
+                "in": [
+                  "TABLE",
+                  "VIEW"
+                ]
+              }
+            }
+          ],
+          "visible_when": {
+            "field": "privilege_scope",
+            "equals": "object"
+          }
+        },
+        {
+          "field_id": "update_columns",
+          "label": "UPDATE columns",
+          "control": "grid",
+          "columns": [
+            {
+              "field_id": "name",
+              "label": "Exact column name",
+              "control": "text",
+              "required": true
+            }
+          ],
+          "required": false,
+          "help": "Empty means the whole relation. Column lists apply only to UPDATE or REFERENCES, never SELECT."
+        },
+        {
+          "field_id": "reference_columns",
+          "label": "REFERENCES columns",
+          "control": "grid",
+          "columns": [
+            {
+              "field_id": "name",
+              "label": "Exact column name",
+              "control": "text",
+              "required": true
+            }
+          ],
+          "required": false,
+          "help": "Empty means the whole relation. Column lists apply only to UPDATE or REFERENCES, never SELECT."
+        },
+        {
+          "field_id": "ddl_class",
+          "label": "DDL object class",
+          "control": "select",
+          "required": true,
+          "default": "TABLE",
+          "options": [
+            {
+              "value": "TABLE",
+              "label": "Table"
+            },
+            {
+              "value": "VIEW",
+              "label": "View"
+            },
+            {
+              "value": "PROCEDURE",
+              "label": "Procedure"
+            },
+            {
+              "value": "FUNCTION",
+              "label": "Function"
+            },
+            {
+              "value": "PACKAGE",
+              "label": "Package"
+            },
+            {
+              "value": "SEQUENCE",
+              "label": "Sequence"
+            },
+            {
+              "value": "GENERATOR",
+              "label": "Generator"
+            },
+            {
+              "value": "DOMAIN",
+              "label": "Domain"
+            },
+            {
+              "value": "EXCEPTION",
+              "label": "Exception"
+            },
+            {
+              "value": "ROLE",
+              "label": "Role"
+            },
+            {
+              "value": "CHARACTER SET",
+              "label": "Character Set"
+            },
+            {
+              "value": "COLLATION",
+              "label": "Collation"
+            },
+            {
+              "value": "FILTER",
+              "label": "Filter"
+            }
+          ],
+          "visible_when": {
+            "field": "privilege_scope",
+            "equals": "ddl_class"
+          }
+        },
+        {
+          "field_id": "ddl_privileges",
+          "label": "DDL privileges",
+          "control": "multiselect",
+          "required": true,
+          "options": [
+            {
+              "value": "CREATE",
+              "label": "Create"
+            },
+            {
+              "value": "ALTER ANY",
+              "label": "Alter Any"
+            },
+            {
+              "value": "DROP ANY",
+              "label": "Drop Any"
+            },
+            {
+              "value": "ALL",
+              "label": "All"
+            }
+          ],
+          "visible_when": {
+            "field": "privilege_scope",
+            "equals": "ddl_class"
+          }
+        },
+        {
+          "field_id": "database_privileges",
+          "label": "Database privileges",
+          "control": "multiselect",
+          "required": true,
+          "options": [
+            {
+              "value": "CREATE",
+              "label": "Create"
+            },
+            {
+              "value": "ALTER",
+              "label": "Alter"
+            },
+            {
+              "value": "DROP",
+              "label": "Drop"
+            },
+            {
+              "value": "ALL",
+              "label": "All"
+            }
+          ],
+          "help": "ALL means ALTER and DROP, not CREATE DATABASE. CREATE DATABASE uses the security database and requires a USER or ROLE without grant options or a GRANTED BY clause. A ROLE must exist in the server security database, not only this database.",
+          "visible_when": {
+            "field": "privilege_scope",
+            "equals": "database"
+          }
+        },
+        {
+          "field_id": "grant_option",
+          "label": "With grant option",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "visible_when": {
+            "field": "privilege_scope",
+            "in": [
+              "object",
+              "ddl_class",
+              "database"
+            ]
+          }
+        },
+        {
+          "field_id": "grantor",
+          "label": "Explicit grantor",
+          "control": "text",
+          "required": false,
+          "help": "Optional GRANTED BY USER. Native authority is required.",
+          "visible_when": {
+            "field": "privilege_scope",
+            "in": [
+              "object",
+              "ddl_class",
+              "database"
+            ]
+          }
+        }
+      ],
+      "notes": "Drafted from the provider's own grant/revoke form (privileges.py, relational_admin._compile_firebird_role). Round-tripped on a live embedded Firebird 5 engine by tools/tests/test_ui_descriptor_security_firebird_live.py (dialog draft -> validate -> plan -> apply -> RDB$USER_PRIVILEGES observed).",
+      "form_reference": "SR-F-031138"
+    },
+    {
+      "operation_id": "revoke",
+      "resource_kind": "privilege",
+      "title": "Revoke privileges",
+      "menu": {
+        "category": "security",
+        "order": 33
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "none",
+      "fields": [
+        {
+          "field_id": "privilege_scope",
+          "label": "Privilege scope",
+          "control": "select",
+          "required": true,
+          "default": "object",
+          "options": [
+            {
+              "value": "object",
+              "label": "Object"
+            },
+            {
+              "value": "ddl_class",
+              "label": "Ddl Class"
+            },
+            {
+              "value": "database",
+              "label": "Database"
+            },
+            {
+              "value": "all_objects",
+              "label": "All Objects"
+            }
+          ]
+        },
+        {
+          "field_id": "principal_kind",
+          "label": "Grantee kind",
+          "control": "select",
+          "required": true,
+          "default": "USER",
+          "options": [
+            {
+              "value": "USER",
+              "label": "User"
+            },
+            {
+              "value": "ROLE",
+              "label": "Role"
+            },
+            {
+              "value": "PUBLIC",
+              "label": "Public"
+            },
+            {
+              "value": "PROCEDURE",
+              "label": "Procedure"
+            },
+            {
+              "value": "FUNCTION",
+              "label": "Function"
+            },
+            {
+              "value": "PACKAGE",
+              "label": "Package"
+            },
+            {
+              "value": "TRIGGER",
+              "label": "Trigger"
+            },
+            {
+              "value": "VIEW",
+              "label": "View"
+            },
+            {
+              "value": "GROUP",
+              "label": "Group"
+            },
+            {
+              "value": "SYSTEM PRIVILEGE",
+              "label": "System Privilege"
+            }
+          ]
+        },
+        {
+          "field_id": "principal",
+          "label": "Grantee name",
+          "control": "text",
+          "required": true,
+          "visible_when": {
+            "field": "principal_kind",
+            "in": [
+              "USER",
+              "ROLE",
+              "PROCEDURE",
+              "FUNCTION",
+              "PACKAGE",
+              "TRIGGER",
+              "VIEW",
+              "GROUP",
+              "SYSTEM PRIVILEGE"
+            ]
+          }
+        },
+        {
+          "field_id": "additional_grantees",
+          "label": "Additional grantees",
+          "control": "grid",
+          "columns": [
+            {
+              "field_id": "kind",
+              "label": "Grantee kind",
+              "control": "select",
+              "required": true,
+              "default": "USER",
+              "options": [
+                {
+                  "value": "USER",
+                  "label": "User"
+                },
+                {
+                  "value": "ROLE",
+                  "label": "Role"
+                },
+                {
+                  "value": "PUBLIC",
+                  "label": "Public"
+                },
+                {
+                  "value": "PROCEDURE",
+                  "label": "Procedure"
+                },
+                {
+                  "value": "FUNCTION",
+                  "label": "Function"
+                },
+                {
+                  "value": "PACKAGE",
+                  "label": "Package"
+                },
+                {
+                  "value": "TRIGGER",
+                  "label": "Trigger"
+                },
+                {
+                  "value": "VIEW",
+                  "label": "View"
+                },
+                {
+                  "value": "GROUP",
+                  "label": "Group"
+                },
+                {
+                  "value": "SYSTEM PRIVILEGE",
+                  "label": "System Privilege"
+                }
+              ]
+            },
+            {
+              "field_id": "name",
+              "label": "Grantee name",
+              "control": "text",
+              "required": true,
+              "visible_when": {
+                "field": "kind",
+                "in": [
+                  "USER",
+                  "ROLE",
+                  "PROCEDURE",
+                  "FUNCTION",
+                  "PACKAGE",
+                  "TRIGGER",
+                  "VIEW",
+                  "GROUP",
+                  "SYSTEM PRIVILEGE"
+                ]
+              }
+            }
+          ],
+          "required": false,
+          "help": "All listed grantees are part of one native statement and receive the selected privileges."
+        },
+        {
+          "field_id": "object_type",
+          "label": "Object type",
+          "control": "select",
+          "required": true,
+          "default": "TABLE",
+          "options": [
+            {
+              "value": "TABLE",
+              "label": "Table"
+            },
+            {
+              "value": "VIEW",
+              "label": "View"
+            },
+            {
+              "value": "PROCEDURE",
+              "label": "Procedure"
+            },
+            {
+              "value": "FUNCTION",
+              "label": "Function"
+            },
+            {
+              "value": "PACKAGE",
+              "label": "Package"
+            },
+            {
+              "value": "SEQUENCE",
+              "label": "Sequence"
+            },
+            {
+              "value": "GENERATOR",
+              "label": "Generator"
+            },
+            {
+              "value": "EXCEPTION",
+              "label": "Exception"
+            }
+          ],
+          "visible_when": {
+            "field": "privilege_scope",
+            "equals": "object"
+          }
+        },
+        {
+          "field_id": "object_name",
+          "label": "Exact object name",
+          "control": "text",
+          "required": true,
+          "help": "Dots belong to the Firebird identifier; they do not name a schema.",
+          "visible_when": {
+            "field": "privilege_scope",
+            "equals": "object"
+          }
+        },
+        {
+          "field_id": "privileges",
+          "label": "Object privileges",
+          "control": "multiselect",
+          "required": true,
+          "options": [
+            {
+              "value": "SELECT",
+              "label": "Select",
+              "visible_when": {
+                "field_id": "object_type",
+                "in": [
+                  "TABLE",
+                  "VIEW"
+                ]
+              }
+            },
+            {
+              "value": "INSERT",
+              "label": "Insert",
+              "visible_when": {
+                "field_id": "object_type",
+                "in": [
+                  "TABLE",
+                  "VIEW"
+                ]
+              }
+            },
+            {
+              "value": "UPDATE",
+              "label": "Update",
+              "visible_when": {
+                "field_id": "object_type",
+                "in": [
+                  "TABLE",
+                  "VIEW"
+                ]
+              }
+            },
+            {
+              "value": "DELETE",
+              "label": "Delete",
+              "visible_when": {
+                "field_id": "object_type",
+                "in": [
+                  "TABLE",
+                  "VIEW"
+                ]
+              }
+            },
+            {
+              "value": "REFERENCES",
+              "label": "References",
+              "visible_when": {
+                "field_id": "object_type",
+                "in": [
+                  "TABLE",
+                  "VIEW"
+                ]
+              }
+            },
+            {
+              "value": "EXECUTE",
+              "label": "Execute",
+              "visible_when": {
+                "field_id": "object_type",
+                "in": [
+                  "PROCEDURE",
+                  "FUNCTION",
+                  "PACKAGE"
+                ]
+              }
+            },
+            {
+              "value": "USAGE",
+              "label": "Usage",
+              "visible_when": {
+                "field_id": "object_type",
+                "in": [
+                  "SEQUENCE",
+                  "GENERATOR",
+                  "EXCEPTION"
+                ]
+              }
+            },
+            {
+              "value": "ALL",
+              "label": "All",
+              "visible_when": {
+                "field_id": "object_type",
+                "in": [
+                  "TABLE",
+                  "VIEW"
+                ]
+              }
+            }
+          ],
+          "visible_when": {
+            "field": "privilege_scope",
+            "equals": "object"
+          }
+        },
+        {
+          "field_id": "update_columns",
+          "label": "UPDATE columns",
+          "control": "grid",
+          "columns": [
+            {
+              "field_id": "name",
+              "label": "Exact column name",
+              "control": "text",
+              "required": true
+            }
+          ],
+          "required": false,
+          "help": "Empty means the whole relation. Column lists apply only to UPDATE or REFERENCES, never SELECT."
+        },
+        {
+          "field_id": "reference_columns",
+          "label": "REFERENCES columns",
+          "control": "grid",
+          "columns": [
+            {
+              "field_id": "name",
+              "label": "Exact column name",
+              "control": "text",
+              "required": true
+            }
+          ],
+          "required": false,
+          "help": "Empty means the whole relation. Column lists apply only to UPDATE or REFERENCES, never SELECT."
+        },
+        {
+          "field_id": "ddl_class",
+          "label": "DDL object class",
+          "control": "select",
+          "required": true,
+          "default": "TABLE",
+          "options": [
+            {
+              "value": "TABLE",
+              "label": "Table"
+            },
+            {
+              "value": "VIEW",
+              "label": "View"
+            },
+            {
+              "value": "PROCEDURE",
+              "label": "Procedure"
+            },
+            {
+              "value": "FUNCTION",
+              "label": "Function"
+            },
+            {
+              "value": "PACKAGE",
+              "label": "Package"
+            },
+            {
+              "value": "SEQUENCE",
+              "label": "Sequence"
+            },
+            {
+              "value": "GENERATOR",
+              "label": "Generator"
+            },
+            {
+              "value": "DOMAIN",
+              "label": "Domain"
+            },
+            {
+              "value": "EXCEPTION",
+              "label": "Exception"
+            },
+            {
+              "value": "ROLE",
+              "label": "Role"
+            },
+            {
+              "value": "CHARACTER SET",
+              "label": "Character Set"
+            },
+            {
+              "value": "COLLATION",
+              "label": "Collation"
+            },
+            {
+              "value": "FILTER",
+              "label": "Filter"
+            }
+          ],
+          "visible_when": {
+            "field": "privilege_scope",
+            "equals": "ddl_class"
+          }
+        },
+        {
+          "field_id": "ddl_privileges",
+          "label": "DDL privileges",
+          "control": "multiselect",
+          "required": true,
+          "options": [
+            {
+              "value": "CREATE",
+              "label": "Create"
+            },
+            {
+              "value": "ALTER ANY",
+              "label": "Alter Any"
+            },
+            {
+              "value": "DROP ANY",
+              "label": "Drop Any"
+            },
+            {
+              "value": "ALL",
+              "label": "All"
+            }
+          ],
+          "visible_when": {
+            "field": "privilege_scope",
+            "equals": "ddl_class"
+          }
+        },
+        {
+          "field_id": "database_privileges",
+          "label": "Database privileges",
+          "control": "multiselect",
+          "required": true,
+          "options": [
+            {
+              "value": "CREATE",
+              "label": "Create"
+            },
+            {
+              "value": "ALTER",
+              "label": "Alter"
+            },
+            {
+              "value": "DROP",
+              "label": "Drop"
+            },
+            {
+              "value": "ALL",
+              "label": "All"
+            }
+          ],
+          "help": "ALL means ALTER and DROP, not CREATE DATABASE. CREATE DATABASE uses the security database and requires a USER or ROLE without grant options or a GRANTED BY clause. A ROLE must exist in the server security database, not only this database.",
+          "visible_when": {
+            "field": "privilege_scope",
+            "equals": "database"
+          }
+        },
+        {
+          "field_id": "grant_option_only",
+          "label": "Revoke only the grant option",
+          "control": "boolean",
+          "required": false,
+          "default": false,
+          "visible_when": {
+            "field": "privilege_scope",
+            "in": [
+              "object",
+              "ddl_class",
+              "database"
+            ]
+          }
+        },
+        {
+          "field_id": "grantor",
+          "label": "Explicit grantor",
+          "control": "text",
+          "required": false,
+          "help": "Optional GRANTED BY USER. Native authority is required.",
+          "visible_when": {
+            "field": "privilege_scope",
+            "in": [
+              "object",
+              "ddl_class",
+              "database"
+            ]
+          }
+        },
+        {
+          "field_id": "confirmation",
+          "label": "Confirm exact grantee names",
+          "control": "text",
+          "required": true,
+          "help": "Enter the names in form order, separated by comma and space. For PUBLIC, enter PUBLIC. Review the complete preview."
+        }
+      ],
+      "notes": "Drafted from the provider's own grant/revoke form (privileges.py, relational_admin._compile_firebird_role). Round-tripped on a live embedded Firebird 5 engine by tools/tests/test_ui_descriptor_security_firebird_live.py (dialog draft -> validate -> plan -> apply -> RDB$USER_PRIVILEGES observed).",
+      "form_reference": "SR-F-031139"
     }
   ]
 }

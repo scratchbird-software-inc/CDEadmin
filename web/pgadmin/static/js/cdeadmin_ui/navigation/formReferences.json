@@ -10285,6 +10285,22 @@
     "workspace": {
       "reference": "SR-F-000001",
       "title": "Provider workspace"
+    },
+    "operation:firebird:role:grant": {
+      "reference": "SR-F-031136",
+      "title": "Firebird role grant"
+    },
+    "operation:firebird:role:revoke": {
+      "reference": "SR-F-031137",
+      "title": "Firebird role revoke"
+    },
+    "operation:firebird:privilege:grant": {
+      "reference": "SR-F-031138",
+      "title": "Firebird privilege grant"
+    },
+    "operation:firebird:privilege:revoke": {
+      "reference": "SR-F-031139",
+      "title": "Firebird privilege revoke"
     }
   }
 }
