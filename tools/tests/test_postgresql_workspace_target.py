@@ -64,13 +64,24 @@ def test_server_scope_is_explicit(workspace):
     assert 'database_id' not in endpoint['route']
 
 
+def test_the_browsers_server_scope_name_means_the_server_itself(workspace):
+    """The Security Manager at server scope sends this on every request, inspect_resource included."""
+    service, server, manager, _ = workspace
+    _, endpoint, _ = service.workspace(server, database_target_id='cdeadmin-server-scope')
+    manager.connection.assert_called_once_with()
+    assert 'database_id' not in endpoint['route']
+
+
 def test_disconnected_target_is_not_reconnected_or_replaced(workspace):
     service, server, manager, connection = workspace
     connection.connected.return_value = False
-    with pytest.raises(EndpointRegistrationError, match='must be connected'):
+    with pytest.raises(EndpointRegistrationError, match='Connect database'):
         service.workspace(server, database_target_id='postgresql-database:42')
     manager.connection.assert_called_once_with(did=42)
     connection.connect.assert_not_called()
+    # The server itself keeps its own wording.
+    with pytest.raises(EndpointRegistrationError, match='must be connected'):
+        service.workspace(server)
 
 
 def test_invalid_target_does_not_touch_manager(workspace):

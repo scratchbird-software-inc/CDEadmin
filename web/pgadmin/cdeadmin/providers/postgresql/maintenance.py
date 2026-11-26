@@ -49,7 +49,11 @@ MAINTENANCE_OPERATIONS = {
 #: Operations whose database comes from the dialog's `database` reference.
 DATABASE_PICKED = frozenset({('role', 'reassign-owned'), ('role', 'drop-owned'),
                              ('tablespace', 'move-objects')})
-_DATABASE_REFERENCE = __import__('re').compile(r'postgresql:pg_database/([1-9][0-9]{0,9})')
+# A database reference: the public resource id a picker sends
+# (postgresql:postgresql/endpoint/<endpoint>/database/OID), the catalog's own spelling
+# (postgresql:pg_database:OID) or the older path form (postgresql:pg_database/OID).
+_DATABASE_REFERENCE = __import__('re').compile(
+    r'postgresql:(?:pg_database[:/]|postgresql/endpoint/[0-9a-f-]{36}/database/)([1-9][0-9]{0,9})')
 MOVE_OBJECT_TYPES = {'all': ('TABLE', 'INDEX', 'MATERIALIZED VIEW'), 'tables': ('TABLE',),
                      'indexes': ('INDEX',), 'materialized-views': ('MATERIALIZED VIEW',)}
 #: Maintenance actions whose plan needs an explicit confirmation (typed name for TRUNCATE).

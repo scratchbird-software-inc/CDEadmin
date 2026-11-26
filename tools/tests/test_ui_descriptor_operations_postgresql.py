@@ -210,6 +210,12 @@ def test_database_picked_operations_compile_and_route_to_the_picked_database():
                         'transaction_mode': 'transaction'}}
     assert compile_maintenance('role', 'drop-owned', role, {'database': db, 'confirmation': 'r"1'})['statement'] == \
         'DROP OWNED BY "r""1" RESTRICT'
+    # The resource ids a database picker can send: the listing's own and the public one.
+    assert compile_maintenance('role', 'drop-owned', role, {
+        'database': 'postgresql:postgresql/endpoint/734ccd7c-073c-4085-b69b-bb1abb541cf6/database/16384',
+        'confirmation': 'r"1'})['statement'] == 'DROP OWNED BY "r""1" RESTRICT'
+    assert compile_maintenance('role', 'drop-owned', role, {'database': 'postgresql:pg_database:16384',
+                                                          'confirmation': 'r"1'})['statement'] == 'DROP OWNED BY "r""1" RESTRICT'
     assert compile_maintenance('role', 'drop-owned', role, {'database': db, 'confirmation': 'r"1', 'cascade': True})[
         'statement'] == 'DROP OWNED BY "r""1" CASCADE'
     space = {'name': 'old'}

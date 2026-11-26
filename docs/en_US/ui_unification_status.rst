@@ -1895,5 +1895,33 @@ Gaps found, not closed:
   field from it. Verified on two overloads: only the selected overload changed. Sending
   identity arguments (names included) was tried first and refused by the compiler's
   readback (``to_regprocedure`` raises on a name-and-type list), hence the types-only field.
-* Still not clicked through: the Security Manager (principals) and membership. The
-  revoke prefill for a default-ACL ``(owner)`` row is unchanged.
+* Security Manager principals and membership (clicked through 2026-11-26, demo PostgreSQL
+  18.3, provider tree, ``status`` and ``grants.status`` flipped to complete for the run only
+  and reverted). With the descriptor ``draft`` PostgreSQL gets the previous manager, which
+  listed no principals. With it ``complete`` the descriptor-driven manager lists all roles.
+  Create (attributes on the Privileges tab, a ``Member of`` row, a comment) previews a
+  three-statement plan, applies, and the catalog shows the role with login, createdb, the
+  comment and the membership. Alter changed CREATEROLE and the connection limit
+  (``ALTER ROLE ... WITH CREATEROLE CONNECTION LIMIT 5``); ``Revoke membership of`` ran
+  ``REVOKE "pg_monitor" FROM "ct_role"``; ``Drop owned objects`` ran ``DROP OWNED BY ... RESTRICT``
+  in the picked database and cleared a table grant; the role was dropped from its tree menu
+  with a typed confirmation. Defects found and fixed: selecting a role failed with 409
+  (``cdeadmin-server-scope`` reached the PostgreSQL workspace unconverted by
+  ``inspect_resource``; ``EndpointService.workspace`` now maps it once); the manager's
+  operation dialogs had no picker data, so the Database field of Drop and Reassign owned
+  was a bare text box (the manager now passes the option context); the picker's database
+  value (the public resource id) was refused by the compiler, which only knew a
+  ``pg_database/OID`` spelling it never receives (both spellings and the catalog's are
+  accepted); the role form's help text carried implementation notes ("pgAdmin renders ...",
+  "Provider tree: ...") and the Password field accepted input a plan always refuses (it is
+  now read-only with help saying where to set it).
+* Gaps recorded, not closed: the manager shows no ``Privileges held`` for a role that holds
+  a table grant, because held privileges are read from the server-scope listing and table
+  ACLs live in database-scope listings; the same "Provider tree: ..." help text remains in
+  ten other PostgreSQL form files; a native refusal reaches the user only as the generic
+  "refused before dispatch" text with no field named (the refusal contract is bounded and
+  secret-free by design, and the UI does not map its codes), so the reason (for instance a
+  missing database choice) is not shown; ``Reassign owned objects`` was opened but not run.
+  The 13 failures in the live-gated ``test_ui_descriptor_operations_postgresql.py`` run
+  are identical with and without these changes. The revoke prefill for a default-ACL
+  ``(owner)`` row is unchanged.

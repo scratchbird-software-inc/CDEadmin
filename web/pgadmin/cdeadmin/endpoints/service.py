@@ -929,6 +929,10 @@ class EndpointService:
         sibling database sessions and caches stay strictly isolated.
         """
         endpoint = getattr(server, 'endpoint_profile', None)
+        # The browser's name for "no database, the server itself" (the Security Manager at
+        # server scope sends it on every request); callers that read one directly need not.
+        if database_target_id == 'cdeadmin-server-scope':
+            database_target_id = None
         if self._is_preserved_postgresql(server):
             return self._postgresql_workspace(server, endpoint, database_target_id)
         if endpoint is None or endpoint.provider_version is None:

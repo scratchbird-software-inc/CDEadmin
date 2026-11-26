@@ -30,6 +30,7 @@ import {ProgressOverlay} from '../feedback/ProgressOverlay';
 import OperationDialog from '../objects/OperationDialog';
 import ProviderObjectEditorHost, {makePost, resourceNative} from '../objects/ProviderObjectEditorHost';
 import {descriptorClient, visualAdminCalls} from '../objects/DescriptorClient';
+import {operationContext} from '../objects/descriptors';
 import {listResources} from './providerList';
 import {granteeSpelling, heldRows} from './DescriptorObjectGrants';
 
@@ -254,6 +255,7 @@ export default function DescriptorSecurityManager({
       </Box>}
     </Box>
     {dialog && <OperationDialog open operation={dialog.operation} targetName={dialog.target.display_name}
+      context={operationContext(state.bundle, state.resources, dialog.target)}
       plan={dialog.calls.plan} apply={dialog.calls.apply}
       onClose={() => setDialog(null)} onApplied={applied} />}
   </Box>;
