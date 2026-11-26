@@ -2025,16 +2025,26 @@ Once 1, 2 and 3 are decided, phase 0 can start immediately; nothing in phases 0 
       say reports no), or for a user holding the new
       ``refusal.view_reasons`` permission, and is refused otherwise.
 
-    *Status (2026-11-26).* The first slice is implemented for PostgreSQL:
-    three registered codes (``database_not_chosen``, ``confirmation_mismatch``,
-    ``password_not_carried``) with their catalog text in
-    ``ui_descriptors/postgresql/refusals.json``; the contract carries the
-    catalog sentence and a reference; the reasons store, the
-    ``refusal.view_reasons`` permission and a PostgreSQL superuser probe gate
-    reading a reason; the client shows the sentence, marks the field and offers
-    *Show reason*. Not done: codes for the other PostgreSQL refusal sites (a
-    known static message maps to its code centrally; everything else keeps the
-    generic sentence), catalogs for the other engines and their administrator
-    probes (until then only an application administrator or a user holding the
-    permission can read a reason there), declarative pre-checks (b), and
-    translation of the new strings.
+    *Status (2026-11-26).* Implemented for PostgreSQL, and every refusal its
+    compilers and provider raise is dealt with. Three routes, none needing an
+    edit at the raise site (``providers/postgresql/refusal_codes.py``
+    ``describe``): an exact known message maps to a specific code with a
+    hand-written catalog sentence (typed confirmation, database not chosen,
+    password not carried); a message that is fixed text in source (411 of
+    them, listed in ``refusal_literals.json`` by ``tools/refusal_inventory.py``)
+    is shown as it stands, which is option (c) restricted to registered text
+    with no user data; a message built from values (96 templates) matches a
+    rule and is shown as the catalog's sentence for the rule, never its own
+    words. Twenty-four codes cover them, across 649 raise sites. ``test_refusal_reasons.py`` (part of
+    ``make ui-descriptors-check``) reads the source and fails when a refusal is
+    neither registered nor matched, so a new one cannot be added uncovered. The
+    reasons store, the ``refusal.view_reasons`` permission, the PostgreSQL
+    superuser probe and the client (sentence, field marking, *Show reason*) are
+    as designed. Not covered: ``PostgreSQLStatementRejected`` (an apply-time
+    rejection, which already shows the server's own words), exceptions passed on
+    from other modules (classified where they began), and the validation
+    messages of the descriptor layer (already shown). Not done: catalogs and
+    administrator probes for the other engines (until then only an application
+    administrator or a user holding the permission can read a reason there),
+    declarative pre-checks (b), translation of the new strings, and rewording
+    the fixed messages, which show in the compilers' own wording.

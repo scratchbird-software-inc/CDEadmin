@@ -184,3 +184,88 @@ def test_the_permission_exists_and_is_registered():
     from pgadmin.tools.user_management.PgAdminPermissions import AllPermissionTypes
     assert AllPermissionTypes.refusal_view_reasons == 'refusal.view_reasons'
     assert 'refusal.view_reasons' in AllPermissionTypes.list()
+
+
+# --- every refusal is dealt with (Decision 22) -----------------------------------------------------
+
+def test_every_refusal_in_the_provider_source_is_registered_or_matched_by_a_rule():
+    """A new refusal that is neither fixed text in refusal_literals.json nor matched by a rule fails here."""
+    import refusal_inventory
+    assert refusal_inventory.main(['--check']) == 0, 'run: python3 tools/refusal_inventory.py --write'
+    unmatched = [template for template in refusal_inventory.dynamic_templates()
+                 if refusal_codes.describe(template.replace('{}', 'x')).code is None]
+    assert unmatched == [], 'add a rule to refusal_codes.RULES for: ' + '; '.join(unmatched)
+    literals = refusal_inventory.literals()
+    assert all(refusal_codes.describe(text).explanation == text or refusal_codes.describe(text).code
+               for text in literals)
+
+
+def test_every_code_a_rule_can_give_has_catalog_text():
+    given = {code for code, _pattern in refusal_codes.RULES} | {code for code, _field in refusal_codes.KNOWN_MESSAGES.values()}
+    assert given <= set(catalog('postgresql')) and given <= refusal_codes.CODES
+    assert 'rule_not_met' in catalog('postgresql')
+
+
+def test_a_message_built_from_values_gets_the_sentence_for_its_rule_and_never_its_own_words():
+    for message, code, field in (
+            ('schema must not be empty', 'value_required', 'schema'),
+            ('privileges must be a list of rows', 'list_expected', 'privileges'),
+            ('name exceeds 63 bytes', 'too_long', 'name'),
+            ('privilege rows must be a list of rows', 'list_expected', None),
+            ('enum label hunter2 repeats', 'duplicate_value', None),
+            ('Native postgres -C rejected postgresql.conf: password=hunter2', 'native_tool_rejected', None),
+            ('PostgreSQL rejected ALTER ROLE x PASSWORD \'hunter2\': syntax', 'native_tool_rejected', None),
+            ('Unsupported PostgreSQL configuration operation: hunter2', 'unsupported_here', None)):
+        reason = refusal_codes.describe(message)
+        assert (reason.code, reason.field_id, reason.explanation) == (code, field, None), message
+
+
+def test_a_fixed_message_is_shown_as_it_stands_and_an_unknown_one_stays_generic():
+    reason = refusal_codes.describe('a table has at most one primary key')
+    assert (reason.code, reason.explanation) == ('rule_not_met', 'a table has at most one primary key')
+    assert refusal_codes.describe('something no compiler raises') == refusal_codes.Reason(None, None)
+    # a known code keeps its catalog sentence rather than the message's own words
+    assert refusal_codes.describe('drop confirmation does not match object name').explanation is None
+
+
+def test_a_fixed_message_cannot_be_forged_by_a_built_one():
+    """Only an exact match shows as it stands; a message that merely contains a registered text does not."""
+    reason = refusal_codes.describe('a table has at most one primary key hunter2')
+    assert reason.explanation is None
+
+
+def test_the_response_shows_a_registered_text_and_still_never_an_entrys_own_message():
+    error = refusal({'field_id': None, 'code': 'rule_not_met', 'explanation': 'a table has at most one primary key',
+                     'message': 'secret-canary', 'value': 'secret-canary'})
+    value = response(error, '0123456789abcdef', catalog('postgresql'))
+    assert value['data']['refusal']['errors'][0]['message'] == 'a table has at most one primary key'
+    assert 'secret-canary' not in json.dumps(value)
+    # no explanation: the catalog's sentence for the code
+    plain = response(refusal({'field_id': None, 'code': 'rule_not_met'}), None, catalog('postgresql'))
+    assert plain['data']['refusal']['errors'][0]['message'] == catalog('postgresql')['rule_not_met']
+
+
+def test_the_plan_funnel_gives_every_provider_refusal_a_reason():
+    from pgadmin.cdeadmin.providers.postgresql.provider import PostgreSQLProvider, PostgreSQLProviderError
+
+    class Planner:
+        def __init__(self, error):
+            self.error = error
+
+        def plan(self, _request):
+            raise self.error
+
+    def refused(error):
+        provider = object.__new__(PostgreSQLProvider)
+        provider._visual_admin = Planner(error)
+        with pytest.raises(VisualAdminValidationError) as caught:
+            provider.plan_visual_admin({})
+        return caught.value.errors[0]
+
+    assert refused(PostgreSQLProviderError('a table has at most one primary key')) == {
+        'field_id': None, 'code': 'rule_not_met', 'explanation': 'a table has at most one primary key'}
+    assert refused(PostgreSQLProviderError.refusing(PostgreSQLNativeAdminError('schema must not be empty'))) == {
+        'field_id': 'schema', 'code': 'value_required'}
+    assert refused(PostgreSQLProviderError('choose the database the operation runs in')) == {
+        'field_id': 'database', 'code': 'database_not_chosen'}
+    assert refused(PostgreSQLProviderError('never seen')) == {'field_id': None, 'code': 'native_review_refused'}

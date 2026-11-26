@@ -1,7 +1,7 @@
 {
   "schema": "cdeadmin.ui-refusals.v1",
   "engine": "postgresql",
-  "notes": "Text for the reason codes registered in providers/postgresql/refusal_codes.py. A test requires an entry for every registered code and none for an unregistered one.",
+  "notes": "Text for the reason codes registered in providers/postgresql/refusal_codes.py. A test requires an entry for every registered code and none for an unregistered one. A refusal whose message is fixed text in source is shown as that text (refusal_literals.json) with the code rule_not_met; the entry here is the sentence for a rule_not_met that has no such text.",
   "refusals": [
     {
       "code": "database_not_chosen",
@@ -14,6 +14,90 @@
     {
       "code": "password_not_carried",
       "message": "A role password is never carried in a plan or SQL preview. Leave it empty here and set it from the server's Properties dialog."
+    },
+    {
+      "code": "value_required",
+      "message": "A required value is missing. Fill in the indicated field, or see the SQL tab for what the operation needs."
+    },
+    {
+      "code": "list_expected",
+      "message": "A grid or list has the wrong shape. Add rows with the grid's Add button, one value per row."
+    },
+    {
+      "code": "number_expected",
+      "message": "A number is missing or outside the allowed range. Enter a whole number the field allows, for example 10."
+    },
+    {
+      "code": "boolean_expected",
+      "message": "This field takes a yes or no choice. Use its switch or checkbox."
+    },
+    {
+      "code": "choice_expected",
+      "message": "The value is not one the field offers. Choose one of the values in its list."
+    },
+    {
+      "code": "invalid_value",
+      "message": "The value is not in the expected format. Check it against the field's help text."
+    },
+    {
+      "code": "too_long",
+      "message": "A value is too long. PostgreSQL names are at most 63 bytes."
+    },
+    {
+      "code": "invalid_name",
+      "message": "A name or reference is not in a form PostgreSQL accepts. Use schema.table or name(argument types), for example public.orders."
+    },
+    {
+      "code": "unsafe_syntax",
+      "message": "The text contains syntax the plan will not carry, such as a statement separator or a comment. Use one plain expression."
+    },
+    {
+      "code": "invalid_sql",
+      "message": "The SQL could not be parsed. Check it for typos; an administrator can read the parser's message with the reference."
+    },
+    {
+      "code": "duplicate_value",
+      "message": "A value appears more than once or already exists. Each one must be distinct."
+    },
+    {
+      "code": "version_required",
+      "message": "This operation needs a newer PostgreSQL version than the connected server."
+    },
+    {
+      "code": "not_changeable",
+      "message": "This cannot be changed once it exists. Drop it and create it again to change it."
+    },
+    {
+      "code": "not_in_object",
+      "message": "The name you gave is not part of this object. Check the spelling against the object's current contents."
+    },
+    {
+      "code": "secret_not_carried",
+      "message": "A secret cannot be carried in a plan. Set it from the server's Properties dialog or use a password file."
+    },
+    {
+      "code": "unsupported_here",
+      "message": "This kind of object or operation is not handled here. Use the object's own node in the tree."
+    },
+    {
+      "code": "native_tool_rejected",
+      "message": "PostgreSQL itself rejected this. An administrator can read its message with the reference."
+    },
+    {
+      "code": "operation_state_unclear",
+      "message": "The outcome of an earlier operation is not known. Check the server before trying again; an administrator can read the details with the reference."
+    },
+    {
+      "code": "prepared_transaction_changed",
+      "message": "The prepared transaction changed, is gone, or belongs to someone else. Review it again before resolving it."
+    },
+    {
+      "code": "file_invalid",
+      "message": "The file content is not in the expected format. Check the lines the file needs."
+    },
+    {
+      "code": "rule_not_met",
+      "message": "A rule of this operation is not met. See the SQL tab, or ask an administrator to read the details with the reference."
     }
   ]
 }

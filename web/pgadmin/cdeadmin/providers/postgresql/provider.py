@@ -1069,15 +1069,21 @@ class PostgreSQLProvider:
             return self._visual_admin.plan(request)
         except PostgreSQLProviderError as exc:
             msg = str(exc)
-            # A refusal with a registered reason says which; any other is the generic one.
-            field_id = getattr(exc, 'refusal_field', None)
-            code = getattr(exc, 'refusal_code', None) or 'native_review_refused'
+            # Whatever raised it, say why in the registered vocabulary (Decision 22): an explicit or known
+            # code, a fixed message shown as it stands, or the rule a built message matches; else generic.
+            from .refusal_codes import describe
+            reason = describe(msg, getattr(exc, 'refusal_code', None), getattr(exc, 'refusal_field', None))
+            field_id = reason.field_id
+            code = reason.code or 'native_review_refused'
             for delegated in ('columns', 'primary_key', 'foreign_key', 'check_constraint', 'unique_constraint', 'exclude_constraint'):
                 if msg.startswith(delegated + ':'):
                     field_id = delegated
                     code = 'delegated_to_child_node'
                     break
-            raise VisualAdminValidationError(msg, [{'field_id': field_id, 'code': code}]) from None
+            entry = {'field_id': field_id, 'code': code}
+            if reason.explanation:
+                entry['explanation'] = reason.explanation
+            raise VisualAdminValidationError(msg, [entry]) from None
 
     def apply_visual_admin(self, request):
         return self._visual_admin.apply(request)

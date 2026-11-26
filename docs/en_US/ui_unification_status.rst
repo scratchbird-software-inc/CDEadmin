@@ -1957,13 +1957,13 @@ Gaps found, not closed:
   ``(owner)`` row is unchanged.
 
 
-Native refusal reasons, first slice (2026-11-26)
-------------------------------------------------
+Native refusal reasons (2026-11-26)
+-----------------------------------
 
 Decision 22 was ruled on 2026-11-26 (explanatory text is allowed in a refusal, one
 catalog per engine, ``refusals.py`` may change, a logged reason may be read by the
-engine's superuser equivalent or by a user or role granted the right) and its first
-slice is implemented for PostgreSQL. A refused draft now shows the catalog sentence for
+engine's superuser equivalent or by a user or role granted the right) and it is
+implemented for PostgreSQL. A refused draft now shows the catalog sentence for
 its reason and a reference, the indicated field is marked, and *Show reason* reveals the
 provider's own message to whoever may read it.
 
@@ -2006,3 +2006,26 @@ for now), catalogs and administrator probes for the other engines, declarative p
 field marking in the editor tabs (the message already appears there). The log line is at
 INFO and does not show at the default log level; the reference is shown to the user either
 way.
+
+Every PostgreSQL refusal covered (2026-11-26, same day): the first slice carried three codes;
+all 649 refusal raise sites in ``providers/postgresql`` that carry their own message (510 fixed,
+139 built) are now dealt with without editing them. ``tools/refusal_inventory.py`` reads the source: 411 fixed messages are
+registered in ``refusal_literals.json`` and shown as they stand, and 96 built messages match
+rules in ``refusal_codes.RULES`` and show the catalog sentence of one of 24 codes (the catalog
+grew from 3 to 24 sentences in ``refusals.json``; ``rule_not_met`` carries a fixed message's own
+text). Where the message names a field by an identifier the refusal marks that field. A test
+(``test_refusal_reasons.py``, in ``make ui-descriptors-check``) fails for any refusal that is
+neither registered nor matched, so a new one cannot be added uncovered; it also checks that a
+message built from values never shows its own words (a secret in a tool message, a value in an
+enum label) and that a message which merely contains a registered text is not shown as it
+stands. Checked against real compilers with malformed drafts (a missing schema is marked on its
+field; the password and confirmation cases keep their hand-written sentences). Not covered:
+apply-time rejections (``PostgreSQLStatementRejected``, already shown with the server's words),
+the validate phase (already shown), other engines, translation, and the wording of the fixed
+messages, which are the compilers' own and read as developer notes in places (for example
+"Select a native object family"). The PostgreSQL pytest failure set is unchanged from baseline
+(71) and ``make ui-descriptors-check`` passes (242 passed, 66 skipped). The MySQL group 9
+hash of ``refusals.py`` recorded above is superseded: it changed again and now hashes to
+``5ef823d1e5ab0d7f`` (``provider.py`` ``fd7f48914fcaaf91`` and ``servers/__init__.py``
+``35c8b043e708c198`` are unchanged). The qualification still cannot run here, so that record
+stays "re-hashed, not re-qualified".

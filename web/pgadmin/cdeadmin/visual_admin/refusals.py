@@ -1,8 +1,9 @@
 """Bounded, secret-free HTTP contracts for pre-dispatch refusals.
 
-A refusal says which field and which registered reason (``code``), and, when the engine's refusal
-catalog has text for that code, the catalog's own sentence as ``message`` (Decision 22). Nothing
-the exception says is sent: its message may carry what the user typed or native tool output. The
+A refusal says which field and which registered reason (``code``), and the sentence for it as
+``message`` (Decision 22): the engine's catalog text for the code, or, when the provider's source
+registers the refusal as fixed text with no user data (``explanation``), that text. Nothing else the
+exception says is sent: a built message may carry what the user typed or native tool output. The
 full reason is kept separately under ``reference`` (see ``refusal_log``).
 """
 import re
@@ -26,7 +27,11 @@ def response(error, reference=None, catalog=None):
         if not isinstance(code, str) or not re.fullmatch(r'[A-Za-z0-9_]{1,128}', code):
             code = 'invalid_field'
         entry = {'field_id': field, 'code': code}
-        text = (catalog or {}).get(code)
+        # A fixed message the provider's source registers is shown as it stands (``explanation``); any other
+        # entry gets the catalog's sentence for its code. An entry's own ``message`` is never sent.
+        text = value.get('explanation')
+        if not (isinstance(text, str) and text.strip()):
+            text = (catalog or {}).get(code)
         if isinstance(text, str) and text.strip():
             entry['message'] = text.strip()[:MESSAGE_LIMIT]
         errors.append(entry)
