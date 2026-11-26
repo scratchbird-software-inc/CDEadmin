@@ -2029,3 +2029,21 @@ hash of ``refusals.py`` recorded above is superseded: it changed again and now h
 ``5ef823d1e5ab0d7f`` (``provider.py`` ``fd7f48914fcaaf91`` and ``servers/__init__.py``
 ``35c8b043e708c198`` are unchanged). The qualification still cannot run here, so that record
 stays "re-hashed, not re-qualified".
+
+Wording of the fixed refusal messages (2026-11-26, same day): of the 411 fixed messages, 99
+read like developer notes (raw catalog column names such as ``attstorage``, ``colconstype``
+and ``jstonerror``, "Select a native object family", "a cast has no alter") and are reworded
+as plain sentences; 177 are internal provider states or families the user cannot act on in the
+dialog and now carry a reason code and so the catalog sentence ("inspection stays with the
+provider tree" is ``unsupported_here``, "fixed once created" is ``not_changeable``, a lost
+connection or an unknown outcome is ``operation_state_unclear``, a stale listing is the new
+``stale_listing``, the provider's own failures the new ``provider_unavailable``); 135 were
+reviewed and kept as written, and are shown as sentences (a capital and a full stop). The
+wording lives in ``providers/postgresql/refusal_wording.json``; the exceptions' own text is
+unchanged, so tests, logs and the reasons store still hold the original. A test requires every
+fixed message to be in exactly one of the three groups, so a new one must be reviewed, and
+checks the rewritten text (a capital, at most 300 characters, no pgAdmin or provider-tree
+wording). The rewrites keep each message's meaning and drop claims the code does not make;
+they are my wording and want a read by someone who knows PostgreSQL, in particular the
+reload message after ``ALTER SYSTEM``, the constraint-type list and the enable-state letters.
+Not clicked through in a browser. The catalog has 26 sentences.

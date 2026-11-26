@@ -2032,10 +2032,11 @@ Once 1, 2 and 3 are decided, phase 0 can start immediately; nothing in phases 0 
     hand-written catalog sentence (typed confirmation, database not chosen,
     password not carried); a message that is fixed text in source (411 of
     them, listed in ``refusal_literals.json`` by ``tools/refusal_inventory.py``)
-    is shown as it stands, which is option (c) restricted to registered text
-    with no user data; a message built from values (96 templates) matches a
+    is shown as it stands (or, where it read like a developer note, as the plainer
+    sentence or the reason code that ``refusal_wording.json`` gives it), which is
+    option (c) restricted to registered text with no user data; a message built from values (96 templates) matches a
     rule and is shown as the catalog's sentence for the rule, never its own
-    words. Twenty-four codes cover them, across 649 raise sites. ``test_refusal_reasons.py`` (part of
+    words. Twenty-six codes cover them, across 649 raise sites. ``test_refusal_reasons.py`` (part of
     ``make ui-descriptors-check``) reads the source and fails when a refusal is
     neither registered nor matched, so a new one cannot be added uncovered. The
     reasons store, the ``refusal.view_reasons`` permission, the PostgreSQL
@@ -2046,5 +2047,4 @@ Once 1, 2 and 3 are decided, phase 0 can start immediately; nothing in phases 0 
     messages of the descriptor layer (already shown). Not done: catalogs and
     administrator probes for the other engines (until then only an application
     administrator or a user holding the permission can read a reason there),
-    declarative pre-checks (b), translation of the new strings, and rewording
-    the fixed messages, which show in the compilers' own wording.
+    declarative pre-checks (b), and translation of the new strings.

@@ -33,6 +33,8 @@ CODES = frozenset({
     'version_required', 'not_changeable', 'not_in_object', 'secret_not_carried', 'unsupported_here',
     # what PostgreSQL or an earlier operation said or left behind
     'native_tool_rejected', 'operation_state_unclear', 'prepared_transaction_changed', 'file_invalid',
+    # the provider's own state, which the user cannot fix in the dialog, and a listing that is out of date
+    'provider_unavailable', 'stale_listing',
     # a fixed rule of the operation, explained by its own sentence, or a rule with no more specific reason
     'rule_not_met',
 })
@@ -133,6 +135,7 @@ RULES = tuple((code, re.compile(pattern, re.DOTALL)) for code, pattern in (
 ))
 
 _LITERALS = None
+_WORDING = None
 
 
 def literals():
@@ -144,7 +147,26 @@ def literals():
     return _LITERALS
 
 
+def wording():
+    """How a registered message is shown instead of as written (refusal_wording.json, read once): a plainer
+    sentence (``text``) or a reason code with an optional field (``code``). A message in neither is shown as it stands."""
+    global _WORDING
+    if _WORDING is None:
+        path = Path(__file__).with_name('refusal_wording.json')
+        data = json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
+        _WORDING = {'text': dict(data.get('text', {})), 'code': dict(data.get('code', {})), 'keep': frozenset(data.get('keep', ()))}
+    return _WORDING
+
+
 EXPLANATION_LIMIT = 300
+
+
+def _sentence(message):
+    """A message reviewed and kept as written, shown as a sentence: a capital letter and a full stop."""
+    text = message.strip()
+    if text[:1].islower():
+        text = text[0].upper() + text[1:]
+    return text if text[-1:] in '.!?' else text + '.'
 
 
 def describe(message, code=None, field_id=None):
@@ -154,8 +176,14 @@ def describe(message, code=None, field_id=None):
     code, field_id = classify(message, code, field_id)
     if code is not None:
         return Reason(code, field_id)
-    if message in literals() and len(message) <= EXPLANATION_LIMIT:
-        return Reason('rule_not_met', None, message)
+    if message in literals():
+        reworded = wording()['code'].get(message)
+        if reworded:
+            return Reason(reworded['code'], reworded.get('field'))
+        reworded = wording()['text'].get(message)
+        shown = reworded if reworded is not None else _sentence(message)
+        if len(shown) <= EXPLANATION_LIMIT:
+            return Reason('rule_not_met', None, shown)
     for rule_code, pattern in RULES:
         match = pattern.fullmatch(message)
         if match:

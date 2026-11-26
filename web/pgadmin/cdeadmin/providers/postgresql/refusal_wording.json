@@ -1,0 +1,781 @@
+{
+ "schema": "cdeadmin.pg-refusal-wording.v1",
+ "notes": "How each fixed refusal message in refusal_literals.json is shown (Decision 22). \"text\" replaces a message that read like a developer note with a plain sentence; \"code\" gives it a reason code and so the catalog sentence (an internal state the user cannot fix in the dialog, or a family such as \"inspection stays with the provider tree\"), with an optional field it is about; \"keep\" lists messages reviewed and fine as written. Every literal is in exactly one; a test fails for a new literal that is in none.",
+ "text": {
+  "A large object is identified by its numeric OID": "A large object is named by its numeric OID, for example 16413.",
+  "ALTER cannot unset operator hash or merge support": "Hash and merge support, once set on an operator, cannot be removed by altering it.",
+  "An active PostgreSQL transaction is required to prepare": "A transaction must be open to prepare it. Start one first.",
+  "Autocommit is required for this maintenance statement": "This maintenance statement cannot run inside a transaction. Turn autocommit on and try again.",
+  "Definition must create exactly the qualified aggregate with the selected replacement choice": "The definition must create exactly the aggregate you selected, with the replace option you chose.",
+  "Each statistics element has kind and value": "Each statistics element needs a kind (column or expression) and a value.",
+  "FOR selector is ROLE or USER": "Choose ROLE or USER.",
+  "LC_COLLATE and LC_CTYPE go together": "Set LC_COLLATE and LC_CTYPE together, or neither.",
+  "PERIOD foreign keys require both local_period_column and referenced_period_column": "A PERIOD foreign key needs both a local period column and a referenced period column.",
+  "PostgreSQL configuration reload failed after ALTER SYSTEM": "PostgreSQL could not reload its configuration after ALTER SYSTEM. Check the server before retrying.",
+  "Privileges must match the native object family, or be ALL alone": "Choose privileges that apply to this kind of object, or ALL on its own.",
+  "Privileges must match the object family, or be ALL alone": "Choose privileges that apply to this kind of object, or ALL on its own.",
+  "RETURNS TABLE column name is unterminated": "A quoted column name in RETURNS TABLE is missing its closing quote.",
+  "RETURNS TABLE needs (column type, ...)": "RETURNS TABLE needs a column list in the form (name type, ...).",
+  "Retained session must have autocommit enabled for this command": "This command cannot run inside a transaction. Turn autocommit on and try again.",
+  "Select 1–100 distinct native grantees": "Choose between 1 and 100 distinct grantees.",
+  "Select CURRENT_ROLE without names or NAMED_ROLES with owners": "Use CURRENT_ROLE with no owner names, or NAMED_ROLES with at least one owner.",
+  "Select GLOBAL without schemas or SCHEMAS with names": "Use GLOBAL with no schemas, or SCHEMAS with at least one schema name.",
+  "Select a native default-privilege object family": "Choose the kind of object the default privileges apply to.",
+  "Select a native object family": "Choose the kind of object the privileges apply to.",
+  "Select grant/revoke/inspect default privileges": "Choose whether to grant, revoke or inspect default privileges.",
+  "Select native grantees": "Choose at least one grantee.",
+  "Select native ndistinct, dependencies or mcv kinds": "Choose at least one statistics kind: ndistinct, dependencies or mcv.",
+  "Select parameter grant/revoke/inspect": "Choose whether to grant, revoke or inspect parameter privileges.",
+  "Select privilege grant or revoke": "Choose whether to grant or revoke privileges.",
+  "Select typed native privileges": "Choose at least one privilege.",
+  "Statistics operands and kinds require reviewed drop/create": "Changing a statistics object's columns, expressions or kinds means dropping and recreating it.",
+  "Stored/virtual generation cannot be converted in place": "A stored generated column cannot be converted to virtual, or back, in place.",
+  "Supply NUL-free UTF-8 configuration/PEM text up to 2 MiB": "Supply plain UTF-8 text of at most 2 MiB, with no NUL characters.",
+  "Supply a scalar parameter value": "Supply a single value for the parameter, not a list.",
+  "Symlinked PostgreSQL configuration/certificate files are refused": "A configuration or certificate file that is a symbolic link cannot be used.",
+  "TABLE columns belong to the return type (RETURNS TABLE)": "Columns of a table-returning function belong in the RETURNS TABLE clause.",
+  "Target index is not a partitioned index (relkind I)": "The target index is not a partitioned index.",
+  "a USING expression goes with a type change": "A USING expression is only used when the column's type changes.",
+  "a cast has no alter": "A cast cannot be altered. Drop it and create it again.",
+  "a cast has no alter; drop and create it for another function, context or comment": "A cast cannot be altered. Drop it and create it again for another function, context or comment.",
+  "a foreign key names its referenced table as schema.table": "Write the referenced table as schema.table, for example public.customers.",
+  "a generated column needs genexpr": "A generated column needs its generation expression.",
+  "a setting is a parameter name": "A setting must be a parameter name, for example work_mem.",
+  "a subscription needs connection settings (host, database, user, ...); the password stays with the inherited dialog or a passfile": "A subscription needs connection settings (host, database, user, ...). The password cannot be set here; use a password file.",
+  "a table is written schema.table": "Write the table as schema.table, for example public.orders.",
+  "access method is a method name": "Enter an access method name, for example btree.",
+  "access method is an access method name": "Enter an access method name, for example btree.",
+  "attcompression must be pglz or lz4": "Compression must be pglz or lz4.",
+  "attidentity must be a (always) or d (by default)": "Identity must be a (always) or d (by default).",
+  "attstorage must be one of p, m, e, x": "Storage must be p (plain), m (main), e (external) or x (extended).",
+  "cast method is function, binary or inout": "The cast method must be function, binary or inout.",
+  "check option is no, local or cascaded": "The check option must be no, local or cascaded.",
+  "colconstype must be n (none), i (identity) or g (generated)": "The column's generation kind must be n (none), i (identity) or g (generated).",
+  "colconstype must be n, i or g": "The column's generation kind must be n (none), i (identity) or g (generated).",
+  "context is explicit, assignment or implicit": "The cast context must be explicit, assignment or implicit.",
+  "contype must be one of p, u, f, c, x, n": "Constraint type must be p (primary key), u (unique), f (foreign key), c (check), x (exclusion) or n (not null).",
+  "enable state is O, D, R or A": "Enable state must be O (origin), D (disabled), R (replica) or A (always).",
+  "encoding is an encoding name": "Enter an encoding name, for example UTF8.",
+  "fill factor is 10 to 100": "Fill factor must be between 10 and 100.",
+  "fillfactor runs from 10 to 100": "Fill factor must be between 10 and 100.",
+  "filter_mode must be ALL, LIMIT_TO or EXCEPT": "The table filter must be ALL, LIMIT_TO or EXCEPT.",
+  "generated_action must be KEEP, SET or DROP": "Choose KEEP, SET or DROP for the generated expression.",
+  "generated_kind must be s (stored) or v (virtual)": "Generation kind must be s (stored) or v (virtual).",
+  "increment must not be zero": "The increment cannot be zero.",
+  "inline trigger code is an EDB feature; name a trigger function": "Inline trigger code is an EDB Advanced Server feature; a value is refused here. Name a trigger function instead.",
+  "jstconntype must be local or remote": "Connection type must be local or remote.",
+  "jstkind must be sql or batch": "Step kind must be sql or batch.",
+  "jstonerror must be f (fail), s (succeed) or i (ignore)": "On error must be f (fail), s (succeed) or i (ignore).",
+  "language is a language name": "Enter a language name, for example plpgsql.",
+  "length and precision are whole numbers": "Length and precision must be whole numbers.",
+  "location is an absolute directory path on the server host": "The location must be an absolute directory path on the server host.",
+  "member kind must be OPERATOR or FUNCTION": "Member kind must be OPERATOR or FUNCTION.",
+  "member number is invalid": "The member number is not valid.",
+  "mode must be plain, concurrently or finalize": "Mode must be plain, concurrently or finalize.",
+  "operator strategy number is invalid": "The strategy number is not valid.",
+  "origin is any or none": "Origin must be any or none.",
+  "owned by needs both the table and the column": "OWNED BY needs both the table and the column.",
+  "partition_type must be range, list or hash": "Partition type must be range, list or hash.",
+  "persistence is logged or unlogged": "Persistence must be logged or unlogged.",
+  "policy type is PERMISSIVE or RESTRICTIVE": "Policy type must be PERMISSIVE or RESTRICTIVE.",
+  "provider is icu, libc or builtin": "The locale provider must be icu, libc or builtin.",
+  "rename to a new, non-empty value": "Enter a new, non-empty name.",
+  "replica_identity is DEFAULT, FULL, NOTHING or USING INDEX name": "Replica identity must be DEFAULT, FULL, NOTHING or USING INDEX followed by an index name.",
+  "rule commands are SELECT, INSERT, UPDATE, DELETE or NOTIFY": "A rule command must be SELECT, INSERT, UPDATE, DELETE or NOTIFY.",
+  "search_path is a comma-separated list of schemas": "The search_path setting must be a comma-separated list of schemas.",
+  "sequence data type must be smallint, integer or bigint": "A sequence's data type must be smallint, integer or bigint.",
+  "slot name is lower-case letters, digits and underscores": "A slot name may contain only lower-case letters, digits and underscores.",
+  "streaming is off, on or parallel": "Streaming must be off, on or parallel.",
+  "support function number is invalid": "The support function number is not valid.",
+  "tables list applies only to LIMIT_TO or EXCEPT": "The table list is only used with LIMIT_TO or EXCEPT.",
+  "the category is one letter": "The category must be a single letter.",
+  "the code contains a NUL byte": "The code cannot contain NUL characters.",
+  "the delimiter is one character": "The delimiter must be a single character.",
+  "the internal length is a whole number or -1": "The internal length must be a whole number or -1.",
+  "the partition bound is FOR VALUES ... or DEFAULT": "Write the partition bound as FOR VALUES ... or DEFAULT.",
+  "the schema restriction is a browsing preference of the inherited tree; the provider tree does not store it": "The schema restriction is a browsing preference kept on the server registration; it cannot be set here.",
+  "the trigger function is required (the capture does not name the current one)": "Choose the trigger function; the current one could not be read.",
+  "this pgAgent has no connection-string column; remote steps are unavailable": "This pgAgent installation does not support remote steps.",
+  "type is composite (c), enumeration (e), range (r), external (b) or shell (p)": "Type kind must be composite (c), enumeration (e), range (r), external (b) or shell (p).",
+  "valid until is a timestamp or 'infinity'": "Valid until must be a timestamp or 'infinity'.",
+  "value_mode must be VALUE or DEFAULT": "Choose VALUE or DEFAULT.",
+  "version is a version name": "Enter a version name.",
+  "version is an extension version name": "Enter an extension version name."
+ },
+ "code": {
+  "Administrative commit was not confirmed": {
+   "code": "operation_state_unclear"
+  },
+  "Administrative connection must be idle": {
+   "code": "provider_unavailable"
+  },
+  "Administrative connection release remains unconfirmed": {
+   "code": "operation_state_unclear"
+  },
+  "Administrative literal policy could not be established": {
+   "code": "provider_unavailable"
+  },
+  "Administrative transaction could not start": {
+   "code": "provider_unavailable"
+  },
+  "Caller transaction state unexpectedly changed": {
+   "code": "provider_unavailable"
+  },
+  "Confirm INSTALL DROP NAMESPACE GUARD": {
+   "code": "confirmation_mismatch",
+   "field": "confirmation"
+  },
+  "Confirm the exact parameter name to reset": {
+   "code": "confirmation_mismatch",
+   "field": "confirmation"
+  },
+  "DROP identity review requires an idle owned connection": {
+   "code": "provider_unavailable"
+  },
+  "DROP identity review transaction could not start": {
+   "code": "provider_unavailable"
+  },
+  "Drop confirmation must match the statistics name": {
+   "code": "confirmation_mismatch",
+   "field": "confirmation"
+  },
+  "Exact resolved database name and OID are required": {
+   "code": "provider_unavailable"
+  },
+  "FOR ALL TABLES is fixed once created; drop and create the publication to change it": {
+   "code": "not_changeable"
+  },
+  "Invalid PostgreSQL configuration parameter name": {
+   "code": "invalid_name"
+  },
+  "Invalid PostgreSQL row batch": {
+   "code": "invalid_value"
+  },
+  "Invalid PostgreSQL row operation": {
+   "code": "invalid_value"
+  },
+  "Invalid PostgreSQL session catalog selection": {
+   "code": "invalid_value"
+  },
+  "Invalid operator optimization options": {
+   "code": "invalid_value"
+  },
+  "Invalid parameter filter": {
+   "code": "invalid_value"
+  },
+  "Invalid prepared transaction recovery request": {
+   "code": "invalid_value"
+  },
+  "Native CHECKPOINT outcome is unknown; cancellation or lost acknowledgement does not undo server checkpoint work. Inspect the server before a new explicit decision; do not replay.": {
+   "code": "operation_state_unclear"
+  },
+  "Native PostgreSQL server-file acknowledgement is unavailable": {
+   "code": "operation_state_unclear"
+  },
+  "Native administrative readback failed before commit": {
+   "code": "provider_unavailable"
+  },
+  "Native aggregate OID is unavailable": {
+   "code": "stale_listing"
+  },
+  "Native aggregate identity exceeds 64 KiB": {
+   "code": "too_long"
+  },
+  "Native aggregate signature is invalid": {
+   "code": "invalid_name"
+  },
+  "Native aggregate signature is unavailable": {
+   "code": "stale_listing"
+  },
+  "Native completion metadata is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "Object privileges are read from each object, not inspected here": {
+   "code": "unsupported_here"
+  },
+  "PostgreSQL SQL language binding required": {
+   "code": "provider_unavailable"
+  },
+  "PostgreSQL alter action is unavailable": {
+   "code": "unsupported_here"
+  },
+  "PostgreSQL autocommit change was not acknowledged; refresh transaction state before executing": {
+   "code": "operation_state_unclear"
+  },
+  "PostgreSQL autocommit policy is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "PostgreSQL cancellation state is unknown": {
+   "code": "operation_state_unclear"
+  },
+  "PostgreSQL catalog lookup failed": {
+   "code": "provider_unavailable"
+  },
+  "PostgreSQL catalog response has no row collection": {
+   "code": "provider_unavailable"
+  },
+  "PostgreSQL catalog row lacks provider authority identity": {
+   "code": "provider_unavailable"
+  },
+  "PostgreSQL connection failed": {
+   "code": "provider_unavailable"
+  },
+  "PostgreSQL connection release failed": {
+   "code": "provider_unavailable"
+  },
+  "PostgreSQL connection state is unknown; close this session": {
+   "code": "operation_state_unclear"
+  },
+  "PostgreSQL connection was lost; do not replay": {
+   "code": "operation_state_unclear"
+  },
+  "PostgreSQL delegated connection failed": {
+   "code": "provider_unavailable"
+  },
+  "PostgreSQL delegated credential kind is unsupported": {
+   "code": "provider_unavailable"
+  },
+  "PostgreSQL delegated route principal is invalid": {
+   "code": "provider_unavailable"
+  },
+  "PostgreSQL delegated session could not be opened": {
+   "code": "provider_unavailable"
+  },
+  "PostgreSQL did not confirm the row batch commit": {
+   "code": "operation_state_unclear"
+  },
+  "PostgreSQL draft is invalid": {
+   "code": "invalid_value"
+  },
+  "PostgreSQL execution still owns its connection": {
+   "code": "provider_unavailable"
+  },
+  "PostgreSQL execution worker could not start": {
+   "code": "provider_unavailable"
+  },
+  "PostgreSQL large-object write verification failed before commit": {
+   "code": "provider_unavailable"
+  },
+  "PostgreSQL maintenance operation is unavailable for this object": {
+   "code": "unsupported_here"
+  },
+  "PostgreSQL native administration operation is unavailable": {
+   "code": "unsupported_here"
+  },
+  "PostgreSQL native target identity is unavailable": {
+   "code": "stale_listing"
+  },
+  "PostgreSQL operation is unavailable": {
+   "code": "unsupported_here"
+  },
+  "PostgreSQL prepared transaction capacity is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "PostgreSQL prepared transaction resolution requires an idle connection": {
+   "code": "provider_unavailable"
+  },
+  "PostgreSQL provider has no renderer for this result kind": {
+   "code": "provider_unavailable"
+  },
+  "PostgreSQL provider is closed": {
+   "code": "provider_unavailable"
+  },
+  "PostgreSQL provider only preserves the psycopg3 driver": {
+   "code": "provider_unavailable"
+  },
+  "PostgreSQL provider route is invalid": {
+   "code": "provider_unavailable"
+  },
+  "PostgreSQL query source is required": {
+   "code": "value_required"
+  },
+  "PostgreSQL relation identity changed": {
+   "code": "stale_listing"
+  },
+  "PostgreSQL resource identity did not resolve exactly once": {
+   "code": "stale_listing"
+  },
+  "PostgreSQL row identity has expired": {
+   "code": "stale_listing"
+  },
+  "PostgreSQL row request requires a preview flag": {
+   "code": "provider_unavailable"
+  },
+  "PostgreSQL server identity must be an integer": {
+   "code": "provider_unavailable"
+  },
+  "PostgreSQL server is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "PostgreSQL server-file export outcome and connection release remain unconfirmed; SQL rollback does not undo file output. Inspect the destination before retrying": {
+   "code": "operation_state_unclear"
+  },
+  "PostgreSQL server-file export outcome is unconfirmed; SQL rollback does not undo file output. Inspect the destination before retrying": {
+   "code": "operation_state_unclear"
+  },
+  "PostgreSQL session cleanup is incomplete": {
+   "code": "operation_state_unclear"
+  },
+  "PostgreSQL session execution is active": {
+   "code": "provider_unavailable"
+  },
+  "PostgreSQL session is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "PostgreSQL tabular result rows must be an array": {
+   "code": "provider_unavailable"
+  },
+  "PostgreSQL transaction action is unavailable": {
+   "code": "unsupported_here"
+  },
+  "PostgreSQL transaction outcome is unknown; do not replay": {
+   "code": "operation_state_unclear"
+  },
+  "Prepared 2PC resolution outcome is unknown; inspect pg_prepared_xacts before taking further action and do not replay.": {
+   "code": "operation_state_unclear"
+  },
+  "Prepared transaction GID disagrees with target": {
+   "code": "prepared_transaction_changed"
+  },
+  "Prepared transaction GID exceeds PostgreSQL 200-byte limit": {
+   "code": "too_long"
+  },
+  "Prepared transaction recovery requires an idle connection": {
+   "code": "provider_unavailable"
+  },
+  "Refresh the native statistics OID": {
+   "code": "stale_listing"
+  },
+  "Relation and session database identities do not match": {
+   "code": "stale_listing"
+  },
+  "Retained PostgreSQL backend connection is closed; will not reconnect": {
+   "code": "provider_unavailable"
+  },
+  "Retained PostgreSQL backend connection was lost; do not reconnect or replay": {
+   "code": "operation_state_unclear"
+  },
+  "Retained PostgreSQL session belongs to a different server or database": {
+   "code": "stale_listing"
+  },
+  "Retained PostgreSQL session is unavailable or uncertain; do not reconnect": {
+   "code": "operation_state_unclear"
+  },
+  "Retained PostgreSQL session is unavailable or uncertain; do not replay": {
+   "code": "operation_state_unclear"
+  },
+  "Retained administrative statement changed": {
+   "code": "stale_listing"
+  },
+  "Retained session database OID disagrees with requested route": {
+   "code": "stale_listing"
+  },
+  "Retained-session administrative readback failed": {
+   "code": "provider_unavailable"
+  },
+  "Retained-session commit outcome is unknown; do not replay": {
+   "code": "operation_state_unclear"
+  },
+  "Retained-session commit was not confirmed": {
+   "code": "operation_state_unclear"
+  },
+  "Retained-session savepoint cleanup failed; close this session without replay": {
+   "code": "operation_state_unclear"
+  },
+  "Retained-session transaction could not start": {
+   "code": "provider_unavailable"
+  },
+  "Row continuation is unavailable": {
+   "code": "stale_listing"
+  },
+  "Selected administrative database identity changed": {
+   "code": "stale_listing"
+  },
+  "Selected database OID is invalid": {
+   "code": "stale_listing"
+  },
+  "Selected database identity changed": {
+   "code": "stale_listing"
+  },
+  "Selected database is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "Selected native catalog object no longer exists": {
+   "code": "stale_listing"
+  },
+  "Statement source is required": {
+   "code": "value_required"
+  },
+  "The parameter draft disagrees with its native target": {
+   "code": "stale_listing"
+  },
+  "The prepared transaction is unavailable to this database and role": {
+   "code": "prepared_transaction_changed"
+  },
+  "Unknown PostgreSQL maintenance option": {
+   "code": "invalid_value"
+  },
+  "Unknown native statistics operation": {
+   "code": "unsupported_here"
+  },
+  "Unsupported native aggregate alteration": {
+   "code": "unsupported_here"
+  },
+  "Unsupported native operator alteration": {
+   "code": "unsupported_here"
+  },
+  "Unsupported prepared-transaction operation": {
+   "code": "unsupported_here"
+  },
+  "a step connection string may not carry a password; use .pgpass or a service": {
+   "code": "secret_not_carried"
+  },
+  "arguments must be rows": {
+   "code": "list_expected"
+  },
+  "column inspection stays with the provider tree": {
+   "code": "unsupported_here"
+  },
+  "columns needs at least one column": {
+   "code": "value_required",
+   "field": "columns"
+  },
+  "commands contain unsafe syntax": {
+   "code": "unsafe_syntax"
+  },
+  "constraint inspection stays with the provider tree": {
+   "code": "unsupported_here"
+  },
+  "database inspection stays with the provider tree": {
+   "code": "unsupported_here"
+  },
+  "domain inspection stays with the provider tree": {
+   "code": "unsupported_here"
+  },
+  "extension inspection stays with the provider tree": {
+   "code": "unsupported_here"
+  },
+  "extensions must be a list": {
+   "code": "list_expected"
+  },
+  "extensions must be an object": {
+   "code": "list_expected"
+  },
+  "extensions.postgresql must be an object": {
+   "code": "list_expected"
+  },
+  "foreign table inspection stays with the provider tree": {
+   "code": "unsupported_here"
+  },
+  "include columns must be rows": {
+   "code": "list_expected"
+  },
+  "index columns must be rows": {
+   "code": "list_expected"
+  },
+  "index inspection stays with the provider tree": {
+   "code": "unsupported_here"
+  },
+  "nothing to change; handlers and trust are fixed once created": {
+   "code": "not_changeable"
+  },
+  "operation is owned by the preserved PostgreSQL UI": {
+   "code": "unsupported_here"
+  },
+  "pgAgent job inspection stays with the provider tree": {
+   "code": "unsupported_here"
+  },
+  "policy inspection stays with the provider tree": {
+   "code": "unsupported_here"
+  },
+  "privilege rows must be objects": {
+   "code": "list_expected"
+  },
+  "provider plan is invalid": {
+   "code": "provider_unavailable"
+  },
+  "provider request must be a contract DTO": {
+   "code": "provider_unavailable"
+  },
+  "psycopg runtime is outside the approved exact versions": {
+   "code": "provider_unavailable"
+  },
+  "refresh native TOAST options before resetting them": {
+   "code": "stale_listing"
+  },
+  "removed members must be a list": {
+   "code": "list_expected"
+  },
+  "reset parameters must be rows": {
+   "code": "list_expected"
+  },
+  "return type must not be empty": {
+   "code": "value_required",
+   "field": "return_type"
+  },
+  "revoke rows must be objects": {
+   "code": "list_expected"
+  },
+  "role inspection stays with the provider tree": {
+   "code": "unsupported_here"
+  },
+  "roles must be a list of names": {
+   "code": "list_expected"
+  },
+  "routine inspection stays with the provider tree": {
+   "code": "unsupported_here"
+  },
+  "schema inspection stays with the provider tree": {
+   "code": "unsupported_here"
+  },
+  "seclabels must be a list of rows": {
+   "code": "list_expected"
+  },
+  "security label rows must be objects": {
+   "code": "list_expected"
+  },
+  "sequence inspection stays with the provider tree": {
+   "code": "unsupported_here"
+  },
+  "server.key must contain a PEM private key block": {
+   "code": "file_invalid"
+  },
+  "settings must be rows": {
+   "code": "list_expected"
+  },
+  "storage parameters must be rows": {
+   "code": "list_expected"
+  },
+  "strategy operator must be an object": {
+   "code": "list_expected"
+  },
+  "support function must be an object": {
+   "code": "list_expected"
+  },
+  "table inspection stays with the provider tree": {
+   "code": "unsupported_here"
+  },
+  "tables must be a list of foreign table names": {
+   "code": "list_expected"
+  },
+  "tablespace inspection stays with the provider tree": {
+   "code": "unsupported_here"
+  },
+  "tags are a list of command tags": {
+   "code": "list_expected"
+  },
+  "text search inspection stays with the provider tree": {
+   "code": "unsupported_here"
+  },
+  "the access method of this table is not known to the listing; refresh before changing it": {
+   "code": "stale_listing"
+  },
+  "the access method of this view is not known to the listing; refresh before changing it": {
+   "code": "stale_listing"
+  },
+  "the arguments are fixed once created; drop and create the routine to change them": {
+   "code": "not_changeable"
+  },
+  "the code must not be empty": {
+   "code": "value_required"
+  },
+  "the columns are fixed once created; drop and create the index to change them": {
+   "code": "not_changeable"
+  },
+  "the connection string carries credentials; change it from the inherited dialog": {
+   "code": "secret_not_carried"
+  },
+  "the current definition could not be read back; edit it from the inherited dialog": {
+   "code": "stale_listing"
+  },
+  "the database identity is not known to the listing": {
+   "code": "stale_listing"
+  },
+  "the owning table is unknown; refresh the tree": {
+   "code": "stale_listing"
+  },
+  "the partition bound contains unsafe syntax": {
+   "code": "unsafe_syntax"
+  },
+  "the partition bound is not valid": {
+   "code": "invalid_value"
+  },
+  "the policy type and event are fixed when the policy is created; drop and create the policy to change them": {
+   "code": "not_changeable"
+  },
+  "the return type is fixed once created; drop and create the routine to change it": {
+   "code": "not_changeable"
+  },
+  "the routine identity is unavailable; refresh the tree": {
+   "code": "stale_listing"
+  },
+  "the schema listing carries no table list to vacuum or analyze": {
+   "code": "stale_listing"
+  },
+  "the table listing carries no OID to reset statistics for": {
+   "code": "stale_listing"
+  },
+  "the template is fixed once created; drop and create the dictionary to change it": {
+   "code": "not_changeable"
+  },
+  "the wrapper and type are fixed once created; drop and create the server to change them": {
+   "code": "not_changeable"
+  },
+  "this table is not a partition the listing knows the parent of": {
+   "code": "stale_listing"
+  },
+  "transform function must be an object": {
+   "code": "list_expected"
+  },
+  "truncate confirmation does not match table name": {
+   "code": "confirmation_mismatch",
+   "field": "confirmation"
+  },
+  "type inspection stays with the provider tree": {
+   "code": "unsupported_here"
+  },
+  "unknown partition operation": {
+   "code": "unsupported_here"
+  },
+  "view inspection stays with the provider tree": {
+   "code": "unsupported_here"
+  }
+ },
+ "keep": [
+  "A PostgreSQL row changed or is no longer writable. Refresh before retrying.",
+  "A plan never carries a password; set it with the inherited Properties dialog",
+  "ALL must be the only privilege",
+  "ANALYZE columns must be a list of column names",
+  "ANALYZE columns must be non-empty and distinct",
+  "Advanced-object catalog exceeds 1000 objects; narrow the scope",
+  "Aggregate definition exceeds 2 MiB",
+  "Argument types must be a plain type list such as integer, text",
+  "BUFFER_USAGE_LIMIT must be 0 or an integer size with optional B, kB, MB, GB or TB unit",
+  "CREATE DATABASE runs alone, outside a transaction: set the comment, privileges, security labels, parameters and default privileges with Edit after creating it",
+  "CREATE SUBSCRIPTION runs alone outside a transaction; set the owner and comment with Alter afterwards",
+  "CREATE TABLESPACE runs alone outside a transaction; set the comment with Alter afterwards",
+  "Cannot attach a partitioned index to itself",
+  "Checkpoint wait timeout is 1–600000 milliseconds",
+  "Close PostgreSQL SQL sessions before disconnecting",
+  "Cluster directory must be an exact canonical path without symlinks",
+  "Columns must be a list of column names",
+  "Columns must be distinct",
+  "Commit or roll back the pending transaction before changing autocommit",
+  "Connect to the selected database before browsing objects",
+  "DROP EXPRESSION is only supported for stored generated columns",
+  "DROP INDEX CONCURRENTLY does not take CASCADE",
+  "Do not combine a replacement expression with DROP EXPRESSION",
+  "Expression changes require an existing generated column",
+  "FOR ALL TABLES takes no table or schema list",
+  "Finish reading the active row page before preparing SQL",
+  "Grant-option-only and CASCADE belong to revoke",
+  "Grantees must be distinct",
+  "INDEX_CLEANUP must be AUTO, ON or OFF",
+  "Invalid native operator symbol; use <> rather than !=",
+  "NOT ENFORCED cannot be combined with NOT VALID",
+  "No configuration deployment backup metadata found for this job",
+  "Nothing to change",
+  "ONLY_DATABASE_STATS cannot be combined with FULL, FREEZE, ANALYZE or SKIP_DATABASE_STATS",
+  "Only SELECT, INSERT, UPDATE and REFERENCES on a table take a column list",
+  "Parameter privileges must be distinct",
+  "PostgreSQL ALTER CONSTRAINT ENFORCED / NOT ENFORCED applies only to FOREIGN KEY constraints",
+  "PostgreSQL cannot drop or rename an enumeration value through the list; use Rename enumeration values",
+  "PostgreSQL prepared transactions are disabled on this instance",
+  "Privileges must be distinct",
+  "REFRESH CONCURRENTLY cannot be combined with WITH NO DATA",
+  "REFRESH PUBLICATION runs alone, outside a transaction; apply the other changes first",
+  "REINDEX SYSTEM cannot run CONCURRENTLY",
+  "RETURNS TABLE needs at least one column",
+  "Resolve the prepared PostgreSQL transaction first",
+  "Row buffer size must be between 1 and 100000",
+  "Row page size must be between 1 and 500",
+  "Saved previous configuration file is missing",
+  "Schemas must be distinct",
+  "Select DROP to remove the stored generation expression",
+  "Select SET and/or ALTER SYSTEM parameter privileges",
+  "Select SET to change the generated expression",
+  "Select at least one operator option",
+  "Select explicit COMMIT or ROLLBACK prepared-transaction decision",
+  "Select settings, pending_restart, file_errors, hba_rules, or ident_mappings",
+  "Single-element statistics require an expression and no multivariate kinds",
+  "Statistics element kind is column or expression",
+  "Statistics kinds must be distinct",
+  "Statistics need 1–32 typed elements; the native dimensional limit also applies",
+  "Statistics target must be -1 through 10000",
+  "Target directory is not an initialized PostgreSQL data directory",
+  "The typed confirmation does not match the object name",
+  "Type RESET ALL to confirm clearing postgresql.auto.conf",
+  "Type the exact prepared transaction GID to confirm resolution",
+  "VACUUM (ONLY_DATABASE_STATS) applies only to database scope",
+  "VACUUM FULL cannot be combined with SKIP_LOCKED",
+  "VACUUM FULL cannot disable PROCESS_MAIN or specify TRUNCATE",
+  "VACUUM FULL cannot use INDEX_CLEANUP",
+  "VACUUM FULL cannot use PARALLEL",
+  "WITH GRANT OPTION belongs to grant",
+  "WITHOUT OVERLAPS cannot be combined with USING INDEX",
+  "a C-language routine needs an object file and a link symbol",
+  "a collation needs a locale, LC_COLLATE with LC_CTYPE, or a collation to copy",
+  "a comment needs a constraint name",
+  "a composite type needs at least one member",
+  "a concurrent build runs alone outside a transaction; set the comment, statistics, extension dependencies and clustering with Edit afterwards",
+  "a configuration copies another or names a parser, not both",
+  "a configuration needs a parser or a configuration to copy",
+  "a foreign key needs column pairs",
+  "a foreign table column cannot be an identity column",
+  "a foreign table needs a foreign server",
+  "a generated column cannot become an identity column",
+  "a local SQL step needs a database name",
+  "a mapping needs a token type name",
+  "a multirange is created with its range type (multirange type name); it cannot be created on its own",
+  "a partition row needs a default, range, list or hash bound",
+  "a partition row needs a name",
+  "a partitioned table needs at least one partition key",
+  "a publication publishes at least one operation",
+  "a remote step needs a connection string",
+  "a reset parameter needs a name",
+  "a restore point needs a name of at most 63 characters",
+  "a security label needs text",
+  "a setting needs a variable name",
+  "a statistics target is a whole number, -1 for the default",
+  "a storage parameter needs a name",
+  "a subscription needs at least one publication",
+  "a table has at most one primary key",
+  "a tablespace change runs alone, outside a transaction; apply the other changes first",
+  "a tablespace option needs a name",
+  "a trigger needs at least one event",
+  "access method type must be INDEX or TABLE",
+  "an INSERT policy has no USING",
+  "an exclusion constraint needs at least one element",
+  "an existing column cannot become a generated column; add a new one",
+  "an external type needs its input and output functions",
+  "an index needs at least one column or expression",
+  "an internal trigger belongs to its constraint",
+  "an option needs a name",
+  "cannot VALIDATE a NOT ENFORCED constraint without enforcing it",
+  "choose a different tablespace to move the objects to",
+  "choose either current value or restart at start value, not both",
+  "choose the database the operation runs in",
+  "conflicting enforcement settings",
+  "connect = false needs create_slot = false (and copy_data = false): the server refuses them together",
+  "connection limit is a whole number, -1 for no limit",
+  "default privileges run inside the database, which cannot be renamed meanwhile; rename it separately",
+  "drop confirmation does not match object name",
+  "enforcement must be ENFORCED or NOT ENFORCED",
+  "enum labels must be text",
+  "nothing to change",
+  "nothing to change; a user mapping changes through its options",
+  "only CHECK and FOREIGN KEY constraints support ENFORCED / NOT ENFORCED",
+  "only a composite type has attributes",
+  "only a materialized view can depend on an extension",
+  "only an enumeration has values",
+  "operator class requires at least one member",
+  "operator class requires strategy operators",
+  "operator class requires support functions",
+  "operator family requires at least one member change",
+  "partitions belong to a partitioned table",
+  "the builtin locale provider needs a builtin locale",
+  "the icu locale provider needs an ICU locale",
+  "the schema has no tables or materialized views to vacuum or analyze",
+  "transform requires at least one conversion direction"
+ ]
+}

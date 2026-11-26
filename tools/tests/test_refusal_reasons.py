@@ -222,7 +222,7 @@ def test_a_message_built_from_values_gets_the_sentence_for_its_rule_and_never_it
 
 def test_a_fixed_message_is_shown_as_it_stands_and_an_unknown_one_stays_generic():
     reason = refusal_codes.describe('a table has at most one primary key')
-    assert (reason.code, reason.explanation) == ('rule_not_met', 'a table has at most one primary key')
+    assert (reason.code, reason.explanation) == ('rule_not_met', 'A table has at most one primary key.')
     assert refusal_codes.describe('something no compiler raises') == refusal_codes.Reason(None, None)
     # a known code keeps its catalog sentence rather than the message's own words
     assert refusal_codes.describe('drop confirmation does not match object name').explanation is None
@@ -263,9 +263,62 @@ def test_the_plan_funnel_gives_every_provider_refusal_a_reason():
         return caught.value.errors[0]
 
     assert refused(PostgreSQLProviderError('a table has at most one primary key')) == {
-        'field_id': None, 'code': 'rule_not_met', 'explanation': 'a table has at most one primary key'}
+        'field_id': None, 'code': 'rule_not_met', 'explanation': 'A table has at most one primary key.'}
     assert refused(PostgreSQLProviderError.refusing(PostgreSQLNativeAdminError('schema must not be empty'))) == {
         'field_id': 'schema', 'code': 'value_required'}
     assert refused(PostgreSQLProviderError('choose the database the operation runs in')) == {
         'field_id': 'database', 'code': 'database_not_chosen'}
     assert refused(PostgreSQLProviderError('never seen')) == {'field_id': None, 'code': 'native_review_refused'}
+
+
+# --- the wording of the fixed messages ------------------------------------------------------------
+
+def test_every_fixed_message_has_been_reviewed_exactly_once():
+    """A new fixed message must be put in refusal_wording.json (text, code, or keep after review)."""
+    import refusal_inventory
+    words = refusal_codes.wording()
+    registered = set(refusal_inventory.literals())
+    groups = [set(words['text']), set(words['code']), set(words['keep'])]
+    assert sum(len(group) for group in groups) == len(set().union(*groups)), 'a message is listed twice'
+    unreviewed = sorted(registered - set().union(*groups))
+    assert unreviewed == [], 'review the wording of: ' + '; '.join(unreviewed)
+    stale = sorted(set().union(*groups) - registered)
+    assert stale == [], 'no longer a refusal message: ' + '; '.join(stale)
+
+
+def test_the_wording_is_sound():
+    words = refusal_codes.wording()
+    for message, replacement in words['text'].items():
+        assert replacement and replacement != message, message
+        assert len(replacement) <= refusal_codes.EXPLANATION_LIMIT, message
+        assert replacement[0].isupper(), f'start with a capital: {replacement}'
+        assert not any(internal in replacement for internal in ('pgAdmin', 'provider tree', 'inherited', 'native ')), replacement
+    for message, entry in words['code'].items():
+        assert entry['code'] in refusal_codes.CODES and entry['code'] in catalog('postgresql'), message
+        assert set(entry) <= {'code', 'field'}, message
+
+
+def test_a_reworded_message_shows_the_new_sentence_and_a_coded_one_the_catalog_sentence():
+    reworded = refusal_codes.describe('attstorage must be one of p, m, e, x')
+    assert (reworded.code, reworded.explanation) == (
+        'rule_not_met', 'Storage must be p (plain), m (main), e (external) or x (extended).')
+    coded = refusal_codes.describe('PostgreSQL provider is closed')
+    assert (coded.code, coded.explanation) == ('provider_unavailable', None)
+    fielded = refusal_codes.describe('Confirm the exact parameter name to reset')
+    assert (fielded.code, fielded.field_id, fielded.explanation) == ('confirmation_mismatch', 'confirmation', None)
+    kept = refusal_codes.describe('a table has at most one primary key')
+    assert kept.explanation == 'A table has at most one primary key.'
+    # a kept message already written as a sentence keeps its capital and its full stop
+    assert refusal_codes.describe('A PostgreSQL row changed or is no longer writable. Refresh before retrying.').explanation == \
+        'A PostgreSQL row changed or is no longer writable. Refresh before retrying.'
+    assert refusal_codes.describe('ALL must be the only privilege').explanation == 'ALL must be the only privilege.'
+
+
+def test_every_message_shown_as_it_stands_reads_as_a_sentence():
+    import refusal_inventory
+    words = refusal_codes.wording()
+    for message in refusal_inventory.literals():
+        shown = refusal_codes.describe(message).explanation
+        if message in words['code'] or shown is None:
+            continue
+        assert shown[0].isupper() and shown[-1] in '.!?', shown

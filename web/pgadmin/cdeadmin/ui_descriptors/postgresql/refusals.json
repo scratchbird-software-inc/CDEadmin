@@ -98,6 +98,14 @@
     {
       "code": "rule_not_met",
       "message": "A rule of this operation is not met. See the SQL tab, or ask an administrator to read the details with the reference."
+    },
+    {
+      "code": "provider_unavailable",
+      "message": "The provider could not complete this just now. Try again; an administrator can read the details with the reference."
+    },
+    {
+      "code": "stale_listing",
+      "message": "What you are working on has changed or is out of date. Refresh the tree and try again."
     }
   ]
 }
