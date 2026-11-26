@@ -208,12 +208,12 @@ def test_status_only_takes_the_two_declared_values(engine_copy):
 def test_only_engines_with_live_verified_operations_are_complete():
     states = {e: json.loads((DESCRIPTORS / e / 'security.json').read_text(encoding='utf-8')).get('status')
               for e in FIRST_SLICE}
-    # PostgreSQL has no privilege operation yet. MySQL's principals and membership are
-    # clicked through; its object grants are not (grants.status is separate).
+    # PostgreSQL has no privilege operation yet. MySQL's principals, membership and object
+    # grants have each been clicked through in a browser.
     assert states == {'firebird': 'complete', 'mysql': 'complete', 'postgresql': 'draft'}
     grants = {e: json.loads((DESCRIPTORS / e / 'security.json').read_text(encoding='utf-8'))['grants']['status']
               for e in FIRST_SLICE}
-    assert grants == {'firebird': 'complete', 'mysql': 'draft', 'postgresql': 'draft'}
+    assert grants == {'firebird': 'complete', 'mysql': 'complete', 'postgresql': 'draft'}
 
 
 def test_grants_carry_their_own_status_separate_from_principals():

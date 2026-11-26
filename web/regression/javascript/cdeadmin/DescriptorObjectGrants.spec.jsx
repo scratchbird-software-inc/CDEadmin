@@ -64,7 +64,9 @@ describe('grant rows read through the descriptor', () => {
   it('offers grants only for engines with a complete descriptor and grantable kinds', () => {
     expect(objectGrantsOffered(bundle, 'table')).toBe(true);
     expect(objectGrantsOffered(bundle, 'trigger')).toBe(false);
-    expect(objectGrantsOffered(loadEngineBundle('mysql'), 'table')).toBe(false);
+    expect(objectGrantsOffered(loadEngineBundle('postgresql'), 'table')).toBe(false);
+    expect(objectGrantsOffered(loadEngineBundle('mysql'), 'table')).toBe(true);
+    expect(objectGrantsOffered(loadEngineBundle('mysql'), 'server')).toBe(false);
     expect(objectGrantsOffered(loadEngineBundle('sqlite'), 'table')).toBe(false);
   });
 
@@ -147,8 +149,8 @@ describe('ObjectGrantsSurface', () => {
   });
 
   it('keeps a draft engine on the previous permissions matrix', async () => {
-    const {api} = makeApi('mysql');
-    render(<Theme><ObjectGrantsSurface api={api} boundNodeData={{...node, cde_engine_id: 'mysql'}} /></Theme>);
+    const {api} = makeApi('postgresql');
+    render(<Theme><ObjectGrantsSurface api={api} boundNodeData={{...node, cde_engine_id: 'postgresql'}} /></Theme>);
     expect(await screen.findByTestId('legacy-matrix')).toBeInTheDocument();
   });
 
@@ -248,5 +250,42 @@ describe('heldRows for a Firebird principal', () => {
     const asUser = heldRows(grants(), resources, 'APP', 'user');
     expect(asUser.map((r) => `${r.object}:${r.privilege}:${r.column}:${r.grantOption}`)).toEqual(['T1:SELECT::false', 'T1:UPDATE:N:true']);
     expect(heldRows(grants(), resources, 'APP', 'role').map((r) => r.object)).toEqual(['P1']);
+  });
+});
+
+describe('DescriptorObjectGrants for a tree node that knows only its id (MySQL)', () => {
+  beforeEach(() => { resetDescriptorClient(); });
+  const priv = (extra) => ({resource_kind: 'privilege', resource_id: `g:${JSON.stringify(extra)}`, display_name: 'g',
+    native: {grantee: '\'ct_app\'@\'%\'', privilege: 'SELECT', is_grantable: 'NO', ...extra}});
+  const ITEMS = [
+    {resource_kind: 'table', resource_id: 'table:d:customers', display_name: 'customers', display_path: ['d', 'customers'], native: {}},
+    priv({scope: 'table', database: 'd', table_name: 'customers', is_grantable: 'YES'}),
+    priv({scope: 'column', database: 'd', table_name: 'customers', column_name: 'city', privilege: 'UPDATE'}),
+    priv({scope: 'table', database: 'other', table_name: 'customers', privilege: 'DROP'}),
+  ];
+  const mountMysql = (api) => render(<Theme><DescriptorObjectGrants api={api} endpointUrl="/ws/1" engine="mysql"
+    objectKind="table" objectName="customers" objectId="table:d:customers" databaseTargetId="db-1" /></Theme>);
+
+  it('finds the object\'s path in the listing and shows only its own database\'s grants', async () => {
+    const {api} = makeApi('mysql', ITEMS);
+    mountMysql(api);
+    const table = await screen.findByRole('table', {name: 'Granted privileges'});
+    const rows = Array.from(table.querySelectorAll('tbody tr')).map((tr) => Array.from(tr.querySelectorAll('td')).map((td) => td.textContent).slice(0, 4));
+    expect(rows).toEqual([['\'ct_app\'@\'%\'', 'SELECT', '', 'Yes'], ['\'ct_app\'@\'%\'', 'UPDATE', 'city', 'No']]);
+    expect(screen.queryByText('DROP')).not.toBeInTheDocument();
+  });
+
+  it('opens the grant dialog with the object fixed, so its database and object are not asked for again', async () => {
+    const {api} = makeApi('mysql', ITEMS);
+    mountMysql(api);
+    fireEvent.click(await screen.findByRole('button', {name: 'Grant privileges'}));
+    expect((await screen.findAllByText(/Grantees/)).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('textbox', {name: /^Database/})).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox', {name: /^Object/})).not.toBeInTheDocument();
+  });
+
+  it('still matches by the tail when no path can be found', () => {
+    const rows = grantRows(loadEngineBundle('mysql').security.grants, ITEMS.slice(1), 'customers', undefined, 'table');
+    expect(rows.map((r) => r.privilege).sort()).toEqual(['DROP', 'SELECT', 'UPDATE']);
   });
 });

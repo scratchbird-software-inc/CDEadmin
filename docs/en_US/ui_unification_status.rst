@@ -1721,3 +1721,37 @@ Verified live: the demo ``cdeadmin_demo`` account (no rights on ``mysql.*``) get
 (``test_a_non_administrator_is_told_the_account_catalog_was_unreadable``); the
 banner logic is covered by Jest. Not clicked through in a browser. Lint counts
 unchanged (engine_prop 135, security_ui 22).
+
+Decision 21: MySQL per-object grants clicked through, grants complete (2026-11-25)
+-----------------------------------------------------------------------------------
+
+Driven in headless Chrome against the demo MySQL 9.7.0 container, from a table's
+Properties page (the Grants section; the separate "Grants" tab on the Object
+Browser is the read-only native catalog listing and is unchanged).
+
+Verified in the browser: the view lists the table's table-scope and column-scope
+grants with grant option and a Revoke button per row, matching the native
+Permissions grid and the server; Revoke opens the prefilled dialog (grantee,
+privilege, database and object fixed) whose plan is the exact statement, and Run
+removes the grant on the server; Grant privileges adds grantees and privileges in
+grids with the object fixed, previews ``GRANT SELECT ON ... TO ...``, and after
+Run the view refreshes to show the new row (the view reloads the full listing, about
+13 to 15 seconds on this server).
+
+Defect found and fixed: the Properties page gives the view only the tree node,
+which carries an id but no path, so the database qualifier never matched and the
+view reported "No grants" while the native grid showed three. The view now reads
+the object's ``display_path`` from its own entry in the listing (by id, then by
+kind and name) and, failing that, matches the available tail of the path.
+
+Result: MySQL ``grants.status`` is **complete**; principals, membership and object
+grants are all served by the descriptor-driven views and the legacy host refuses
+MySQL (MariaDB, TiDB and Dolt still use it, so its MySQL-family code stays).
+
+Not clicked through: the revoke of a column-scope row, database, routine and
+function grants views, and the privilege dialogs at global/proxy scope. A revoke
+at table scope needs the connected account to hold GRANT OPTION; without it MySQL
+refuses (error 1142) and the dialog reports the outcome as unknown, correctly, with
+nothing applied. The page also shows an existing second "Verify Endpoint" prompt
+after connecting (its re-verify returns 401 about open sessions); it is unrelated
+to the grants view and was left alone.

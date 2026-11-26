@@ -62,7 +62,7 @@ export function grantRows(grants, resources, objectName, objectPath, objectKind)
   const onObject = (native) => {
     if(spec) {
       return spec.scopes.includes(native[listing.scope_field])
-        && spec.fields.every((field, index) => native[field] === path[path.length - spec.fields.length + index])
+        && spec.fields.slice(-path.length).every((field, index, fields) => native[field] === path[path.length - fields.length + index])
         && Object.entries(spec.where || {}).every(([field, value]) => native[field] === value);
     }
     return native[objectKey] === objectName;
@@ -170,7 +170,7 @@ export function objectTypeValue(operation, objectKind) {
 }
 
 export default function DescriptorObjectGrants({
-  api, endpointUrl, engine, version, databaseTargetId = '', objectKind, objectName, objectPath, onApplied, onAuthRequired,
+  api, endpointUrl, engine, version, databaseTargetId = '', objectKind, objectName, objectPath, objectId, onApplied, onAuthRequired,
 }) {
   const client = useMemo(() => descriptorClient(api), [api]);
   const post = useMemo(() => makePost(api, endpointUrl, databaseTargetId || undefined, {onAuthRequired}),
@@ -194,17 +194,25 @@ export default function DescriptorObjectGrants({
   }, [client, engine, version, post, objectKind, refresh]);
 
   const grants = state.bundle?.security?.grants;
+  // Where the object sits in the tree: given, or read from the object's own entry in the listing
+  // (a tree node carries its id but not its path).
+  const path = useMemo(() => {
+    if(objectPath?.length) return objectPath;
+    const found = state.resources.find((resource) => objectId && resource.resource_id === objectId)
+      || state.resources.find((resource) => resource.resource_kind === objectKind && resource.display_name === objectName);
+    return Array.isArray(found?.display_path) ? found.display_path.map(String) : undefined;
+  }, [objectPath, objectId, objectKind, objectName, state.resources]);
   const rows = useMemo(() => (grants && state.status === 'ready' && objectGrantsOffered(state.bundle, objectKind)
-    ? grantRows(grants, state.resources, objectName, objectPath, objectKind) : []), [grants, state, objectKind, objectName, objectPath]);
+    ? grantRows(grants, state.resources, objectName, path, objectKind) : []), [grants, state, objectKind, objectName, path]);
   const operations = useMemo(() => Object.fromEntries(
     (state.bundle?.kinds?.[grants?.grant_kind]?.operations || []).map((op) => [op.operation_id, op])), [state.bundle, grants]);
 
   const open = useCallback((operationId, row) => {
     const operation = operations[operationId];
-    const fixed = dialogValues(grants, operation, objectKind, objectName, objectPath, row);
+    const fixed = dialogValues(grants, operation, objectKind, objectName, path, row);
     setDialog({operation, fixed, calls: visualAdminCalls(post, {
       resourceKind: grants.grant_kind, operationId, target: null})});
-  }, [operations, objectKind, objectName, objectPath, post, grants]);
+  }, [operations, objectKind, objectName, path, post, grants]);
 
   const applied = useCallback((result) => {
     setDialog(null);
@@ -261,6 +269,7 @@ DescriptorObjectGrants.propTypes = {
   objectKind: PropTypes.string.isRequired,
   objectName: PropTypes.string.isRequired,
   objectPath: PropTypes.arrayOf(PropTypes.string),
+  objectId: PropTypes.string,
   onApplied: PropTypes.func,
   onAuthRequired: PropTypes.func,
 };
