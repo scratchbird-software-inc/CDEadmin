@@ -2024,3 +2024,17 @@ Once 1, 2 and 3 are decided, phase 0 can start immediately; nothing in phases 0 
       provider reports it on the reader's own session (a provider that cannot
       say reports no), or for a user holding the new
       ``refusal.view_reasons`` permission, and is refused otherwise.
+
+    *Status (2026-11-26).* The first slice is implemented for PostgreSQL:
+    three registered codes (``database_not_chosen``, ``confirmation_mismatch``,
+    ``password_not_carried``) with their catalog text in
+    ``ui_descriptors/postgresql/refusals.json``; the contract carries the
+    catalog sentence and a reference; the reasons store, the
+    ``refusal.view_reasons`` permission and a PostgreSQL superuser probe gate
+    reading a reason; the client shows the sentence, marks the field and offers
+    *Show reason*. Not done: codes for the other PostgreSQL refusal sites (a
+    known static message maps to its code centrally; everything else keeps the
+    generic sentence), catalogs for the other engines and their administrator
+    probes (until then only an application administrator or a user holding the
+    permission can read a reason there), declarative pre-checks (b), and
+    translation of the new strings.

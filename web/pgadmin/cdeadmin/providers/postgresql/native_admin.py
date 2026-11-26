@@ -44,7 +44,16 @@ _PG_OPERATOR = re.compile(
 
 
 class PostgreSQLNativeAdminError(RuntimeError):
-    """A PostgreSQL provider-native operation cannot be compiled safely."""
+    """A PostgreSQL provider-native operation cannot be compiled safely.
+
+    ``refusal_code`` and ``refusal_field`` say why in the registered vocabulary of
+    ``refusal_codes`` (Decision 22); both are None for a refusal that has no code.
+    """
+
+    def __init__(self, message='', code=None, field_id=None):
+        super().__init__(message)
+        from .refusal_codes import classify
+        self.refusal_code, self.refusal_field = classify(message, code, field_id)
 
 
 def _required_text(value, label):

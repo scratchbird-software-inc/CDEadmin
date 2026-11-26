@@ -25,6 +25,7 @@ import {ProgressOverlay} from '../feedback/ProgressOverlay';
 import ObjectEditor from './ObjectEditor';
 import ObjectPermissionsMatrix from '../security/ObjectGrantsSurface';
 import {DescriptorClient, visualAdminCalls} from './DescriptorClient';
+import {refusalMessage, refusalOf} from './refusals';
 import {buildOptionContext, kindForm, editorAvailable, versionSupportNotice, nativeEditorForm, nativeInitialValues} from './descriptors';
 import {Stack} from '../primitives/Layout';
 
@@ -131,9 +132,11 @@ export function makePost(api, endpointUrl, databaseTargetId, {onAuthRequired} = 
           ? respData.data.errors.map((e) => e?.message).filter(Boolean)
           : [];
         const baseMsg = respData.errormsg || respData.error;
-        const combined = fieldMsgs.length
-          ? `${baseMsg ? baseMsg + ': ' : ''}${fieldMsgs.join('; ')}`
-          : baseMsg;
+        const refusal = refusalOf({data: respData.data});
+        const combined = refusal ? refusalMessage(refusal, baseMsg)
+          : fieldMsgs.length
+            ? `${baseMsg ? baseMsg + ': ' : ''}${fieldMsgs.join('; ')}`
+            : baseMsg;
         if (combined) {
           const enriched = new Error(combined);
           enriched.data = respData.data;

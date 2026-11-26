@@ -120,6 +120,14 @@ def _surface_facts(native):
 class PostgreSQLProviderError(RuntimeError):
     """A PostgreSQL provider operation cannot be completed safely."""
 
+    @classmethod
+    def refusing(cls, source):
+        """The provider error for a compiler refusal, keeping the reason code and field it carried."""
+        error = cls(str(source))
+        error.refusal_code = getattr(source, 'refusal_code', None)
+        error.refusal_field = getattr(source, 'refusal_field', None)
+        return error
+
 
 class PostgreSQLStatementRejected(PostgreSQLProviderError):
     """The server rejected the administrative statement before anything
@@ -660,7 +668,7 @@ class PostgreSQLProvider:
                     draft.get('database') if isinstance(draft, Mapping)
                     else None)
             except Exception as exc:
-                raise PostgreSQLProviderError(str(exc)) from exc
+                raise PostgreSQLProviderError.refusing(exc) from exc
             return {'server_id': _required_int(route, 'server_id'),
                     'database_id': picked}
         return {
@@ -675,7 +683,7 @@ class PostgreSQLProvider:
         try:
             return compile_native_admin(request)
         except PostgreSQLNativeAdminError as exc:
-            raise PostgreSQLProviderError(str(exc)) from exc
+            raise PostgreSQLProviderError.refusing(exc) from exc
 
     @staticmethod
     def _check_admin_version(connection, compiled):
@@ -1020,6 +1028,21 @@ class PostgreSQLProvider:
                     response['release_status'] = 'confirmed'
         return response
 
+    def is_native_administrator(self, request):
+        """Whether the connected account is a PostgreSQL superuser, on the reader's own session
+        (Decision 22: such an account may read a logged refusal reason). Anything unclear is no."""
+        try:
+            route = _mapping(request).get('_provider_route') or {}
+            connection = self._driver.connection_manager(_required_int(route, 'server_id')).connection()
+            if not connection.connected():
+                return False
+            status, result = connection.execute_dict(
+                'SELECT rolsuper FROM pg_catalog.pg_roles WHERE rolname = session_user')
+            rows = result.get('rows', []) if status and isinstance(result, Mapping) else []
+            return bool(rows) and rows[0].get('rolsuper') is True
+        except Exception:
+            return False
+
     def visual_admin_descriptor(self):
         """Describe PostgreSQL objects for the common administration UI."""
         descriptor = self._visual_admin.descriptor()
@@ -1046,8 +1069,9 @@ class PostgreSQLProvider:
             return self._visual_admin.plan(request)
         except PostgreSQLProviderError as exc:
             msg = str(exc)
-            field_id = None
-            code = 'native_review_refused'
+            # A refusal with a registered reason says which; any other is the generic one.
+            field_id = getattr(exc, 'refusal_field', None)
+            code = getattr(exc, 'refusal_code', None) or 'native_review_refused'
             for delegated in ('columns', 'primary_key', 'foreign_key', 'check_constraint', 'unique_constraint', 'exclude_constraint'):
                 if msg.startswith(delegated + ':'):
                     field_id = delegated

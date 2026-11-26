@@ -13,7 +13,7 @@
  * receipt. Tier 3 adds the execution-host selector and an output pane.
  */
 
-import {useMemo, useState} from 'react';
+import {useEffect, useMemo, useState} from 'react';
 import PropTypes from 'prop-types';
 import gettext from 'sources/gettext';
 import {useLocaleRevision} from '../actions/t_actions';
@@ -29,6 +29,7 @@ import {ScratchDiffTable} from '../data/beautiful';
 import AdaptiveFieldPlacementGrid from './AdaptiveFieldPlacementGrid';
 import FieldControl from './FieldControl';
 import {activeFields, fieldVisible, toOperationDraft} from './descriptors';
+import {refusalFieldErrors, refusalOf} from './refusals';
 import {planSqlText} from './ObjectEditor';
 import FirebirdServiceObservation from '../../Dialogs/FirebirdServiceObservation';
 import FirebirdLimboObservation from '../../Dialogs/FirebirdLimboObservation';
@@ -54,8 +55,33 @@ function validate(fields, values) {
   return errors;
 }
 
+/** The full reason behind a refusal's reference, for whoever may read it (the server decides; anyone
+ *  else is told they may not). Shown on request, never fetched on its own. */
+function RefusalReason({reference, lookup}) {
+  const [state, setState] = useState({status: 'idle', text: ''});
+  useEffect(() => setState({status: 'idle', text: ''}), [reference]);
+  if(!reference || typeof lookup !== 'function') return null;
+  const show = async () => {
+    setState({status: 'loading', text: ''});
+    try {
+      const result = await lookup(reference);
+      setState({status: 'ready', text: String(result?.message ?? '')});
+    } catch(error) {
+      setState({status: 'error', text: error?.message || String(error)});
+    }
+  };
+  return <Box sx={{fontSize: '0.75rem', mt: 0.5}}>
+    {state.status === 'idle' && <Button intent="neutral" onClick={show}>{gettext('Show reason')}</Button>}
+    {state.status === 'loading' && gettext('Reading the reason…')}
+    {state.status === 'ready' && <Box component="pre" sx={{whiteSpace: 'pre-wrap', m: 0}}>{state.text}</Box>}
+    {state.status === 'error' && <ValidationMessage status="error">{state.text}</ValidationMessage>}
+  </Box>;
+}
+
+RefusalReason.propTypes = {reference: PropTypes.string, lookup: PropTypes.func};
+
 export default function OperationDialog({open, operation, targetName, context={}, executionHosts=[],
-  fixedValues, plan, apply, onClose, onApplied}) {
+  fixedValues, plan, apply, reasonLookup, onClose, onApplied}) {
   const localeRev = useLocaleRevision();
   const needsTypedName = operation.confirmation === 'typed_name';
   // A typed-name operation's `confirmation` field is the typed box below; the
@@ -74,6 +100,9 @@ export default function OperationDialog({open, operation, targetName, context={}
   // Errors show on a field once it is edited, and on every field once run is tried.
   const [touched, setTouched] = useState(() => new Set());
   const [submitAttempted, setSubmitAttempted] = useState(false);
+  // What the provider said about a field when it refused the draft (Decision 22); editing the field clears it.
+  const [refused, setRefused] = useState({});
+  const [reference, setReference] = useState(null);
   const errors = useMemo(() => validate(fields, values), [fields, values, localeRev]);
   const visible = activeFields(fields, {draft: values});
   const groups = operation.groups?.length ? operation.groups : [...new Set(visible.map((field) => field.group || ''))];
@@ -89,6 +118,7 @@ export default function OperationDialog({open, operation, targetName, context={}
   const setValue = (fieldId, value) => {
     setTouched((current) => current.has(fieldId) ? current : new Set([...current, fieldId]));
     setValues((current) => ({...current, [fieldId]: value}));
+    setRefused((current) => { if(!current[fieldId]) return current; const rest = {...current}; delete rest[fieldId]; return rest; });
     setPlanState({status: 'idle', plan: null, error: null});
   };
   const setConfirm = (text) => {
@@ -102,6 +132,8 @@ export default function OperationDialog({open, operation, targetName, context={}
       setPlanState({status: 'ready', plan: result, error: null});
       return result;
     } catch(error) {
+      setRefused(refusalFieldErrors(error));
+      setReference(refusalOf(error)?.reference || null);
       setPlanState({status: 'error', plan: null, error: error?.message || String(error)});
       return null;
     }
@@ -123,6 +155,8 @@ export default function OperationDialog({open, operation, targetName, context={}
       setApplyState({status: 'done', result, error: null});
       onApplied?.(result);
     } catch(error) {
+      setRefused(refusalFieldErrors(error));
+      setReference(refusalOf(error)?.reference || null);
       setApplyState({status: 'error', result: null, error: error?.message || String(error)});
     }
   };
@@ -177,7 +211,7 @@ export default function OperationDialog({open, operation, targetName, context={}
                 draft={values}
                 context={context}
                 resourceKind={operation.resource_kind}
-                error={submitAttempted || touched.has(field.field_id) ? errors[field.field_id] : undefined}
+                error={(submitAttempted || touched.has(field.field_id) ? errors[field.field_id] : undefined) || refused[field.field_id]}
                 disabled={busy}
                 dense
                 onChange={(value) => setValue(field.field_id, value)}
@@ -193,6 +227,7 @@ export default function OperationDialog({open, operation, targetName, context={}
         value={confirmText} onChange={(event) => setConfirm(event.target.value)}
         validationMessage={confirmText && !confirmed ? gettext('Name does not match.') : undefined} />}
       {planState.status === 'error' && <ValidationMessage status="error">{planState.error}</ValidationMessage>}
+      {planState.status === 'error' && <RefusalReason reference={reference} lookup={reasonLookup} />}
       {planState.plan && <Box data-cdeadmin-qa-key="operation-dialog.plan">
         {blocked && <Banner status="warning">
           {gettext('The provider will not run this: %s.', (planState.plan.blockers || []).join(', ') || gettext('blocked'))}
@@ -221,6 +256,7 @@ export default function OperationDialog({open, operation, targetName, context={}
           value={sql || gettext('-- Native operation; the provider reported no SQL text.')} />
       </Box>}
       {applyState.status === 'error' && <ValidationMessage status="error">{applyState.error}</ValidationMessage>}
+      {applyState.status === 'error' && <RefusalReason reference={reference} lookup={reasonLookup} />}
       {applyState.status === 'done' && (() => {
         const observation = receipt?.driver_observation ??
           (typeof receipt?.schema === 'string' && receipt.schema.startsWith('cdeadmin.firebird-') ? receipt : null);
@@ -253,6 +289,7 @@ export default function OperationDialog({open, operation, targetName, context={}
 }
 
 OperationDialog.propTypes = {
+  reasonLookup: PropTypes.func,
   open: PropTypes.bool.isRequired,
   operation: PropTypes.object.isRequired,
   targetName: PropTypes.string,

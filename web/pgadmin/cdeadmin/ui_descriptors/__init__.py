@@ -128,6 +128,9 @@ class UIDescriptorService:
                 'tools': (_load_json(folder / 'tools.json') or {}).get('tools', []),
                 # Decision 21: principals and grants the Security Manager offers.
                 'security': _load_json(folder / 'security.json') or {},
+                # Decision 22: the text shown for each reason code a refusal can carry.
+                'refusals': {row['code']: row['message']
+                             for row in (_load_json(folder / 'refusals.json') or {}).get('refusals', [])},
                 'forms': {},
             }
             for path in sorted((folder / 'forms').glob('*.form.json')):
@@ -136,6 +139,13 @@ class UIDescriptorService:
             bundle['kinds'] = self._kind_index(bundle)
             self._engines[engine_id] = bundle
             return bundle
+
+    def refusal_messages(self, engine_id) -> dict:
+        """The engine's text for each refusal reason code; empty for an engine with no catalog."""
+        try:
+            return dict(self.engine(engine_id).get('refusals') or {})
+        except UIDescriptorError:
+            return {}
 
     def invalidate(self):
         with self._lock:

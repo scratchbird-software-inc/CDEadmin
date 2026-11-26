@@ -47,7 +47,7 @@ FAMILIES = ("table", "view", "index", "routine", "trigger", "sequence", "type",
 FORBIDDEN_LABEL = re.compile(r"\bexact native\b|\bnative .* reference\b", re.I)
 ENGINE_FILES = {"capabilities.json", "operations.json", "navigator.json",
                 "omitted_families.json", "options.json", "tools.json", "security.json",
-                "README.md"}
+                "refusals.json", "README.md"}
 IGNORED_FOLDERS = {"forms", "__pycache__"}
 
 
@@ -371,6 +371,15 @@ def validate_descriptors(strict_pending: bool) -> tuple[list[str], dict]:
                 seen_commands.add(tool["command_id"])
         if (engine_dir / "security.json").exists():
             check_security_descriptor(engine, engine_dir, caps, schemas, errors)
+        if (engine_dir / "refusals.json").exists():
+            refusals_doc = load(engine_dir / "refusals.json")
+            schemas.check(refusals_doc, schemas.schemas["refusals.schema.json"], schemas.schemas["refusals.schema.json"],
+                          f"{engine}/refusals.json", errors)
+            codes = [row.get("code") for row in refusals_doc.get("refusals", [])]
+            for code in sorted({code for code in codes if codes.count(code) > 1}):
+                errors.append(f"{engine}/refusals.json: duplicate code {code!r}")
+            if refusals_doc.get("engine") != engine:
+                errors.append(f"{engine}/refusals.json: engine is {refusals_doc.get('engine')!r}")
         nav = load(engine_dir / "navigator.json")
         schemas.check(nav, schemas.schemas["navigator.schema.json"], schemas.schemas["navigator.schema.json"],
                       f"{engine}/navigator.json", errors)

@@ -283,7 +283,7 @@ export default function DescriptorSecurityManager({
     </Box>
     {dialog && <OperationDialog open operation={dialog.operation} targetName={dialog.target.display_name}
       context={operationContext(state.bundle, state.resources, dialog.target)}
-      plan={dialog.calls.plan} apply={dialog.calls.apply}
+      plan={dialog.calls.plan} apply={dialog.calls.apply} reasonLookup={dialog.calls.reason}
       onClose={() => setDialog(null)} onApplied={applied} />}
   </Box>;
 }

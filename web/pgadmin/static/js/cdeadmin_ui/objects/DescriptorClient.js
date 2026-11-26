@@ -97,6 +97,10 @@ export function visualAdminCalls(post, {resourceKind, operationId, target=null, 
       return post({action: 'visual_admin_apply', request: {plan_id: plan.plan_id, plan_digest: plan.plan_digest,
         confirmed: true, ...(sessionId ? {session_id: sessionId} : {})}});
     },
+    // The full reason behind a refusal's reference (the server allows it for administrators and those granted it).
+    async reason(reference) {
+      return post({action: 'refusal_reason', request: {reference}});
+    },
   };
 }
 

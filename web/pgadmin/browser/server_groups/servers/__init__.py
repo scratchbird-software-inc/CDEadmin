@@ -3581,6 +3581,20 @@ class ServerNode(PGChildNodeView):
                         return bad_request('Invalid file delivery request')
                 data = request.get_json(silent=True) or {}
                 action = data.get('action')
+                if action == 'refusal_reason':
+                    # Decision 22: the full reason for a refusal, for the endpoint's native
+                    # administrator or a user granted the right to see logged reasons.
+                    from pgadmin.cdeadmin.visual_admin.refusal_log import lookup as refusal_lookup
+                    asked = data.get('request') if isinstance(data.get('request'), dict) else {}
+                    allowed = bool(
+                        current_user.has_permission(AllPermissionTypes.refusal_view_reasons)
+                        or service.native_administrator(server))
+                    status, body = refusal_lookup(
+                        asked.get('reference'), getattr(getattr(server, 'endpoint_profile', None), 'id', None),
+                        allowed)
+                    response = make_json_response(status=status, **body)
+                    response.headers['Cache-Control'] = 'no-store'
+                    return response
                 scoped_target = request.args.get('database_target_id')
                 if scoped_target and action in POSTGRESQL_REPLICATION_TEMPORARY_ACTIONS:
                     return bad_request(gettext(
@@ -4431,7 +4445,27 @@ class ServerNode(PGChildNodeView):
             return response
         except (VisualAdminValidationError, VisualAdminAccessError) as exc:
             from pgadmin.cdeadmin.visual_admin.refusals import response as refusal_response
-            response = make_json_response(**refusal_response(exc))
+            from pgadmin.cdeadmin.visual_admin.refusal_log import reasons as refusal_reasons
+            from pgadmin.cdeadmin.ui_descriptors import service_for_app as ui_descriptors_for_app
+            reference, catalog = None, {}
+            try:
+                # The reason is kept under a reference for those allowed to read it; the log
+                # line names the reference, never the reason, and a failure here never hides the refusal.
+                body = request.get_json(silent=True) or {}
+                asked = body.get('request') if isinstance(body.get('request'), dict) else {}
+                operation = '%s/%s' % (asked.get('resource_kind'), asked.get('operation_id'))
+                codes = [row.get('code') for row in getattr(exc, 'errors', ()) if isinstance(row, dict)]
+                endpoint = getattr(server, 'endpoint_profile', None)
+                reference = refusal_reasons().record(
+                    endpoint_id=getattr(endpoint, 'id', None), user_id=current_user.id, operation=operation,
+                    message=str(exc), codes=codes)
+                current_app.logger.info(
+                    'Refusal %s: operation=%s endpoint=%s codes=%s', reference, operation,
+                    getattr(endpoint, 'id', None), ','.join(str(code) for code in codes))
+                catalog = ui_descriptors_for_app(current_app).refusal_messages(profile['engine_id'])
+            except Exception:
+                current_app.logger.warning('Refusal reason could not be recorded', exc_info=True)
+            response = make_json_response(**refusal_response(exc, reference, catalog))
             response.headers['Cache-Control'] = 'no-store'
             return response
         except (

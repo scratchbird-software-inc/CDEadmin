@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cdeadmin.ui-refusals.v1",
+  "title": "Reasons a provider can give for refusing a draft",
+  "description": "One catalog per engine (Decision 22). Each entry is the text shown to the user for a registered reason code. The text is written here, never taken from an exception, so it may explain and give a sample value but cannot echo what the user typed.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "engine", "refusals"],
+  "properties": {
+    "schema": {"const": "cdeadmin.ui-refusals.v1"},
+    "engine": {"type": "string"},
+    "notes": {"type": "string"},
+    "refusals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "message"],
+        "properties": {
+          "code": {"type": "string", "pattern": "^[a-z][a-z0-9_]{0,63}$"},
+          "message": {"type": "string", "minLength": 1, "maxLength": 300}
+        }
+      }
+    }
+  }
+}

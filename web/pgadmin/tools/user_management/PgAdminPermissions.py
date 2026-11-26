@@ -27,6 +27,7 @@ class AllPermissionTypes:
     storage_add_folder = 'storage_add_folder'
     storage_remove_folder = 'storage_remove_folder'
     change_password = 'change_password'
+    refusal_view_reasons = 'refusal.view_reasons'
     project_asset_edit = 'project.asset.edit'
     schema_compare_view = 'schema_compare.view'
     schema_compare_edit_mapping = 'schema_compare.edit_mapping'
@@ -234,6 +235,11 @@ class PgAdminPermissions:
             AllPermissionCategories.miscellaneous,
             AllPermissionTypes.change_password,
             gettext("Change Password")
+        )
+        self.add_permission(
+            AllPermissionCategories.miscellaneous,
+            AllPermissionTypes.refusal_view_reasons,
+            gettext("View the logged reasons for refused operations")
         )
         self.add_permission(
             AllPermissionCategories.projects,

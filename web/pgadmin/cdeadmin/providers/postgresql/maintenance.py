@@ -184,9 +184,9 @@ def _analyze_columns(value):
     return [_identifier(col, 'column') for col in items]
 
 
-def _refuse(message):
+def _refuse(message, code=None, field_id=None):
     from .native_admin import PostgreSQLNativeAdminError
-    raise PostgreSQLNativeAdminError(message)
+    raise PostgreSQLNativeAdminError(message, code, field_id)
 
 
 def _flag(draft, name, default=False):

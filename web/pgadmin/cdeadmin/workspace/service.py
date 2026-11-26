@@ -545,6 +545,17 @@ class ProviderWorkspaceService:
             self._principal_id(server), context.endpoint_id
         )}
 
+    def native_administrator(self, server):
+        """Whether the provider says the connected account administers the engine (the equivalent
+        of a superuser). A provider with no such check, or any failure, answers no."""
+        try:
+            context, endpoint, _root = self.endpoint_service.workspace(server)
+            instance = self.endpoint_service.provider_registry.resolve(context).instance
+            probe = getattr(instance, 'is_native_administrator', None)
+            return bool(callable(probe) and probe({'_provider_route': endpoint['route']}))
+        except Exception:
+            return False
+
     def resource_page(self, server, request):
         """Return the next generation-bound root navigator page."""
         if not isinstance(request, dict):

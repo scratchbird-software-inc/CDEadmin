@@ -380,6 +380,7 @@ export function openFamilyDrop(itemData, item) {
       context={operationContext(bundle, [], target)}
       plan={({draft}) => calls.plan({draft})}
       apply={({plan}) => calls.apply({plan})}
+      reasonLookup={calls.reason}
       onClose={close}
       onApplied={() => refreshNode(item, {parent: true})} /></Theme>);
   };
@@ -419,6 +420,7 @@ export function openDescriptorOperation(itemData, item, operation) {
     const effectiveOperation = withTargetOperationDefaults(operation, targetName, itemData.cde_resource_kind);
     root.render(<Theme><OperationDialog open operation={effectiveOperation} targetName={targetName}
       context={operationContext(bundle, resources, target)} plan={({draft}) => calls.plan({draft})} apply={({plan}) => calls.apply({plan})}
+      reasonLookup={calls.reason}
       onClose={close} onApplied={() => refreshNode(item, {parent: itemData._type === 'cde_resource' || operation.operation_id === 'drop'})} /></Theme>);
   };
   run();

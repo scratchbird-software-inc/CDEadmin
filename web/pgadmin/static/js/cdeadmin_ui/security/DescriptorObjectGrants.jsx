@@ -358,7 +358,7 @@ export default function DescriptorObjectGrants({
         </tr>)}</tbody>
       </Box>}
     {dialog && <OperationDialog open operation={dialog.operation} targetName={objectName} fixedValues={dialog.fixed}
-      plan={dialog.calls.plan} apply={dialog.calls.apply} onClose={() => setDialog(null)} onApplied={applied} />}
+      plan={dialog.calls.plan} apply={dialog.calls.apply} reasonLookup={dialog.calls.reason} onClose={() => setDialog(null)} onApplied={applied} />}
   </Box>;
 }
 

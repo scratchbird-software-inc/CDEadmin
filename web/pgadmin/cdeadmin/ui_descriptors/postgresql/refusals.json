@@ -1,0 +1,19 @@
+{
+  "schema": "cdeadmin.ui-refusals.v1",
+  "engine": "postgresql",
+  "notes": "Text for the reason codes registered in providers/postgresql/refusal_codes.py. A test requires an entry for every registered code and none for an unregistered one.",
+  "refusals": [
+    {
+      "code": "database_not_chosen",
+      "message": "Choose the database this runs in. It only affects the objects of that database."
+    },
+    {
+      "code": "confirmation_mismatch",
+      "message": "The name you typed does not match the object's name. Type it exactly as shown, for example orders, to confirm."
+    },
+    {
+      "code": "password_not_carried",
+      "message": "A role password is never carried in a plan or SQL preview. Leave it empty here and set it from the server's Properties dialog."
+    }
+  ]
+}

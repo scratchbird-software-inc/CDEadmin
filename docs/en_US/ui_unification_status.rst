@@ -1955,3 +1955,54 @@ Gaps found, not closed:
   The 13 failures in the live-gated ``test_ui_descriptor_operations_postgresql.py`` run
   are identical with and without these changes. The revoke prefill for a default-ACL
   ``(owner)`` row is unchanged.
+
+
+Native refusal reasons, first slice (2026-11-26)
+------------------------------------------------
+
+Decision 22 was ruled on 2026-11-26 (explanatory text is allowed in a refusal, one
+catalog per engine, ``refusals.py`` may change, a logged reason may be read by the
+engine's superuser equivalent or by a user or role granted the right) and its first
+slice is implemented for PostgreSQL. A refused draft now shows the catalog sentence for
+its reason and a reference, the indicated field is marked, and *Show reason* reveals the
+provider's own message to whoever may read it.
+
+Built: ``providers/postgresql/refusal_codes.py`` (three registered codes and the static
+messages that map to them, which covers the typed-confirmation check of about 38 drop
+sites without editing them), ``ui_descriptors/postgresql/refusals.json`` with its schema
+and validator check, ``visual_admin/refusals.py`` (catalog ``message`` and ``reference``),
+``visual_admin/refusal_log.py`` (a bounded in-process store, 500 entries and 24 hours,
+bound to the endpoint; the full reason is never written to the log, whose line carries the
+reference, codes, operation and endpoint), the ``refusal.view_reasons`` permission, a
+``refusal_reason`` workspace action, ``PostgreSQLProvider.is_native_administrator`` (a
+connected ``rolsuper`` on the reader's own session; any doubt answers no), and the client
+(``makePost`` message, ``OperationDialog`` field marking and *Show reason*, wired into the
+four dialog callers). Tests: ``test_refusal_reasons.py`` (14, part of
+``make ui-descriptors-check``) and ``RefusalReasons.spec.jsx`` (9).
+
+Clicked through (demo PostgreSQL 18.3, provider tree): *Drop owned objects* with a wrong
+typed name showed the catalog sentence with a reference, and *Show reason* as an
+administrator showed ``drop confirmation does not match object name``; the reason text is
+in neither the response nor the application log. Not clicked through: a refusal read by a
+non-administrator (unit tests only) and the superuser probe against a live server.
+
+Qualification: the MySQL group 9 qualification hashes ``visual_admin/refusals.py``,
+``visual_admin/provider.py`` and ``browser/server_groups/servers/__init__.py`` into its
+evidence when it runs. Its authenticated-API pass could not complete in this environment:
+it fails while registering its fixture server (``verify_endpoint`` returns a body with no
+``success`` key, ``cdeadmin_mysql_online_ddl_qualification.py`` line 33), identically on the
+unmodified code, so the cause predates this change and was not investigated. The result is
+therefore **re-hashed, not re-qualified**: the files now hash to ``refusals.py``
+``39533da2ef6fab65``, ``provider.py`` ``fd7f48914fcaaf91`` (unchanged) and
+``servers/__init__.py`` ``35c8b043e708c198``, and earlier evidence for those files is
+superseded and needs review. The refusal behaviour that qualification asserts (a 422, no
+store, no draft value in the body) is covered by
+``test_refusals_are_typed_and_do_not_return_drafts_or_sensitive_messages``, which passes. The
+two failure logs are kept in ``temp-workarea/qualification/``.
+
+Open: codes for the other PostgreSQL refusal sites (about 540 raise sites, mostly generic
+for now), catalogs and administrator probes for the other engines, declarative pre-checks
+(option b), translation of the catalog text and of "Show reason" and "Reference", and
+field marking in the editor tabs (the message already appears there). The log line is at
+INFO and does not show at the default log level; the reference is shown to the user either
+way.
