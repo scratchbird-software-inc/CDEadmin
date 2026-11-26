@@ -2,105 +2,1032 @@
  "schema": "cdeadmin.refusal-wording.v1",
  "engine": "mysql",
  "notes": "How each fixed refusal message in the matching literals file is shown (Decision 22). \"text\" replaces a message that read like a developer note with a plain sentence; \"code\" gives it a reason code and so the catalog sentence, with an optional field; \"keep\" lists messages reviewed and fine as written; \"unreviewed\" lists messages not yet reviewed, shown as written. Every literal is in exactly one; the number unreviewed is capped in tools/refusal_unreviewed_maximums.json and can only fall.",
- "text": {},
- "code": {},
- "keep": [],
- "unreviewed": [
+ "text": {
+  "Ambiguous native account changes": "These account changes conflict. Make each change only once.",
+  "Ambiguous native account options": "These account options conflict. Set each option only once.",
+  "Ambiguous native column declaration": "The column declaration is ambiguous. Give each part only once.",
+  "Ambiguous native column masking policy": "The column masking policy is ambiguous. Give each part only once.",
+  "Ambiguous native role options": "These role options conflict. Set each option only once.",
+  "Ambiguous native routine field": "A routine field is given more than once. Give each field only once.",
+  "Ambiguous native routine options": "These routine options conflict. Set each option only once.",
+  "Ambiguous native trigger field": "A trigger field is given more than once. Give each field only once.",
+  "Ambiguous native trigger options": "These trigger options conflict. Set each option only once."
+ },
+ "code": {
+  "Account active must be boolean": {
+   "code": "boolean_expected"
+  },
+  "Account existence option must be boolean": {
+   "code": "boolean_expected"
+  },
+  "Anonymous account must be boolean": {
+   "code": "boolean_expected"
+  },
+  "Boolean value must be true or false": {
+   "code": "boolean_expected"
+  },
+  "CHECK enforcement must be boolean": {
+   "code": "boolean_expected"
+  },
+  "Deterministic must be boolean": {
+   "code": "boolean_expected"
+  },
+  "IF EXISTS must be boolean": {
+   "code": "boolean_expected"
+  },
+  "IF NOT EXISTS must be boolean": {
+   "code": "boolean_expected"
+  },
+  "IGNORE LEAVES must be boolean": {
+   "code": "boolean_expected"
+  },
+  "Index visibility must be boolean": {
+   "code": "boolean_expected"
+  },
+  "A Shell filter record is invalid": {
+   "code": "invalid_value"
+  },
+  "A histogram bucket record is invalid": {
+   "code": "invalid_value"
+  },
+  "A partition record is invalid": {
+   "code": "invalid_value"
+  },
+  "COMMENT requires bounded text without NUL": {
+   "code": "invalid_value"
+  },
+  "Each document update entry must be structured": {
+   "code": "invalid_value"
+  },
+  "Each filter predicate must be a structured row": {
+   "code": "invalid_value"
+  },
+  "Each indexed document field must be an object": {
+   "code": "invalid_value"
+  },
+  "Index comment requires bounded text": {
+   "code": "invalid_value"
+  },
+  "Index expression requires bounded SQL text": {
+   "code": "invalid_value"
+  },
+  "Invalid executable_path": {
+   "code": "invalid_value"
+  },
+  "Invalid monitoring metadata interval": {
+   "code": "invalid_value"
+  },
+  "Key block size requires unsigned decimal text": {
+   "code": "invalid_value"
+  },
+  "Key text requires 1–16384 UTF-8 bytes without NUL; the native store UDF uses NUL-terminated text": {
+   "code": "invalid_value"
+  },
+  "Key-part columns and expressions require text": {
+   "code": "invalid_value"
+  },
+  "MariaDB dump path escapes the tool workspace": {
+   "code": "invalid_value"
+  },
+  "MariaDB dump path is invalid": {
+   "code": "invalid_value"
+  },
+  "MariaDB dump path must be a child path": {
+   "code": "invalid_value"
+  },
+  "MariaDB tool options are invalid": {
+   "code": "invalid_value"
+  },
+  "MariaDB tool timeout is invalid": {
+   "code": "invalid_value"
+  },
+  "MariaDB tool workspace is unsafe": {
+   "code": "invalid_value"
+  },
+  "A histogram integer is outside its native range": {
+   "code": "number_expected"
+  },
+  "Integer exceeds the native Shell value range": {
+   "code": "number_expected"
+  },
+  "A Shell filter table is duplicated": {
+   "code": "duplicate_value"
+  },
+  "Duplicate FLUSH target selected": {
+   "code": "duplicate_value"
+  },
+  "MariaDB backup artifact already exists": {
+   "code": "duplicate_value"
+  },
+  "Account changes require an independently owned connection": {
+   "code": "provider_unavailable"
+  },
+  "Account review requires the registered MySQL9.7 Shell native grammar library; no DCL was executed": {
+   "code": "provider_unavailable"
+  },
+  "Another native initialization owns the directory claim": {
+   "code": "provider_unavailable"
+  },
+  "Catalog capture requires its own idle connection": {
+   "code": "provider_unavailable"
+  },
+  "Column masking DDL requires an independently owned connection": {
+   "code": "provider_unavailable"
+  },
+  "Data capture requires its own idle connection": {
+   "code": "provider_unavailable"
+  },
+  "Engine diagnostics require an independently owned connection": {
+   "code": "provider_unavailable"
+  },
+  "Failover configuration requires an independent native connection": {
+   "code": "provider_unavailable"
+  },
+  "Guarded table DROP requires an independently owned administrative connection": {
+   "code": "provider_unavailable"
+  },
+  "Independent MySQL session variables are unavailable; the user command was not dispatched and no original-session metadata query was substituted": {
+   "code": "provider_unavailable"
+  },
+  "Index creation requires an independently owned connection": {
+   "code": "provider_unavailable"
+  },
+  "Key-cache management requires an independently owned connection": {
+   "code": "provider_unavailable"
+  },
+  "MariaDB client is closing": {
+   "code": "provider_unavailable"
+  },
+  "MariaDB session route is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "MariaDB tool credential binding is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "MariaDB tool credential is invalid": {
+   "code": "provider_unavailable"
+  },
+  "MariaDB tool credential is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "MariaDB tool workspace is required": {
+   "code": "provider_unavailable"
+  },
+  "Monitoring probe retained a transaction": {
+   "code": "provider_unavailable"
+  },
+  "A selected exact native MyISAM index is unavailable": {
+   "code": "stale_listing"
+  },
+  "Ambiguous native backup metadata": {
+   "code": "stale_listing"
+  },
+  "An observed native UUID is required": {
+   "code": "stale_listing"
+  },
+  "Companion myisamchk binary changed before post-pack index rebuild": {
+   "code": "stale_listing"
+  },
+  "Completed native dump metadata is unavailable or ambiguous": {
+   "code": "stale_listing"
+  },
+  "Exact native MariaDB 12.2.2 server_uid is required": {
+   "code": "stale_listing"
+  },
+  "Exact native MySQL 9.7.0 server_uuid is required": {
+   "code": "stale_listing"
+  },
+  "Exact native MySQL cache execution identity is unavailable": {
+   "code": "stale_listing"
+  },
+  "Exact native MySQL engine diagnostic execution identity is unavailable": {
+   "code": "stale_listing"
+  },
+  "Exact native MySQL instance execution identity is unavailable": {
+   "code": "stale_listing"
+  },
+  "Exact native MySQL spatial reference execution identity is unavailable": {
+   "code": "stale_listing"
+  },
+  "Exact native MySQL table definition is unavailable": {
+   "code": "stale_listing"
+  },
+  "Exact native key-cache values are unavailable": {
+   "code": "stale_listing"
+  },
+  "Exact native masked-column declaration is unavailable": {
+   "code": "stale_listing"
+  },
+  "Execution-host datadir server-uuid changed after review": {
+   "code": "stale_listing"
+  },
+  "Index definition changed during native mode admission": {
+   "code": "stale_listing"
+  },
+  "Invalid MySQL server_uuid on session resource": {
+   "code": "stale_listing"
+  },
+  "Invalid native MySQL relation identity": {
+   "code": "stale_listing"
+  },
+  "Live MySQL X server_uuid differs from the selected server": {
+   "code": "stale_listing"
+  },
+  "Live MySQL server_uuid differs from the selected NDB target": {
+   "code": "stale_listing"
+  },
+  "Live MySQL server_uuid differs from the selected target": {
+   "code": "stale_listing"
+  },
+  "MariaDB restore metadata does not match the target": {
+   "code": "stale_listing"
+  },
+  "Monitoring native identity changed": {
+   "code": "stale_listing"
+  },
+  "Account connection cleanup failed; inspect native state before another review": {
+   "code": "operation_state_unclear"
+  },
+  "Benchmark review observer connection release is unconfirmed": {
+   "code": "operation_state_unclear"
+  },
+  "Diagnostic review connection release is unconfirmed": {
+   "code": "operation_state_unclear"
+  },
+  "MariaDB autocommit acknowledgement is unknown": {
+   "code": "operation_state_unclear"
+  },
+  "MariaDB session outcome is unknown": {
+   "code": "operation_state_unclear"
+  },
+  "MariaDB session outcome is unknown; close it before opening a separate session. Do not replay the operation.": {
+   "code": "operation_state_unclear"
+  },
+  "Confirm coordination with all native backup/page-tracking clients": {
+   "code": "confirmation_required"
+  },
+  "Confirm destructive_confirmed before offline MyISAM compression": {
+   "code": "confirmation_required"
+  },
+  "Confirm destructive_confirmed before offline MyISAM repair, index sort, or analyze": {
+   "code": "confirmation_required"
+  },
+  "Confirm destructive_confirmed before rewriting InnoDB page checksums with --write": {
+   "code": "confirmation_required"
+  },
+  "Confirm isolated_scratch_confirmed before running mysqlslap": {
+   "code": "confirmation_required"
+  },
+  "Confirm removal of failover configuration for every channel": {
+   "code": "confirmation_required"
+  },
+  "Confirm that changing the native backup ID can delete the prior exported index file": {
+   "code": "confirmation_required"
+  },
+  "Confirm that reloading changes native query rewriting for all clients": {
+   "code": "confirmation_required"
+  },
+  "Confirm that the native tracking files are no longer required by any backup": {
+   "code": "confirmation_required"
+  },
+  "Confirm this server is dedicated to an initial load before disabling crash recovery": {
+   "code": "confirmation_required"
+  },
+  "Explicit original-session diagnostics acknowledgement is required": {
+   "code": "confirmation_required"
+  },
+  "Explicitly allow replacement of source-session diagnostics": {
+   "code": "confirmation_required"
+  },
+  "Confirm private diagnostic access and the exact native server": {
+   "code": "confirmation_mismatch"
+  },
+  "Confirm private plan access and the exact target display name": {
+   "code": "confirmation_mismatch"
+  },
+  "Confirm the exact MySQL server and rule options": {
+   "code": "confirmation_mismatch"
+  },
+  "Confirm the exact MySQL server display name": {
+   "code": "confirmation_mismatch"
+  },
+  "Confirm the exact MySQL server name and native options": {
+   "code": "confirmation_mismatch"
+  },
+  "Confirm the exact MySQL table name": {
+   "code": "confirmation_mismatch"
+  },
+  "Confirm the exact NDB logfile-group name": {
+   "code": "confirmation_mismatch"
+  },
+  "Confirm the exact NDB logfile-group name and undofile options": {
+   "code": "confirmation_mismatch"
+  },
+  "Confirm the exact NDB node ID": {
+   "code": "confirmation_mismatch"
+  },
+  "Confirm the exact X collection name": {
+   "code": "confirmation_mismatch"
+  },
+  "Confirm the exact native MySQL column resource address": {
+   "code": "confirmation_mismatch"
+  },
+  "Confirm the exact native MySQL server and page-tracking options": {
+   "code": "confirmation_mismatch"
+  },
+  "Confirm the exact native MySQL table address": {
+   "code": "confirmation_mismatch"
+  },
+  "Confirm the exact native XA server name": {
+   "code": "confirmation_mismatch"
+  },
+  "Confirm the exact native foreign-server resource address": {
+   "code": "confirmation_mismatch"
+  },
+  "Confirm the exact native server and disconnection of all its clients": {
+   "code": "confirmation_mismatch"
+  },
+  "Confirm the exact native server and key-cache options": {
+   "code": "confirmation_mismatch"
+  },
+  "Confirm the exact server display name and NDB backup ID to abort": {
+   "code": "confirmation_mismatch"
+  },
+  "Confirm the exact server display name and NDB backup options": {
+   "code": "confirmation_mismatch"
+  },
+  "Confirm the exact server display name for NDB cluster inspection": {
+   "code": "confirmation_mismatch"
+  },
+  "Confirm the exact spatial reference system ID": {
+   "code": "confirmation_mismatch"
+  },
+  "Confirm the exact verification database and native options": {
+   "code": "confirmation_mismatch"
+  },
+  "Confirm the selected MySQL server name": {
+   "code": "confirmation_mismatch"
+  },
+  "Confirm the selected native object and failover options": {
+   "code": "confirmation_mismatch"
+  },
+  "Confirm the selected object name": {
+   "code": "confirmation_mismatch"
+  },
+  "Confirm the selected server and user-key fields": {
+   "code": "confirmation_mismatch"
+  },
+  "Catalog capture requires native MySQL 9.7.0": {
+   "code": "version_required"
+  },
+  "MariaDB tool must be from the exact 12.2.2 release": {
+   "code": "version_required"
+  },
+  "Managed recovery Shell utilities currently require a POSIX application execution host": {
+   "code": "unsupported_here"
+  },
+  "Invalid MySQL identifier": {
+   "code": "invalid_name"
+  },
+  "A bounded deterministic SQL mode value is required": {
+   "code": "value_required"
+  },
+  "A managed source name is required": {
+   "code": "value_required"
+  },
+  "An exact native signed integer UDF result is required": {
+   "code": "value_required"
+  },
+  "Authentication plugin must not be empty": {
+   "code": "value_required"
+  },
+  "Each filter predicate requires a document path": {
+   "code": "value_required"
+  },
+  "Factor plugin must not be empty": {
+   "code": "value_required"
+  },
+  "MariaDB backup produced an empty dump file": {
+   "code": "native_tool_rejected"
+  },
+  "MariaDB backup produced no dump file": {
+   "code": "native_tool_rejected"
+  },
+  "MariaDB restore object postcondition failed": {
+   "code": "native_tool_rejected"
+  },
+  "MariaDB restore dump checksum does not match metadata": {
+   "code": "file_invalid"
+  },
+  "MariaDB restore metadata is invalid": {
+   "code": "file_invalid"
+  },
+  "MariaDB restore source lacks its ScratchRobin metadata": {
+   "code": "file_invalid"
+  },
+  "MySQL 9.7.0 server runtime is required for mysqlslap": {
+   "code": "version_required"
+  },
+  "MySQL X collection administration requires MySQL 9.7.0": {
+   "code": "version_required"
+  },
+  "Native backup protection requires MySQL9.7.0": {
+   "code": "version_required"
+  },
+  "Native dump verification requires MySQL9.7.0": {
+   "code": "version_required"
+  },
+  "MySQL EXPLAIN FOR CONNECTION review connection release is unconfirmed": {
+   "code": "operation_state_unclear"
+  },
+  "MySQL FLUSH review connection release is unconfirmed": {
+   "code": "operation_state_unclear"
+  },
+  "MySQL autocommit acknowledgement is unknown": {
+   "code": "operation_state_unclear"
+  },
+  "MySQL client script framing is unconfirmed before query dispatch": {
+   "code": "operation_state_unclear"
+  },
+  "MySQL preparation state is unconfirmed; close this session": {
+   "code": "operation_state_unclear"
+  },
+  "MySQL prepared statement release is unconfirmed; close this session": {
+   "code": "operation_state_unclear"
+  },
+  "MySQL session outcome is unknown": {
+   "code": "operation_state_unclear"
+  },
+  "MySQL session outcome is unknown; close it before opening a separate session. Do not replay the operation.": {
+   "code": "operation_state_unclear"
+  },
+  "NDB review connection release is unconfirmed": {
+   "code": "operation_state_unclear"
+  },
+  "MySQL driver mode must be boolean": {
+   "code": "boolean_expected"
+  },
+  "MySQL pool reset must be Boolean": {
+   "code": "boolean_expected"
+  },
+  "MySQL pool size must be 1 through 32": {
+   "code": "number_expected"
+  },
+  "NDB management server port must be 1..65535": {
+   "code": "number_expected"
+  },
+  "NDB node ID must be 1..255": {
+   "code": "number_expected"
+  },
+  "NODEGROUP requires an integer 0..65535": {
+   "code": "number_expected"
+  },
+  "Native lock wait requires 1 to 120 seconds": {
+   "code": "number_expected"
+  },
+  "Native metadata lock wait requires 1 to 120 seconds": {
+   "code": "number_expected"
+  },
+  "Native MySQL identifier requires 1 to 64 characters without NUL": {
+   "code": "invalid_name"
+  },
+  "Native NDB identifier requires 1 to 64 characters without NUL": {
+   "code": "invalid_name"
+  },
+  "MySQL query attributes exceed 2 MiB": {
+   "code": "too_long"
+  },
+  "Native catalog exceeds the 20,000-fact / 8 MiB capture limit": {
+   "code": "too_long"
+  },
+  "Native descriptor inventory exceeds its bound": {
+   "code": "too_long"
+  },
+  "Native directory observation exceeds its entry bound": {
+   "code": "too_long"
+  },
+  "Native dump metadata exceeds the supported observation size": {
+   "code": "too_long"
+  },
+  "Native engine attributes exceed 64 KiB": {
+   "code": "too_long"
+  },
+  "Native failover inventory exceeds 20000 rows": {
+   "code": "too_long"
+  },
+  "Native instance observation exceeds its bound": {
+   "code": "too_long"
+  },
+  "Native prepared XA inventory exceeds 20,000 branches": {
+   "code": "too_long"
+  },
+  "Native rewrite rules exceed 1000 rows or 4 MiB; no partial review is admitted": {
+   "code": "too_long"
+  },
+  "Native Shell checksum verification requires trusted local_infile; explicitly authorize temporary enablement": {
+   "code": "confirmation_required"
+  },
+  "Native MySQL grammar rejected the account change; no DCL was executed": {
+   "code": "invalid_sql"
+  },
+  "Native MySQL grammar rejected the routine definition; no DDL was executed": {
+   "code": "invalid_sql"
+  },
+  "MySQL Shell operation failed; inspect the redacted provider observation": {
+   "code": "native_tool_rejected"
+  },
+  "MySQL Shell restore schema postcondition failed": {
+   "code": "native_tool_rejected"
+  },
+  "MySQL Shell dump has no verifiable schema inventory": {
+   "code": "file_invalid"
+  },
+  "MySQL Shell dump metadata is invalid": {
+   "code": "file_invalid"
+  },
+  "MySQL Shell operation has no verifiable dump metadata": {
+   "code": "file_invalid"
+  },
+  "MySQL Shell restore source is not a completed dump": {
+   "code": "file_invalid"
+  },
+  "Native backup metadata is not an object": {
+   "code": "file_invalid"
+  },
+  "Native dump data metadata has an unsupported shape": {
+   "code": "file_invalid"
+  },
+  "MySQL Shell backup path already exists": {
+   "code": "duplicate_value"
+  },
+  "MySQL host utilities do not execute inside a retained SQL session": {
+   "code": "unsupported_here"
+  },
+  "MySQL uses named privileges and roles, not an administrator flag": {
+   "code": "unsupported_here"
+  },
+  "Native GRANT AS supports global privileges only": {
+   "code": "unsupported_here"
+  },
+  "Native account drop supports IF EXISTS, not CASCADE": {
+   "code": "unsupported_here"
+  },
+  "Native initialization requires the Linux host adapter": {
+   "code": "unsupported_here"
+  },
+  "MySQL Shell options are invalid": {
+   "code": "invalid_value"
+  },
+  "MySQL Shell timeout is invalid": {
+   "code": "invalid_value"
+  },
+  "MySQL binary parameter is invalid": {
+   "code": "invalid_value"
+  },
+  "MySQL binary parameter length does not match": {
+   "code": "invalid_value"
+  },
+  "MySQL numeric parameter is invalid": {
+   "code": "invalid_value"
+  },
+  "MySQL parameter bindings do not match the native source markers": {
+   "code": "invalid_value"
+  },
+  "MySQL parameter names must be text": {
+   "code": "invalid_value"
+  },
+  "MySQL parameter requires an exact supported value or typed envelope": {
+   "code": "invalid_value"
+  },
+  "MySQL parameters do not match this native command": {
+   "code": "invalid_value"
+  },
+  "MySQL parameters must be an object or array": {
+   "code": "invalid_value"
+  },
+  "MySQL pool name is invalid": {
+   "code": "invalid_value"
+  },
+  "MySQL query attributes require a JSON object of names and values": {
+   "code": "invalid_value"
+  },
+  "MySQL query attributes require bounded JSON values and valid Unicode": {
+   "code": "invalid_value"
+  },
+  "MySQL temporal parameter is invalid": {
+   "code": "invalid_value"
+  },
+  "MySQL typed parameter is invalid": {
+   "code": "invalid_value"
+  },
+  "MySQL-family transaction isolation is invalid": {
+   "code": "invalid_value"
+  },
+  "Native MySQL table options require an object": {
+   "code": "invalid_value"
+  },
+  "Native XA identity lengths or format ID differ": {
+   "code": "invalid_value"
+  },
+  "Native identifier must be nonempty text without NUL": {
+   "code": "invalid_value"
+  },
+  "Native index text must be valid UTF-8": {
+   "code": "invalid_value"
+  },
+  "MySQL X Protocol server identity is unavailable": {
+   "code": "stale_listing"
+  },
+  "MySQL X server or principal identity changed since review": {
+   "code": "stale_listing"
+  },
+  "MySQL cancellation identity is not available yet": {
+   "code": "stale_listing"
+  },
+  "MySQL cancellation server identity changed": {
+   "code": "stale_listing"
+  },
+  "MySQL foreign-server execution identity changed": {
+   "code": "stale_listing"
+  },
+  "MySQL server or principal identity changed since NDB review": {
+   "code": "stale_listing"
+  },
+  "MySQL server or principal identity changed since review": {
+   "code": "stale_listing"
+  },
+  "MySQL server, principal, or active role changed since review": {
+   "code": "stale_listing"
+  },
+  "MySQL server_uuid changed after benchmark review": {
+   "code": "stale_listing"
+  },
+  "MySQL spatial reference execution identity changed": {
+   "code": "stale_listing"
+  },
+  "Native MariaDB server identity is unavailable": {
+   "code": "stale_listing"
+  },
+  "Native MySQL database/server/version identity changed": {
+   "code": "stale_listing"
+  },
+  "Native MySQL foreign-server identity is unavailable": {
+   "code": "stale_listing"
+  },
+  "Native MySQL instance differs from the selected Rewriter server": {
+   "code": "stale_listing"
+  },
+  "Native MySQL instance differs from the selected cache server": {
+   "code": "stale_listing"
+  },
+  "Native MySQL instance differs from the selected page-tracking server": {
+   "code": "stale_listing"
+  },
+  "Native MySQL instance differs from the selected server": {
+   "code": "stale_listing"
+  },
+  "Native MySQL instance identity or observed maintenance state changed since review": {
+   "code": "stale_listing"
+  },
+  "Native MySQL server identity is unavailable": {
+   "code": "stale_listing"
+  },
+  "Native MySQL spatial reference identity is unavailable": {
+   "code": "stale_listing"
+  },
+  "Native MySQL utility binary changed after review; re-plan before dispatch": {
+   "code": "stale_listing"
+  },
+  "Native Rewriter definition or selected rules changed since review": {
+   "code": "stale_listing"
+  },
+  "Native Rewriter execution identity changed since review": {
+   "code": "stale_listing"
+  },
+  "Native SQL peer differs from the registered recovery instance": {
+   "code": "stale_listing"
+  },
+  "Native XA execution identity changed since review": {
+   "code": "stale_listing"
+  },
+  "Native XA recovery returned duplicate identities": {
+   "code": "stale_listing"
+  },
+  "Native XA server differs from the selected instance": {
+   "code": "stale_listing"
+  },
+  "Native account definition is unavailable": {
+   "code": "stale_listing"
+  },
+  "Native account identity is ambiguous": {
+   "code": "stale_listing"
+  },
+  "Native account or execution identity changed since review": {
+   "code": "stale_listing"
+  },
+  "Native backup metadata differs from the acknowledged artifact manifest": {
+   "code": "stale_listing"
+  },
+  "Native column declaration and facts disagree": {
+   "code": "stale_listing"
+  },
+  "Native column layout changed during data capture": {
+   "code": "stale_listing"
+  },
+  "Native column, masking reference or execution identity changed since review": {
+   "code": "stale_listing"
+  },
+  "Native engine diagnostic result metadata changed": {
+   "code": "stale_listing"
+  },
+  "Native execution identity or grants changed since review": {
+   "code": "stale_listing"
+  },
+  "Native failover identity or configuration changed since review": {
+   "code": "stale_listing"
+  },
+  "Native foreign-server definition changed before review": {
+   "code": "stale_listing"
+  },
+  "Native foreign-server definition or credential changed since review": {
+   "code": "stale_listing"
+  },
+  "Native grammar dependency changed": {
+   "code": "stale_listing"
+  },
+  "Native index identity or owning table changed since review": {
+   "code": "stale_listing"
+  },
+  "Native initialization directory identity changed": {
+   "code": "stale_listing"
+  },
+  "Native initialization inputs changed before guardian dispatch": {
+   "code": "stale_listing"
+  },
+  "Native initialization metadata changed": {
+   "code": "stale_listing"
+  },
+  "Native initialization output changed": {
+   "code": "stale_listing"
+  },
+  "Native key-cache execution identity changed since review": {
+   "code": "stale_listing"
+  },
+  "Native key-cache values changed since review": {
+   "code": "stale_listing"
+  },
+  "Native masking declaration and column facts disagree": {
+   "code": "stale_listing"
+  },
+  "Native option-file attributes changed": {
+   "code": "stale_listing"
+  },
+  "Native owning-table definition is unavailable": {
+   "code": "stale_listing"
+  },
+  "Native page-tracking execution identity changed since review": {
+   "code": "stale_listing"
+  },
+  "Native page-tracking inputs changed since review": {
+   "code": "stale_listing"
+  },
+  "Native recovery utility lease is unavailable or changed": {
+   "code": "stale_listing"
+  },
+  "Native relation is unavailable or its kind changed": {
+   "code": "stale_listing"
+  },
+  "Native routine grammar dependency changed since review": {
+   "code": "stale_listing"
+  },
+  "Native routine identity or definition changed since review": {
+   "code": "stale_listing"
+  },
+  "Native row shape changed during capture": {
+   "code": "stale_listing"
+  },
+  "MySQL EXPLAIN FOR CONNECTION requires a dedicated observer connection": {
+   "code": "provider_unavailable"
+  },
+  "MySQL FLUSH requires a dedicated administrative connection": {
+   "code": "provider_unavailable"
+  },
+  "MySQL Shell workspace is required": {
+   "code": "provider_unavailable"
+  },
+  "MySQL X collection operations require a dedicated X Protocol session": {
+   "code": "provider_unavailable"
+  },
+  "MySQL cache maintenance requires an independently owned connection": {
+   "code": "provider_unavailable"
+  },
+  "MySQL client command framing failed before this command was dispatched": {
+   "code": "provider_unavailable"
+  },
+  "MySQL client is closing": {
+   "code": "provider_unavailable"
+  },
+  "MySQL command encoding failed before dispatch": {
+   "code": "provider_unavailable"
+  },
+  "MySQL connection lease is closed": {
+   "code": "provider_unavailable"
+  },
+  "MySQL connection pool exhausted": {
+   "code": "provider_unavailable"
+  },
+  "MySQL connector is closed": {
+   "code": "provider_unavailable"
+  },
+  "MySQL execution owner is closing": {
+   "code": "provider_unavailable"
+  },
+  "MySQL execution still owns its connection": {
+   "code": "provider_unavailable"
+  },
+  "MySQL execution token is invalid": {
+   "code": "provider_unavailable"
+  },
+  "MySQL foreign-server DDL requires an independently owned connection": {
+   "code": "provider_unavailable"
+  },
+  "MySQL instance maintenance requires an independently owned connection": {
+   "code": "provider_unavailable"
+  },
+  "MySQL native utility work is active": {
+   "code": "provider_unavailable"
+  },
+  "MySQL parameter connection is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "MySQL pool has been retired": {
+   "code": "provider_unavailable"
+  },
+  "MySQL protocol connection is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "MySQL result character-set connection is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "MySQL result connection is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "MySQL result metadata connection is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "MySQL row read still owns its connection": {
+   "code": "provider_unavailable"
+  },
+  "MySQL session execution is active": {
+   "code": "provider_unavailable"
+  },
+  "MySQL session route is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "MySQL spatial reference DDL requires an independently owned connection": {
+   "code": "provider_unavailable"
+  },
+  "MySQL utility credential binding is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "MySQL utility database credential lease is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "MySQL-family profile version is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "NDB Cluster administration requires a dedicated administrative connection": {
+   "code": "provider_unavailable"
+  },
+  "Native MariaDB application client is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "Native MariaDB backup-stage client is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "Native MariaDB catalog client is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "Native MariaDB data client is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "Native MariaDB encoding client is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "Native MariaDB query session required": {
+   "code": "provider_unavailable"
+  },
+  "Native MariaDB server application client is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "Native MariaDB server catalog client is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "Native MariaDB session required": {
+   "code": "provider_unavailable"
+  },
+  "Native MariaDB validation client is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "Native MySQL SQL-mode status is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "Native MySQL application client is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "Native MySQL catalog client is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "Native MySQL data client is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "Native MySQL encoding client is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "Native MySQL foreign-server operation is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "Native MySQL grammar validation is unavailable; no SQL was executed": {
+   "code": "provider_unavailable"
+  },
+  "Native MySQL server application client is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "Native MySQL spatial reference operation is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "Native MySQL validation client is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "Native SQL mode is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "Native XA recovery did not return exact hexadecimal bytes": {
+   "code": "provider_unavailable"
+  },
+  "Native checksum row count is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "Native checksums do not cover every dumped table": {
+   "code": "provider_unavailable"
+  },
+  "Native connection instrumentation loss counters are unavailable": {
+   "code": "provider_unavailable"
+  },
+  "Native dump data coverage is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "Native dump row counts and checksum coverage differ": {
+   "code": "provider_unavailable"
+  },
+  "Native engine diagnostic text is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "Native failover function result is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "Native generated-password factors are incomplete": {
+   "code": "provider_unavailable"
+  },
+  "Native generated-password result is missing": {
+   "code": "provider_unavailable"
+  },
+  "Native global process visibility is unqualified": {
+   "code": "provider_unavailable"
+  },
+  "Native observer handshake is unqualified": {
+   "code": "provider_unavailable"
+  },
+  "Native partition checksum coverage is incomplete": {
+   "code": "provider_unavailable"
+  },
+  "Native row-read session is unavailable": {
+   "code": "provider_unavailable"
+  }
+ },
+ "keep": [
   "--quick applies only to check or recover modes",
-  "A Shell filter record is invalid",
-  "A Shell filter table is duplicated",
-  "A bounded deterministic SQL mode value is required",
-  "A histogram bucket record is invalid",
   "A histogram frequency must be between zero and one",
-  "A histogram integer is outside its native range",
-  "A managed source name is required",
-  "A partition record is invalid",
-  "A selected exact native MyISAM index is unavailable",
   "A selected name resolves to a base table, not a temporary table",
-  "Account active must be boolean",
   "Account attributes require a native object",
   "Account attributes require finite native JSON values",
-  "Account changes require an independently owned connection",
-  "Account connection cleanup failed; inspect native state before another review",
-  "Account existence option must be boolean",
   "Account identity and default-role replacement use their native operations",
-  "Account review requires the registered MySQL9.7 Shell native grammar library; no DCL was executed",
   "All-account privilege removal is a native REVOKE action",
   "Alter factors use explicit ADD, MODIFY or DROP records",
-  "Ambiguous native account changes",
-  "Ambiguous native account options",
-  "Ambiguous native backup metadata",
-  "Ambiguous native column declaration",
-  "Ambiguous native column masking policy",
-  "Ambiguous native role options",
-  "Ambiguous native routine field",
-  "Ambiguous native routine options",
-  "Ambiguous native trigger field",
-  "Ambiguous native trigger options",
   "An anonymous account cannot also have a username",
-  "An exact native signed integer UDF result is required",
   "An existing key function has another native implementation; it will not be replaced",
-  "An observed native UUID is required",
-  "Anonymous account must be boolean",
-  "Another native initialization owns the directory claim",
   "Authentication input does not match the selected mode",
-  "Authentication plugin must not be empty",
-  "Benchmark review observer connection release is unconfirmed",
-  "Boolean value must be true or false",
-  "CHECK enforcement must be boolean",
-  "COMMENT requires bounded text without NUL",
   "CREATE USER uses IF NOT EXISTS",
   "Cannot combine --count with --write checksum rewrite",
-  "Catalog capture requires its own idle connection",
-  "Catalog capture requires native MySQL 9.7.0",
   "Certificate/cipher clauses require SPECIFIED TLS policy",
   "Close MySQL SQL sessions and dedicated native work before changing this connection; explicitly finish pending work",
   "Close this recovery registration's native SQL connections before detaching its transport",
   "Close this recovery registration's native SQL connections before replacing its transport",
   "Collection index type must be INDEX, SPATIAL, or FULLTEXT",
-  "Column masking DDL requires an independently owned connection",
   "Column prefix length requires a positive native integer",
   "Column privileges require a table or view and native column names",
   "Commit or roll back the MariaDB transaction before changing autocommit",
   "Commit or roll back the MySQL transaction before changing autocommit",
-  "Companion myisamchk binary changed before post-pack index rebuild",
-  "Completed native dump metadata is unavailable or ambiguous",
-  "Confirm coordination with all native backup/page-tracking clients",
-  "Confirm destructive_confirmed before offline MyISAM compression",
-  "Confirm destructive_confirmed before offline MyISAM repair, index sort, or analyze",
-  "Confirm destructive_confirmed before rewriting InnoDB page checksums with --write",
-  "Confirm isolated_scratch_confirmed before running mysqlslap",
-  "Confirm private diagnostic access and the exact native server",
-  "Confirm private plan access and the exact target display name",
-  "Confirm removal of failover configuration for every channel",
-  "Confirm that changing the native backup ID can delete the prior exported index file",
-  "Confirm that reloading changes native query rewriting for all clients",
-  "Confirm that the native tracking files are no longer required by any backup",
-  "Confirm the exact MySQL server and rule options",
-  "Confirm the exact MySQL server display name",
-  "Confirm the exact MySQL server name and native options",
-  "Confirm the exact MySQL table name",
-  "Confirm the exact NDB logfile-group name",
-  "Confirm the exact NDB logfile-group name and undofile options",
-  "Confirm the exact NDB node ID",
-  "Confirm the exact X collection name",
-  "Confirm the exact native MySQL column resource address",
-  "Confirm the exact native MySQL server and page-tracking options",
-  "Confirm the exact native MySQL table address",
-  "Confirm the exact native XA server name",
-  "Confirm the exact native foreign-server resource address",
-  "Confirm the exact native server and disconnection of all its clients",
-  "Confirm the exact native server and key-cache options",
-  "Confirm the exact server display name and NDB backup ID to abort",
-  "Confirm the exact server display name and NDB backup options",
-  "Confirm the exact server display name for NDB cluster inspection",
-  "Confirm the exact spatial reference system ID",
-  "Confirm the exact verification database and native options",
-  "Confirm the selected MySQL server name",
-  "Confirm the selected native object and failover options",
-  "Confirm the selected object name",
-  "Confirm the selected server and user-key fields",
-  "Confirm this server is dedicated to an initial load before disabling crash recovery",
   "Create factors use authentication_factors",
   "DATA DIRECTORY and INDEX DIRECTORY are given when a table is created; ALTER TABLE ignores them",
   "DATABASE scope has no individual object",
@@ -110,45 +1037,22 @@
   "Data capture column metadata exceeds 4 MiB",
   "Data capture exceeded 30 seconds; no partial download is available",
   "Data capture exceeds 4 MiB; no partial download is available",
-  "Data capture requires its own idle connection",
   "Default role requires separate user and host",
   "Default roles require native account records on create",
-  "Deterministic must be boolean",
-  "Diagnostic review connection release is unconfirmed",
   "Discarding the secondary password is a separate native ALTER change",
   "Document modify limit must be a positive integer",
   "Document modify requires at least one filter predicate",
   "Document remove limit must be a positive integer",
   "Document remove requires at least one filter predicate",
-  "Duplicate FLUSH target selected",
   "Each concurrency level must be between 1 and 256",
-  "Each document update entry must be structured",
-  "Each filter predicate must be a structured row",
-  "Each filter predicate requires a document path",
-  "Each indexed document field must be an object",
   "Each key part requires a column or an expression",
   "Engine attributes exceed 64 KiB",
   "Engine attributes require a JSON value",
-  "Engine diagnostics require an independently owned connection",
-  "Exact native MariaDB 12.2.2 server_uid is required",
-  "Exact native MySQL 9.7.0 server_uuid is required",
-  "Exact native MySQL cache execution identity is unavailable",
-  "Exact native MySQL engine diagnostic execution identity is unavailable",
-  "Exact native MySQL instance execution identity is unavailable",
-  "Exact native MySQL spatial reference execution identity is unavailable",
-  "Exact native MySQL table definition is unavailable",
-  "Exact native key-cache values are unavailable",
-  "Exact native masked-column declaration is unavailable",
-  "Execution-host datadir server-uuid changed after review",
   "Expiry days require INTERVAL",
-  "Explicit original-session diagnostics acknowledgement is required",
-  "Explicitly allow replacement of source-session diagnostics",
   "FLUSH TABLES ... FOR EXPORT requires an InnoDB base table",
   "FLUSH TABLES WITH READ LOCK / FOR EXPORT / UNLOCK requires a retained session",
   "FULLTEXT and SPATIAL indexes do not accept UNIQUE or USING",
   "Factor mode requires a native plugin",
-  "Factor plugin must not be empty",
-  "Failover configuration requires an independent native connection",
   "Failover priority must be 0 through 100",
   "Filter combinator must be AND or OR",
   "Find limit must be 1..500 and offset >= 0",
@@ -160,292 +1064,51 @@
   "Generated factors take no supplied credential",
   "Grantor options require a GRANT AS account",
   "Guarded table DROP does not admit bound parameters",
-  "Guarded table DROP requires an independently owned administrative connection",
   "Guarded table DROP requires exactly one native DROP TABLE statement",
   "IF EXISTS and IGNORE UNKNOWN USER apply to REVOKE",
-  "IF EXISTS must be boolean",
-  "IF NOT EXISTS must be boolean",
-  "IGNORE LEAVES must be boolean",
-  "Independent MySQL session variables are unavailable; the user command was not dispatched and no original-session metadata query was substituted",
-  "Index comment requires bounded text",
-  "Index creation requires an independently owned connection",
   "Index database and owning table differ",
-  "Index definition changed during native mode admission",
   "Index expression has an unsafe native boundary",
-  "Index expression requires bounded SQL text",
-  "Index visibility must be boolean",
   "Indexed document field path must start with \"$.\"",
   "Initial members require native account records",
   "Initial members require separate native user and host",
   "Install the native Community mysqlbackup component before using page tracking",
-  "Integer exceeds the native Shell value range",
   "Integer filter/update value cannot be boolean",
   "Invalid JSON value in document operation",
-  "Invalid MySQL identifier",
-  "Invalid MySQL server_uuid on session resource",
-  "Invalid executable_path",
   "Invalid integer filter/update value",
-  "Invalid monitoring metadata interval",
-  "Invalid native MySQL relation identity",
   "Invalid numeric filter/update value",
-  "Key block size requires unsigned decimal text",
-  "Key text requires 1–16384 UTF-8 bytes without NUL; the native store UDF uses NUL-terminated text",
-  "Key-cache management requires an independently owned connection",
-  "Key-part columns and expressions require text",
-  "Live MySQL X server_uuid differs from the selected server",
-  "Live MySQL server_uuid differs from the selected NDB target",
-  "Live MySQL server_uuid differs from the selected target",
-  "Managed recovery Shell utilities currently require a POSIX application execution host",
-  "MariaDB autocommit acknowledgement is unknown",
-  "MariaDB backup artifact already exists",
-  "MariaDB backup produced an empty dump file",
-  "MariaDB backup produced no dump file",
-  "MariaDB client is closing",
-  "MariaDB dump path escapes the tool workspace",
-  "MariaDB dump path is invalid",
-  "MariaDB dump path must be a child path",
-  "MariaDB restore dump checksum does not match metadata",
-  "MariaDB restore metadata does not match the target",
-  "MariaDB restore metadata is invalid",
-  "MariaDB restore object postcondition failed",
-  "MariaDB restore source lacks its ScratchRobin metadata",
-  "MariaDB session outcome is unknown",
-  "MariaDB session outcome is unknown; close it before opening a separate session. Do not replay the operation.",
-  "MariaDB session route is unavailable",
-  "MariaDB tool credential binding is unavailable",
-  "MariaDB tool credential is invalid",
-  "MariaDB tool credential is unavailable",
-  "MariaDB tool must be from the exact 12.2.2 release",
-  "MariaDB tool options are invalid",
-  "MariaDB tool timeout is invalid",
-  "MariaDB tool workspace is required",
-  "MariaDB tool workspace is unsafe",
   "MariaDB upgrade check does not accept options",
   "Mode expression exceeds its inference bound",
-  "Monitoring native identity changed",
   "Monitoring probe exceeded its native row bound",
-  "Monitoring probe retained a transaction",
   "MySQL 9.7 does not support mysql_native_password",
   "MySQL 9.7 removed FLUSH HOSTS; use TRUNCATE TABLE performance_schema.host_cache",
-  "MySQL 9.7.0 server runtime is required for mysqlslap",
-  "MySQL EXPLAIN FOR CONNECTION requires a dedicated observer connection",
-  "MySQL EXPLAIN FOR CONNECTION review connection release is unconfirmed",
-  "MySQL FLUSH requires a dedicated administrative connection",
-  "MySQL FLUSH review connection release is unconfirmed",
-  "MySQL Shell backup path already exists",
   "MySQL Shell credential binding is unavailable",
   "MySQL Shell credentials are unavailable",
-  "MySQL Shell dump has no verifiable schema inventory",
-  "MySQL Shell dump metadata is invalid",
-  "MySQL Shell operation failed; inspect the redacted provider observation",
-  "MySQL Shell operation has no verifiable dump metadata",
-  "MySQL Shell options are invalid",
-  "MySQL Shell restore schema postcondition failed",
   "MySQL Shell restore selected no schemas to verify",
-  "MySQL Shell restore source is not a completed dump",
   "MySQL Shell target schema requires one selected schema",
-  "MySQL Shell timeout is invalid",
-  "MySQL Shell workspace is required",
   "MySQL Shell workspace is unsafe",
-  "MySQL X Protocol server identity is unavailable",
-  "MySQL X collection administration requires MySQL 9.7.0",
-  "MySQL X collection operations require a dedicated X Protocol session",
-  "MySQL X server or principal identity changed since review",
-  "MySQL autocommit acknowledgement is unknown",
-  "MySQL binary parameter is invalid",
-  "MySQL binary parameter length does not match",
-  "MySQL cache maintenance requires an independently owned connection",
-  "MySQL cancellation identity is not available yet",
-  "MySQL cancellation server identity changed",
   "MySQL character-set connection is unavailable",
   "MySQL character-set cursor is unavailable",
-  "MySQL client command framing failed before this command was dispatched",
-  "MySQL client is closing",
-  "MySQL client script framing is unconfirmed before query dispatch",
-  "MySQL command encoding failed before dispatch",
-  "MySQL connection lease is closed",
-  "MySQL connection pool exhausted",
-  "MySQL connector is closed",
-  "MySQL driver mode must be boolean",
-  "MySQL execution owner is closing",
-  "MySQL execution still owns its connection",
-  "MySQL execution token is invalid",
-  "MySQL foreign-server DDL requires an independently owned connection",
-  "MySQL foreign-server execution identity changed",
   "MySQL has no trigger active flag or numeric position; select FOLLOWS/PRECEDES",
-  "MySQL host utilities do not execute inside a retained SQL session",
   "MySQL innochecksum --no-check requires an explicit --write checksum algorithm",
-  "MySQL instance maintenance requires an independently owned connection",
-  "MySQL native utility work is active",
-  "MySQL numeric parameter is invalid",
-  "MySQL parameter bindings do not match the native source markers",
-  "MySQL parameter connection is unavailable",
   "MySQL parameter conversion failed before query dispatch",
-  "MySQL parameter names must be text",
-  "MySQL parameter requires an exact supported value or typed envelope",
-  "MySQL parameters do not match this native command",
-  "MySQL parameters must be an object or array",
-  "MySQL pool has been retired",
-  "MySQL pool name is invalid",
-  "MySQL pool reset must be Boolean",
-  "MySQL pool size must be 1 through 32",
   "MySQL pooled connections require named arguments",
-  "MySQL preparation state is unconfirmed; close this session",
-  "MySQL prepared statement release is unconfirmed; close this session",
-  "MySQL protocol connection is unavailable",
-  "MySQL query attributes exceed 2 MiB",
-  "MySQL query attributes require a JSON object of names and values",
-  "MySQL query attributes require bounded JSON values and valid Unicode",
   "MySQL query cancelled before command dispatch",
   "MySQL query cancelled before dispatch",
   "MySQL query source is required",
-  "MySQL result character-set connection is unavailable",
-  "MySQL result connection is unavailable",
-  "MySQL result metadata connection is unavailable",
   "MySQL result type is not admitted",
-  "MySQL row read still owns its connection",
   "MySQL row triggers have one native event",
-  "MySQL server or principal identity changed since NDB review",
-  "MySQL server or principal identity changed since review",
-  "MySQL server, principal, or active role changed since review",
-  "MySQL server_uuid changed after benchmark review",
-  "MySQL session execution is active",
-  "MySQL session outcome is unknown",
-  "MySQL session outcome is unknown; close it before opening a separate session. Do not replay the operation.",
-  "MySQL session route is unavailable",
-  "MySQL spatial reference DDL requires an independently owned connection",
-  "MySQL spatial reference execution identity changed",
   "MySQL supports bounded second/third-factor records",
-  "MySQL temporal parameter is invalid",
   "MySQL text result charset is absent",
-  "MySQL typed parameter is invalid",
-  "MySQL uses named privileges and roles, not an administrator flag",
-  "MySQL utility credential binding is unavailable",
-  "MySQL utility database credential lease is unavailable",
-  "MySQL-family profile version is unavailable",
-  "MySQL-family transaction isolation is invalid",
-  "NDB Cluster administration requires a dedicated administrative connection",
-  "NDB management server port must be 1..65535",
-  "NDB node ID must be 1..255",
-  "NDB review connection release is unconfirmed",
-  "NODEGROUP requires an integer 0..65535",
   "NONE is an explicit create default; use a native authentication change on alter",
   "Native ADD factors must be in ascending order",
   "Native ALTER combines only the same factor action kind",
-  "Native GRANT AS supports global privileges only",
   "Native JSON does not accept nonfinite numbers",
   "Native JSON numeric overflow",
-  "Native MariaDB application client is unavailable",
-  "Native MariaDB backup-stage client is unavailable",
-  "Native MariaDB catalog client is unavailable",
-  "Native MariaDB data client is unavailable",
-  "Native MariaDB encoding client is unavailable",
-  "Native MariaDB query session required",
-  "Native MariaDB server application client is unavailable",
-  "Native MariaDB server catalog client is unavailable",
-  "Native MariaDB server identity is unavailable",
-  "Native MariaDB session required",
-  "Native MariaDB validation client is unavailable",
-  "Native MySQL SQL-mode status is unavailable",
-  "Native MySQL application client is unavailable",
-  "Native MySQL catalog client is unavailable",
-  "Native MySQL data client is unavailable",
-  "Native MySQL database/server/version identity changed",
-  "Native MySQL encoding client is unavailable",
-  "Native MySQL foreign-server identity is unavailable",
-  "Native MySQL foreign-server operation is unavailable",
-  "Native MySQL grammar rejected the account change; no DCL was executed",
-  "Native MySQL grammar rejected the routine definition; no DDL was executed",
-  "Native MySQL grammar validation is unavailable; no SQL was executed",
-  "Native MySQL identifier requires 1 to 64 characters without NUL",
-  "Native MySQL instance differs from the selected Rewriter server",
-  "Native MySQL instance differs from the selected cache server",
-  "Native MySQL instance differs from the selected page-tracking server",
-  "Native MySQL instance differs from the selected server",
-  "Native MySQL instance identity or observed maintenance state changed since review",
-  "Native MySQL server application client is unavailable",
-  "Native MySQL server identity is unavailable",
-  "Native MySQL spatial reference identity is unavailable",
-  "Native MySQL spatial reference operation is unavailable",
-  "Native MySQL table options require an object",
-  "Native MySQL utility binary changed after review; re-plan before dispatch",
-  "Native MySQL validation client is unavailable",
-  "Native NDB identifier requires 1 to 64 characters without NUL",
-  "Native Rewriter definition or selected rules changed since review",
-  "Native Rewriter execution identity changed since review",
-  "Native SQL mode is unavailable",
-  "Native SQL peer differs from the registered recovery instance",
-  "Native Shell checksum verification requires trusted local_infile; explicitly authorize temporary enablement",
   "Native Shell credential factor bindings changed",
-  "Native XA execution identity changed since review",
-  "Native XA identity lengths or format ID differ",
-  "Native XA recovery did not return exact hexadecimal bytes",
-  "Native XA recovery returned duplicate identities",
-  "Native XA server differs from the selected instance",
-  "Native account definition is unavailable",
-  "Native account drop supports IF EXISTS, not CASCADE",
-  "Native account identity is ambiguous",
-  "Native account or execution identity changed since review",
-  "Native backup metadata differs from the acknowledged artifact manifest",
-  "Native backup metadata is not an object",
-  "Native backup protection requires MySQL9.7.0",
-  "Native catalog exceeds the 20,000-fact / 8 MiB capture limit",
-  "Native checksum row count is unavailable",
-  "Native checksums do not cover every dumped table",
-  "Native column declaration and facts disagree",
-  "Native column layout changed during data capture",
-  "Native column, masking reference or execution identity changed since review",
-  "Native connection instrumentation loss counters are unavailable",
-  "Native descriptor inventory exceeds its bound",
-  "Native directory observation exceeds its entry bound",
-  "Native dump data coverage is unavailable",
-  "Native dump data metadata has an unsupported shape",
-  "Native dump metadata exceeds the supported observation size",
-  "Native dump row counts and checksum coverage differ",
-  "Native dump verification requires MySQL9.7.0",
-  "Native engine attributes exceed 64 KiB",
   "Native engine attributes require JSON values",
-  "Native engine diagnostic result metadata changed",
-  "Native engine diagnostic text is unavailable",
-  "Native execution identity or grants changed since review",
-  "Native factor changes are separate from first-factor/dual-password changes",
-  "Native failover function result is unavailable",
-  "Native failover identity or configuration changed since review",
-  "Native failover inventory exceeds 20000 rows",
-  "Native foreign-server definition changed before review",
-  "Native foreign-server definition or credential changed since review",
-  "Native generated-password factors are incomplete",
-  "Native generated-password result is missing",
-  "Native global process visibility is unqualified",
-  "Native grammar dependency changed",
-  "Native identifier must be nonempty text without NUL",
-  "Native index identity or owning table changed since review",
-  "Native index text must be valid UTF-8",
-  "Native initialization directory identity changed",
-  "Native initialization inputs changed before guardian dispatch",
-  "Native initialization metadata changed",
-  "Native initialization output changed",
-  "Native initialization requires the Linux host adapter",
-  "Native instance observation exceeds its bound",
-  "Native key-cache execution identity changed since review",
-  "Native key-cache values changed since review",
-  "Native lock wait requires 1 to 120 seconds",
-  "Native masking declaration and column facts disagree",
-  "Native metadata lock wait requires 1 to 120 seconds",
-  "Native observer handshake is unqualified",
-  "Native option-file attributes changed",
-  "Native owning-table definition is unavailable",
-  "Native page-tracking execution identity changed since review",
-  "Native page-tracking inputs changed since review",
-  "Native partition checksum coverage is incomplete",
-  "Native prepared XA inventory exceeds 20,000 branches",
-  "Native recovery utility lease is unavailable or changed",
-  "Native relation is unavailable or its kind changed",
-  "Native rewrite rules exceed 1000 rows or 4 MiB; no partial review is admitted",
-  "Native routine grammar dependency changed since review",
-  "Native routine identity or definition changed since review",
-  "Native row shape changed during capture",
-  "Native row-read session is unavailable",
+  "Native factor changes are separate from first-factor/dual-password changes"
+ ],
+ "unreviewed": [
   "Native schema metadata filename is unavailable",
   "Native server control requires an independently owned connection",
   "Native server object identity is unavailable",

@@ -102,6 +102,10 @@
     {
       "code": "database_not_chosen",
       "message": "Choose the database this runs in. It only affects the objects of that database."
+    },
+    {
+      "code": "confirmation_required",
+      "message": "This operation needs your confirmation. Tick or fill in the confirmation the dialog asks for."
     }
   ]
 }

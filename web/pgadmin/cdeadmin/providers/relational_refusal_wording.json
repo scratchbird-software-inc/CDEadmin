@@ -2,10 +2,508 @@
  "schema": "cdeadmin.refusal-wording.v1",
  "engine": "relational",
  "notes": "How each fixed refusal message in the matching literals file is shown (Decision 22). \"text\" replaces a message that read like a developer note with a plain sentence; \"code\" gives it a reason code and so the catalog sentence, with an optional field; \"keep\" lists messages reviewed and fine as written; \"unreviewed\" lists messages not yet reviewed, shown as written. Every literal is in exactly one; the number unreviewed is capped in tools/refusal_unreviewed_maximums.json and can only fall.",
- "text": {},
- "code": {},
- "keep": [],
- "unreviewed": [
+ "text": {
+  "Select a native routine characteristic": "Choose a routine characteristic.",
+  "increment must not be zero": "The increment cannot be zero."
+ },
+ "code": {
+  "DuckDB database operation has no native compiler": {
+   "code": "provider_unavailable"
+  },
+  "Firebird driver has no create_database operation": {
+   "code": "provider_unavailable"
+  },
+  "Firebird driver has no drop_database operation": {
+   "code": "provider_unavailable"
+  },
+  "Firebird provider database creation configuration is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "Firebird service operation requires a database route": {
+   "code": "provider_unavailable"
+  },
+  "Loadable-function connection unexpectedly selected a database; dispatch refused": {
+   "code": "provider_unavailable"
+  },
+  "MariaDB database operation has no native compiler": {
+   "code": "provider_unavailable"
+  },
+  "MySQL database operation has no native compiler": {
+   "code": "provider_unavailable"
+  },
+  "Native event administration requires an independently owned connection": {
+   "code": "provider_unavailable"
+  },
+  "SQLite database operation has no native compiler": {
+   "code": "provider_unavailable"
+  },
+  "Server loadable functions require an owned connection without a default database": {
+   "code": "provider_unavailable"
+  },
+  "client result kind differs from provider profile": {
+   "code": "provider_unavailable"
+  },
+  "connection_initializer must be callable": {
+   "code": "provider_unavailable"
+  },
+  "credential reference must be a non-empty string": {
+   "code": "provider_unavailable"
+  },
+  "credential reference requires a principal reference": {
+   "code": "provider_unavailable"
+  },
+  "credential references must be an object": {
+   "code": "provider_unavailable"
+  },
+  "credential_argument must be a non-empty string": {
+   "code": "provider_unavailable"
+  },
+  "credential_arguments must map kinds to connector arguments": {
+   "code": "provider_unavailable"
+  },
+  "database_create_arguments must be callable": {
+   "code": "provider_unavailable"
+  },
+  "database_creator must be callable": {
+   "code": "provider_unavailable"
+  },
+  "database_dropper must be callable": {
+   "code": "provider_unavailable"
+  },
+  "database_initializer must be callable": {
+   "code": "provider_unavailable"
+  },
+  "database_operation_runner must be callable": {
+   "code": "provider_unavailable"
+  },
+  "embedded database creation arguments changed the trusted database target": {
+   "code": "provider_unavailable"
+  },
+  "embedded database creation options are unavailable": {
+   "code": "provider_unavailable"
+  },
+  "embedded database deletion requires a database route": {
+   "code": "provider_unavailable"
+  },
+  "embedded database deletion requires a retained target": {
+   "code": "provider_unavailable"
+  },
+  "embedded provider has no database file deleter": {
+   "code": "provider_unavailable"
+  },
+  "endpoint has no approved database creation root": {
+   "code": "provider_unavailable"
+  },
+  "failed_session_releaser must be callable": {
+   "code": "provider_unavailable"
+  },
+  "profile version query returned no value": {
+   "code": "provider_unavailable"
+  },
+  "provider database operation returned an invalid result": {
+   "code": "provider_unavailable"
+  },
+  "provider database operation runner is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "provider operation cancellation is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "provider operation observation is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "provider operational action is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "provider server operation returned an invalid result": {
+   "code": "provider_unavailable"
+  },
+  "provider server operation runner is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "provider session identity is invalid": {
+   "code": "provider_unavailable"
+  },
+  "query_columns_reader must be callable": {
+   "code": "provider_unavailable"
+  },
+  "query_parameter_normalizer must be callable": {
+   "code": "provider_unavailable"
+  },
+  "query_value_normalizer must be callable": {
+   "code": "provider_unavailable"
+  },
+  "relational administration adapter is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "relational administration operation is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "relational administration requires a trusted endpoint route": {
+   "code": "provider_unavailable"
+  },
+  "relational client dependency has no approved connector": {
+   "code": "provider_unavailable"
+  },
+  "relational client dependency has no approved server connector": {
+   "code": "provider_unavailable"
+  },
+  "relational credential binding is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "relational driver has no transaction controller": {
+   "code": "provider_unavailable"
+  },
+  "relational metadata reader must return a list": {
+   "code": "provider_unavailable"
+  },
+  "relational native plan is incomplete": {
+   "code": "provider_unavailable"
+  },
+  "relational native plan is invalid": {
+   "code": "provider_unavailable"
+  },
+  "relational operation has no provider compiler": {
+   "code": "provider_unavailable"
+  },
+  "relational profile is required": {
+   "code": "provider_unavailable"
+  },
+  "relational request requires a non-empty route": {
+   "code": "provider_unavailable"
+  },
+  "relational security reader is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "relational security reader must return a mapping": {
+   "code": "provider_unavailable"
+  },
+  "relational transaction action is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "row cursor cancellation request is invalid": {
+   "code": "provider_unavailable"
+  },
+  "row paging requires a trusted route and table resource": {
+   "code": "provider_unavailable"
+  },
+  "row selector must contain a provider identity token": {
+   "code": "provider_unavailable"
+  },
+  "secret_acquirer must be callable": {
+   "code": "provider_unavailable"
+  },
+  "security_reader must be callable": {
+   "code": "provider_unavailable"
+  },
+  "server identity reader must return a mapping": {
+   "code": "provider_unavailable"
+  },
+  "server metadata reader must return a list": {
+   "code": "provider_unavailable"
+  },
+  "server operation ID is invalid": {
+   "code": "provider_unavailable"
+  },
+  "server-level connection is unavailable": {
+   "code": "provider_unavailable"
+  },
+  "server-level relational hooks must be complete": {
+   "code": "provider_unavailable"
+  },
+  "server_connect_positional must be callable": {
+   "code": "provider_unavailable"
+  },
+  "server_connector_name must not be empty": {
+   "code": "provider_unavailable"
+  },
+  "server_operation_runner must be callable": {
+   "code": "provider_unavailable"
+  },
+  "session_initializer must be callable": {
+   "code": "provider_unavailable"
+  },
+  "session_releaser must be callable": {
+   "code": "provider_unavailable"
+  },
+  "session_rollback_needed must be callable": {
+   "code": "provider_unavailable"
+  },
+  "this operation runs outside a transaction and needs an independently owned connection": {
+   "code": "provider_unavailable"
+  },
+  "tool_credential_kinds must be a set of secret kinds": {
+   "code": "provider_unavailable"
+  },
+  "transaction_controller must be callable": {
+   "code": "provider_unavailable"
+  },
+  "transaction_observer must be callable": {
+   "code": "provider_unavailable"
+  },
+  "trusted endpoint route is required": {
+   "code": "provider_unavailable"
+  },
+  "Firebird row version is unavailable": {
+   "code": "stale_listing"
+  },
+  "Firebird row version is unavailable; refresh the row page": {
+   "code": "stale_listing"
+  },
+  "Invalid native row identity": {
+   "code": "stale_listing"
+  },
+  "Native physical row identity is unavailable": {
+   "code": "stale_listing"
+  },
+  "database drop target does not match the trusted route": {
+   "code": "stale_listing"
+  },
+  "provider-issued row identity token is required": {
+   "code": "stale_listing"
+  },
+  "relational resource is unavailable": {
+   "code": "stale_listing"
+  },
+  "relational result token is invalid": {
+   "code": "stale_listing"
+  },
+  "row continuation token is invalid": {
+   "code": "stale_listing"
+  },
+  "row continuation token is unavailable or mismatched": {
+   "code": "stale_listing"
+  },
+  "row identity belongs to another kind": {
+   "code": "stale_listing"
+  },
+  "row identity belongs to another provider session": {
+   "code": "stale_listing"
+  },
+  "row identity belongs to another route": {
+   "code": "stale_listing"
+  },
+  "row identity belongs to another table": {
+   "code": "stale_listing"
+  },
+  "row identity has another purpose": {
+   "code": "stale_listing"
+  },
+  "row identity no longer identifies exactly one row": {
+   "code": "stale_listing"
+  },
+  "row identity token has expired": {
+   "code": "stale_listing"
+  },
+  "row identity token is stale or invalid": {
+   "code": "stale_listing"
+  },
+  "target resource path is empty": {
+   "code": "stale_listing"
+  },
+  "target resource path is invalid": {
+   "code": "stale_listing"
+  },
+  "view insert identity is unavailable or mismatched": {
+   "code": "stale_listing"
+  },
+  "MariaDB replication operation is unavailable": {
+   "code": "unsupported_here"
+  },
+  "MariaDB role operation is unavailable": {
+   "code": "unsupported_here"
+  },
+  "constraint kind is unsupported": {
+   "code": "unsupported_here"
+  },
+  "database creation driver operation is unavailable": {
+   "code": "unsupported_here"
+  },
+  "database creation mode is unavailable": {
+   "code": "unsupported_here"
+  },
+  "database drop driver operation is unavailable": {
+   "code": "unsupported_here"
+  },
+  "default insertion is unavailable": {
+   "code": "unsupported_here"
+  },
+  "initial role members are unavailable for this engine": {
+   "code": "unsupported_here"
+  },
+  "row deletion was not admitted by the provider": {
+   "code": "unsupported_here"
+  },
+  "row paging requires a relation that supports row reads": {
+   "code": "unsupported_here"
+  },
+  "user alteration is unavailable": {
+   "code": "unsupported_here"
+  },
+  "user creation is unavailable": {
+   "code": "unsupported_here"
+  },
+  "DuckDB type kind is invalid": {
+   "code": "invalid_value"
+  },
+  "Firebird SQL security mode is invalid": {
+   "code": "invalid_value"
+  },
+  "Firebird database creation options are invalid": {
+   "code": "invalid_value"
+  },
+  "Invalid Firebird array dimension row": {
+   "code": "invalid_value"
+  },
+  "Invalid Firebird index kind": {
+   "code": "invalid_value"
+  },
+  "Invalid index direction": {
+   "code": "invalid_value"
+  },
+  "MariaDB TLS requirement is invalid": {
+   "code": "invalid_value"
+  },
+  "MariaDB authentication mode is invalid": {
+   "code": "invalid_value"
+  },
+  "MariaDB maximum statement time is invalid": {
+   "code": "invalid_value"
+  },
+  "MariaDB password expiration is invalid": {
+   "code": "invalid_value"
+  },
+  "MariaDB replication heartbeat is invalid": {
+   "code": "invalid_value"
+  },
+  "administration draft is invalid": {
+   "code": "invalid_value"
+  },
+  "authentication mode is invalid": {
+   "code": "invalid_value"
+  },
+  "database creation options are invalid": {
+   "code": "invalid_value"
+  },
+  "extension action is invalid": {
+   "code": "invalid_value"
+  },
+  "literal value is invalid": {
+   "code": "invalid_value"
+  },
+  "macro parameter entry is invalid": {
+   "code": "invalid_value"
+  },
+  "object path is empty": {
+   "code": "invalid_value"
+  },
+  "object path is invalid": {
+   "code": "invalid_value"
+  },
+  "relational query parameters must be a mapping or sequence": {
+   "code": "invalid_value"
+  },
+  "unknown Firebird 5.0 system privilege": {
+   "code": "invalid_value"
+  },
+  "account name must not be empty": {
+   "code": "value_required"
+  },
+  "domain type must not be empty": {
+   "code": "value_required"
+  },
+  "enum type requires a non-empty value array": {
+   "code": "value_required"
+  },
+  "identifier list must not be empty": {
+   "code": "value_required"
+  },
+  "identifier must not be empty": {
+   "code": "value_required"
+  },
+  "privileges must be a non-empty array": {
+   "code": "value_required"
+  },
+  "relational query source is required": {
+   "code": "value_required"
+  },
+  "server operation requires an exact database identifier": {
+   "code": "value_required"
+  },
+  "structured type requires a non-empty field array": {
+   "code": "value_required"
+  },
+  "system privileges must be a non-empty array": {
+   "code": "value_required"
+  },
+  "table creation requires at least one structured column": {
+   "code": "value_required"
+  },
+  "table path requires a schema/database": {
+   "code": "value_required"
+  },
+  "target resource is required": {
+   "code": "value_required"
+  },
+  "trigger events are required": {
+   "code": "value_required"
+  },
+  "user password is required": {
+   "code": "value_required"
+  },
+  "alter changes must be an object": {
+   "code": "list_expected"
+  },
+  "column definition must be an object": {
+   "code": "list_expected"
+  },
+  "constraint definition must be an object": {
+   "code": "list_expected"
+  },
+  "create options must be an object": {
+   "code": "list_expected"
+  },
+  "initial role members must be an array": {
+   "code": "list_expected"
+  },
+  "insert values must be an object": {
+   "code": "list_expected"
+  },
+  "macro parameters must be an array": {
+   "code": "list_expected"
+  },
+  "publication table selections must be arrays": {
+   "code": "list_expected"
+  },
+  "row update changes must be an object": {
+   "code": "list_expected"
+  },
+  "server operation options must be an object": {
+   "code": "list_expected"
+  },
+  "clear_description must be boolean": {
+   "code": "boolean_expected"
+  },
+  "drop_system_privileges must be boolean": {
+   "code": "boolean_expected"
+  },
+  "execute_on_connection must be true or false": {
+   "code": "boolean_expected"
+  },
+  "row page limit must be an integer": {
+   "code": "number_expected"
+  },
+  "identifier exceeds provider limit": {
+   "code": "too_long"
+  },
+  "account name is invalid": {
+   "code": "invalid_name"
+  },
+  "duplicate system privilege": {
+   "code": "duplicate_value"
+  }
+ },
+ "keep": [
   "A Firebird array domain has at most 16 dimensions",
   "AUTO ADMIN MAPPING applies only to RDB$ADMIN",
   "Cannot set and remove a comment",
@@ -13,7 +511,6 @@
   "Choose a role change",
   "Choose an index change",
   "Comment must be text",
-  "DuckDB database operation has no native compiler",
   "DuckDB endpoint has no absolute filesystem root.",
   "DuckDB export directory must be absent or empty.",
   "DuckDB export parent directory does not exist.",
@@ -22,227 +519,62 @@
   "DuckDB import directory lacks schema.sql or load.sql.",
   "DuckDB import/export directory escapes the endpoint root.",
   "DuckDB import/export directory must be absolute.",
-  "DuckDB type kind is invalid",
   "Empty Firebird array dimension",
   "Firebird 5 array upper bound must strictly exceed lower bound",
   "Firebird BLOB segment size must be between 1 and 65535",
   "Firebird BLOB subtype must be TEXT, BINARY, or a 16-bit integer",
-  "Firebird SQL security mode is invalid",
   "Firebird array bounds must be signed integers",
   "Firebird array bounds must fit in signed 32-bit integers",
   "Firebird array dimension shorthand must be a positive integer",
   "Firebird array dimensions require a non-BLOB base type",
   "Firebird database alteration has no structured changes",
-  "Firebird database creation options are invalid",
   "Firebird database drop requires a database route",
   "Firebird does not support DROP CASCADE",
-  "Firebird driver has no create_database operation",
-  "Firebird driver has no drop_database operation",
   "Firebird function return type is required",
   "Firebird member type is invalid",
   "Firebird objects belong to the selected database; database/schema qualifiers are not supported",
   "Firebird package requires a header and body",
-  "Firebird provider database creation configuration is unavailable",
-  "Firebird row version is unavailable",
-  "Firebird row version is unavailable; refresh the row page",
-  "Firebird service operation requires a database route",
   "Firebird tables have no schema-qualified name",
   "Identity override requires a Firebird base-table insert and a Boolean choice",
   "Identity override requires explicit values",
-  "Invalid Firebird array dimension row",
-  "Invalid Firebird index kind",
-  "Invalid index direction",
-  "Invalid native row identity",
-  "Loadable-function connection unexpectedly selected a database; dispatch refused",
-  "MariaDB TLS requirement is invalid",
-  "MariaDB authentication mode is invalid",
-  "MariaDB database operation has no native compiler",
-  "MariaDB maximum statement time is invalid",
   "MariaDB package requires a specification and body",
-  "MariaDB password expiration is invalid",
   "MariaDB replication change has no clauses",
-  "MariaDB replication heartbeat is invalid",
-  "MariaDB replication operation is unavailable",
-  "MariaDB role operation is unavailable",
   "MariaDB user alteration has no changes",
-  "MySQL database operation has no native compiler",
-  "Native event administration requires an independently owned connection",
-  "Native physical row identity is unavailable",
   "Numeric masks apply only to FLAGSET",
   "SQLite database configuration has no changes",
-  "SQLite database operation has no native compiler",
   "SQLite page size is invalid",
   "SQLite triggers fire on exactly one event",
   "SQLite virtual table module is not admitted",
-  "Select a native routine characteristic",
-  "Server loadable functions require an owned connection without a default database",
   "Structured flags apply only to FLAGSET",
   "a passwordless account cannot also set a password",
   "a publication table cannot be included and excluded",
-  "account name is invalid",
-  "account name must not be empty",
-  "administration draft is invalid",
-  "alter changes must be an object",
   "alteration requires one admitted structured change",
-  "authentication mode is invalid",
   "cannot replace and drop system privileges together",
   "choose a comment or remove comment, not both",
   "choose a next value or original start, not both",
-  "clear_description must be boolean",
-  "client result kind differs from provider profile",
   "close all retained sessions for this database before deleting the database file",
-  "column definition must be an object",
   "comment must be text",
   "complete native commands are not accepted as object bodies",
-  "connection_initializer must be callable",
   "connector and provider-tool credentials must be distinct",
-  "constraint definition must be an object",
-  "constraint kind is unsupported",
-  "create options must be an object",
-  "credential reference must be a non-empty string",
-  "credential reference requires a principal reference",
-  "credential references must be an object",
-  "credential_argument must be a non-empty string",
-  "credential_arguments must map kinds to connector arguments",
   "database alteration has no structured changes",
-  "database creation driver operation is unavailable",
-  "database creation mode is unavailable",
-  "database creation options are invalid",
-  "database drop driver operation is unavailable",
-  "database drop target does not match the trusted route",
   "database file escapes the approved creation root",
   "database name must be a safe unqualified file name",
   "database path is invalid",
-  "database_create_arguments must be callable",
-  "database_creator must be callable",
-  "database_dropper must be callable",
-  "database_initializer must be callable",
-  "database_operation_runner must be callable",
-  "default insertion is unavailable",
   "domain alteration has no structured changes",
-  "domain type must not be empty",
-  "drop_system_privileges must be boolean",
-  "duplicate system privilege",
-  "embedded database creation arguments changed the trusted database target",
-  "embedded database creation options are unavailable",
-  "embedded database deletion requires a database route",
-  "embedded database deletion requires a retained target",
-  "embedded provider has no database file deleter",
-  "endpoint has no approved database creation root",
-  "enum type requires a non-empty value array",
   "event alteration has no structured changes",
-  "execute_on_connection must be true or false",
-  "extension action is invalid",
-  "failed_session_releaser must be callable",
-  "identifier exceeds provider limit",
-  "identifier list must not be empty",
-  "identifier must not be empty",
-  "increment must not be zero",
-  "initial role members are unavailable for this engine",
-  "initial role members must be an array",
   "insert contains a column not admitted for insertion",
   "insert target kind does not match",
-  "insert values must be an object",
-  "literal value is invalid",
-  "macro parameter entry is invalid",
-  "macro parameters must be an array",
   "object body must be text",
-  "object path is empty",
-  "object path is invalid",
   "plugin library must be a safe unqualified filename",
-  "privileges must be a non-empty array",
-  "profile version query returned no value",
-  "provider database operation returned an invalid result",
-  "provider database operation runner is unavailable",
-  "provider operation cancellation is unavailable",
-  "provider operation observation is unavailable",
-  "provider operational action is unavailable",
-  "provider server operation returned an invalid result",
-  "provider server operation runner is unavailable",
-  "provider session identity is invalid",
-  "provider-issued row identity token is required",
-  "publication table selections must be arrays",
-  "query_columns_reader must be callable",
-  "query_parameter_normalizer must be callable",
-  "query_value_normalizer must be callable",
-  "relational administration adapter is unavailable",
-  "relational administration operation is unavailable",
-  "relational administration requires a trusted endpoint route",
-  "relational client dependency has no approved connector",
-  "relational client dependency has no approved server connector",
-  "relational credential binding is unavailable",
-  "relational driver has no transaction controller",
-  "relational metadata reader must return a list",
-  "relational native plan is incomplete",
-  "relational native plan is invalid",
-  "relational operation has no provider compiler",
-  "relational profile is required",
-  "relational query parameters must be a mapping or sequence",
-  "relational query source is required",
-  "relational request requires a non-empty route",
-  "relational resource is unavailable",
-  "relational result token is invalid",
-  "relational security reader is unavailable",
-  "relational security reader must return a mapping",
-  "relational transaction action is unavailable",
-  "row continuation token is invalid",
-  "row continuation token is unavailable or mismatched",
-  "row cursor cancellation request is invalid",
-  "row deletion was not admitted by the provider",
-  "row identity belongs to another kind",
-  "row identity belongs to another provider session",
-  "row identity belongs to another route",
-  "row identity belongs to another table",
-  "row identity has another purpose",
-  "row identity no longer identifies exactly one row",
-  "row identity token has expired",
-  "row identity token is stale or invalid",
-  "row page limit must be an integer",
-  "row paging requires a relation that supports row reads",
-  "row paging requires a trusted route and table resource",
-  "row selector must contain a provider identity token",
-  "row update changes must be an object",
   "row update contains a column not admitted for editing",
-  "secret_acquirer must be callable",
-  "security_reader must be callable",
   "select FOLLOWS or PRECEDES for the ordering anchor",
   "select or create a database before opening a query session",
   "sequence alteration has no structured changes",
-  "server identity reader must return a mapping",
-  "server metadata reader must return a list",
-  "server operation ID is invalid",
-  "server operation options must be an object",
-  "server operation requires an exact database identifier",
-  "server-level connection is unavailable",
-  "server-level relational hooks must be complete",
-  "server_connect_positional must be callable",
-  "server_connector_name must not be empty",
-  "server_operation_runner must be callable",
-  "session_initializer must be callable",
-  "session_releaser must be callable",
-  "session_rollback_needed must be callable",
-  "structured type requires a non-empty field array",
-  "system privileges must be a non-empty array",
   "table alteration has no structured changes",
-  "table creation requires at least one structured column",
-  "table path requires a schema/database",
-  "target resource is required",
-  "target resource path is empty",
-  "target resource path is invalid",
-  "this operation runs outside a transaction and needs an independently owned connection",
-  "tool_credential_kinds must be a set of secret kinds",
-  "transaction_controller must be callable",
-  "transaction_observer must be callable",
-  "trigger events are required",
   "trigger order must be NONE, FOLLOWS or PRECEDES",
-  "trusted endpoint route is required",
-  "unknown Firebird 5.0 system privilege",
   "user alteration has no changes",
-  "user alteration is unavailable",
-  "user creation is unavailable",
-  "user password is required",
-  "view insert identity is unavailable or mismatched",
   "view query must be one statement",
   "view query must begin with SELECT or WITH"
- ]
+ ],
+ "unreviewed": []
 }

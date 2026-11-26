@@ -11,7 +11,7 @@ from pgadmin.cdeadmin.visual_admin.refusal_vocabulary import Vocabulary
 HERE = Path(__file__).parent
 PROVIDERS = HERE.parent
 
-CODES = GENERIC_CODES | {'confirmation_mismatch', 'password_not_carried', 'database_not_chosen'}
+CODES = GENERIC_CODES | {'confirmation_mismatch', 'confirmation_required', 'password_not_carried', 'database_not_chosen'}
 
 # exact static message -> (code, id of the field the refusal is about)
 KNOWN_MESSAGES = {}
