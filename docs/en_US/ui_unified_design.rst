@@ -1858,7 +1858,7 @@ Once 1, 2 and 3 are decided, phase 0 can start immediately; nothing in phases 0 
     the same data from the grantee side).
 
 22. Reasons for native refusals (found in the PostgreSQL provider-tree
-    click-through, 2026-11-26; **not yet ruled**). When a provider refuses a
+    click-through, 2026-11-26; **ruled 2026-11-26, see the rulings below**). When a provider refuses a
     draft while compiling its plan, the user sees one fixed sentence ("The
     operation was refused before dispatch. Review the indicated fields or
     create a new plan.") and no field is indicated. A missing database choice
@@ -1954,3 +1954,73 @@ Once 1, 2 and 3 are decided, phase 0 can start immediately; nothing in phases 0 
     ``refusals.py`` acceptable given that the MySQL group 9 qualification
     hashes it, or must that record be re-run first? (4) May an administrator
     see a logged reason (option d), and under which permission?
+
+    *Rulings (owner, 2026-11-26).*
+
+    1. The secret-free rule is about drafts, values and secrets, not about
+       explanation. A refusal may carry explanatory text, including a sample
+       value such as an example password, as long as nothing the user typed
+       and no real secret is returned. Option (c) is therefore permitted; the
+       first slice does not need it.
+    2. One catalog per engine: ``ui_descriptors/<engine>/refusals.json``.
+    3. ``visual_admin/refusals.py`` may change. The MySQL group 9
+       qualification hashes it (and ``visual_admin/provider.py`` and
+       ``browser/server_groups/servers/__init__.py``) when it runs and writes
+       the hashes into its own evidence; nothing in the source pins them. The
+       qualification is re-run after the change, so its evidence names the
+       current files; earlier evidence is superseded, and if a re-run is not
+       possible the status page says "re-hashed, not re-qualified".
+    4. A logged reason may be read by the engine's equivalent of a superuser
+       (for example PostgreSQL ``SUPERUSER``, MySQL ``root``, Firebird
+       ``SYSDBA``) and by any user or role that has been granted the right to
+       see logged reasons.
+
+    *Adopted.* Options (a) a catalog of reason codes per engine, (b)
+    declarative pre-checks where a rule can state the check, and (d) a support
+    reference whose full reason is logged and readable under ruling 4. The
+    order is the one under *Default if not ruled*: the client and the contract
+    first, then the first PostgreSQL vocabulary, then the other engines.
+
+    *Design.*
+
+    - **Codes.** A provider refusal carries a ``code`` and a ``field_id``
+      (``PostgreSQLNativeAdminError`` and the maintenance and privilege
+      ``_refuse`` helpers gain both). The wrappers that re-raise it as a
+      ``PostgreSQLProviderError`` copy them, and the plan funnel builds the
+      refusal from them. A site without a code stays generic.
+    - **Registry.** Each provider declares the codes it can raise (for
+      PostgreSQL ``providers/postgresql/refusal_codes.py``); the raise helper
+      rejects an unregistered code. Codes the contract already uses
+      (``native_review_refused``, ``unknown_fields``,
+      ``operation_target_not_supported``, ``delegated_to_child_node``,
+      ``invalid_user``, ``protected_password_delivery_unavailable``, the
+      ``VISUAL_ADMIN_*`` codes) are not registered and keep the generic
+      sentence until an engine chooses to give them text.
+    - **Catalog.** ``ui_descriptors/<engine>/refusals.json`` is
+      ``{schema, engine, refusals: [{code, message}]}``; the message is
+      English text for the user, may include a sample value, and never a value
+      the user typed. A test requires an entry for every registered code and
+      no entry for an unregistered one.
+    - **Contract.** The server resolves the message from the engine's catalog
+      when it builds the refusal, so every caller shows it without carrying a
+      bundle. ``data.refusal.errors[]`` becomes ``{field_id, code, message}``
+      with ``message`` present only for a catalogued code, and the response
+      gains ``data.refusal.reference``, an opaque id. No draft value and no
+      provider message is sent; the message comes from the catalog, never from
+      the exception. The client translates it with the other UI strings.
+    - **Client.** ``makePost`` attaches the refusal (an HTTP 422 arrives at
+      ``error.response.data.data.refusal``) to the error it throws;
+      ``OperationDialog`` shows the message for each entry, marks the
+      indicated field, and shows the reference.
+    - **Reasons store.** The full reason (the provider's message, the
+      operation, the endpoint and user, the time; never the draft) is kept only
+      in a bounded store under the reference and is not written to the
+      application log, which anyone who reads the file could otherwise read.
+      The log line carries the reference, the code, the operation and the
+      endpoint only. The store lives in one process and is lost on restart, so
+      a request for an unknown or expired reference answers exactly that.
+      Each entry is bound to the endpoint where the refusal happened. A
+      request is allowed for the endpoint's native administrator, as that
+      provider reports it on the reader's own session (a provider that cannot
+      say reports no), or for a user holding the new
+      ``refusal.view_reasons`` permission, and is refused otherwise.
