@@ -240,7 +240,7 @@ def test_a_listing_may_not_name_its_object_two_ways(engine_copy):
 def test_a_listing_must_name_its_object(engine_copy):
     def neither(doc):
         doc['grants']['listing'].pop('kinds')
-    assert any('needs object_field, object_fields or kinds' in e for e in check(engine_copy('mysql', neither)))
+    assert any('needs object_field, object_fields, kinds or embedded' in e for e in check(engine_copy('mysql', neither)))
 
 
 def test_mysql_declares_scope_keyed_grants_without_privilege_codes():

@@ -412,6 +412,8 @@ def administration_operations():
                                  | {'create', 'alter', 'drop', 'inspect'})
     result['default-privileges'] = frozenset({'inspect','grant','revoke'})
     result['parameter-acl'] = frozenset({'inspect','grant','revoke'})
+    # Object privileges are read from each object; only the change is an operation (Decision 21).
+    result['privilege'] = frozenset({'grant', 'revoke'})
     result['prepared-transaction'] = frozenset({'inspect', 'resolve'})
     result['foreign-server'] = frozenset(result['foreign-server'] | {'import-foreign-schema'})
     result['database'] = frozenset(result['database'] | {'install-drop-namespace-guard'})
@@ -454,7 +456,7 @@ def adapt_catalog(catalog):
         'text-search-dictionary', 'text-search-parser',
         'text-search-template', 'pgagent-job', 'column', 'constraint',
         'table', 'partitioned-table', 'foreign-table', 'extended-statistics', 'parameter-acl', 'default-privileges',
-        'prepared-transaction',
+        'prepared-transaction', 'privilege',
     }
 
     def native_field(field_id, label, control='text', required=False, **extra):
@@ -475,6 +477,9 @@ def adapt_catalog(catalog):
         if kind == 'parameter-acl':
             from .parameter_acl import form
             return form(operation_id,field)
+        if kind == 'privilege':
+            from .privileges import form as privilege_form
+            return privilege_form(operation_id, field)
         if kind == 'extended-statistics':
             from .statistics import form
             return form(operation_id,field)
@@ -678,7 +683,10 @@ def adapt_catalog(catalog):
                     'delete', 'drop', 'truncate', 'export-server-file', 'resolve',
                 },
             })
-            if kind in {'parameter-acl','default-privileges','prepared-transaction'}:operation['target_required']=False
+            if kind in {'parameter-acl','default-privileges','prepared-transaction','privilege'}:operation['target_required']=False
+            if kind == 'privilege':
+                # A privilege change is reviewed and confirmed; REVOKE ... CASCADE reaches other roles' grants.
+                operation['confirmation_required'] = True
             if operation_id in maintenance.get(kind, ()):
                 operation['form'] = maintenance_form(
                     kind, operation_id, lambda *a, **k: native_field(*a, **k))

@@ -245,9 +245,9 @@ def check_security_descriptor(engine, engine_dir, caps, schemas, errors):
         errors.append(f"{rel}: grants.status (draft or complete) is required when grants are declared")
     listing = grants.get("listing")
     if listing:
-        ways = [key for key in ("object_field", "object_fields", "kinds") if listing.get(key)]
+        ways = [key for key in ("object_field", "object_fields", "kinds", "embedded") if listing.get(key)]
         if not ways:
-            errors.append(f"{rel}: grants.listing needs object_field, object_fields or kinds")
+            errors.append(f"{rel}: grants.listing needs object_field, object_fields, kinds or embedded")
         if len(ways) > 1:
             errors.append(f"{rel}: grants.listing declares both {' and '.join(ways)}")
         if listing.get("kinds") and not listing.get("scope_field"):
@@ -256,6 +256,9 @@ def check_security_descriptor(engine, engine_dir, caps, schemas, errors):
         for kind_name in (listing.get("kinds") or {}):
             if kind_name not in grantable_kinds:
                 errors.append(f"{rel}: grants.listing kind {kind_name!r} is not in grantable_kinds")
+        for child in (listing.get("embedded") or {}).get("children", []):
+            if child["kind"] not in kinds:
+                errors.append(f"{rel}: grants.listing embedded child kind {child['kind']!r} is not in capabilities.json")
         membership_doc = doc.get("membership") or {}
         for key in ("listing", "member_of_listing"):
             if key in membership_doc and "native_field" not in membership_doc[key]:

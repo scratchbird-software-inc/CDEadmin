@@ -1702,6 +1702,10 @@ class PostgreSQLProvider:
                 ).append(r['display_name'])
         # Array and relation row types stay out, as on the inherited tree.
         hidden_types = implicit_type_ids(capture['resources'], include_system)
+        try:
+            server_version = int(self._driver.connection_manager(route['server_id']).version)
+        except Exception:
+            server_version = 0
         result = []
         for item in capture['resources']:
             if item['resource_id'] in hidden_types:
@@ -1828,6 +1832,8 @@ class PostgreSQLProvider:
                 from .cluster import parse_acl_items
                 from .databases import PRIVILEGE_CODES as DATABASE_PRIV_CODES
                 native['privileges'] = parse_acl_items(raw.get('datacl'), DATABASE_PRIV_CODES)
+            from .privileges import apply_default_acl
+            apply_default_acl(item['resource_kind'], native, raw, server_version)
             _surface_facts(native)
             resource = {
                 'identity': self._identity(), 'endpoint_id': self.context.endpoint_id,
@@ -1859,6 +1865,7 @@ class PostgreSQLProvider:
         return result
 
     def _column_resources(self, relation, item, route, schemas):
+        from .cluster import parse_acl_items
         native = item.get('native') or {}
         rows = (native.get('children') or {}).get('pg_attribute') or []
         chain = relation['extensions']['postgresql']['legacy_route']
@@ -1885,6 +1892,8 @@ class PostgreSQLProvider:
                 'security_labels': [
                     label for label in native.get('security_labels') or []
                     if label.get('objsubid') == attnum],
+                # Column-level grants live in pg_attribute.attacl; NULL means none beyond the table's.
+                'privileges': parse_acl_items(row.get('attacl')),
                 'catalog_row': row})
             from .columns import facts as column_facts
             column_native['column_facts'] = column_facts(column_native)

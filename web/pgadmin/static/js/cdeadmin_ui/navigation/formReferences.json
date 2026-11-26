@@ -10301,6 +10301,14 @@
     "operation:firebird:privilege:revoke": {
       "reference": "SR-F-031139",
       "title": "Firebird privilege revoke"
+    },
+    "operation:postgresql:privilege:grant": {
+      "reference": "SR-F-031140",
+      "title": "PostgreSQL privilege grant"
+    },
+    "operation:postgresql:privilege:revoke": {
+      "reference": "SR-F-031141",
+      "title": "PostgreSQL privilege revoke"
     }
   }
 }

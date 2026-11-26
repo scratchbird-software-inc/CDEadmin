@@ -29,7 +29,7 @@ POSTGRESQL_NATIVE_FORM_KINDS = frozenset({
     'pgagent-job',
     # M7 (2026-11-11): the table family: columns, constraints, tables,
     # partitioned tables and foreign tables.
-    'column', 'constraint', 'table', 'partitioned-table', 'foreign-table', 'extended-statistics', 'parameter-acl', 'default-privileges', 'prepared-transaction',
+    'column', 'constraint', 'table', 'partitioned-table', 'foreign-table', 'extended-statistics', 'parameter-acl', 'default-privileges', 'prepared-transaction', 'privilege',
     # M5 (2026-11-11).
     'cast', 'collation', 'language', 'foreign-data-wrapper',
     'foreign-server', 'user-mapping', 'publication', 'subscription',
@@ -391,6 +391,9 @@ def compile_native_admin(request: Mapping[str, Any]) -> dict[str, Any]:
     if kind == 'parameter-acl':
         from .parameter_acl import compile_operation
         return compile_operation(operation,native,draft)
+    if kind == 'privilege':
+        from .privileges import compile_operation as compile_privilege
+        return compile_privilege(operation, native, draft)
     if kind == 'extended-statistics':
         from .statistics import compile_operation
         return compile_operation(operation,native,draft)

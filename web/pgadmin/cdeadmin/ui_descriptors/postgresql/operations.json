@@ -2332,7 +2332,7 @@
           "label": "Statistics target",
           "control": "number",
           "required": false,
-          "help": "-1 uses default; 0–10000 native target."
+          "help": "-1 uses default; 0\u201310000 native target."
         },
         {
           "field_id": "comment",
@@ -2414,7 +2414,7 @@
           ]
         }
       ],
-      "notes": "Native extended-statistics lifecycle. Column/expression operands and multivariate kinds are distinct typed grids. Single expression has no multivariate kinds. Target -1 or0–10000; owner/schema/name/comment changes use native DDL. Native virtual generated operands are refused; no fabricated statistics and no implicit ANALYZE. Captured OID/table/kinds/definition remain native. DDN create supports exact source dependency and rediscovered identities. Uses the retained administration review, permissions, transaction/cleanup and no automatic replay.",
+      "notes": "Native extended-statistics lifecycle. Column/expression operands and multivariate kinds are distinct typed grids. Single expression has no multivariate kinds. Target -1 or0\u201310000; owner/schema/name/comment changes use native DDL. Native virtual generated operands are refused; no fabricated statistics and no implicit ANALYZE. Captured OID/table/kinds/definition remain native. DDN create supports exact source dependency and rediscovered identities. Uses the retained administration review, permissions, transaction/cleanup and no automatic replay.",
       "menu": {
         "category": "create"
       },
@@ -2451,7 +2451,7 @@
           "label": "Statistics target",
           "control": "number",
           "required": false,
-          "help": "-1 uses default; 0–10000 native target."
+          "help": "-1 uses default; 0\u201310000 native target."
         },
         {
           "field_id": "comment",
@@ -2460,7 +2460,7 @@
           "required": false
         }
       ],
-      "notes": "Native extended-statistics lifecycle. Column/expression operands and multivariate kinds are distinct typed grids. Single expression has no multivariate kinds. Target -1 or0–10000; owner/schema/name/comment changes use native DDL. Native virtual generated operands are refused; no fabricated statistics and no implicit ANALYZE. Captured OID/table/kinds/definition remain native. DDN create supports exact source dependency and rediscovered identities. Uses the retained administration review, permissions, transaction/cleanup and no automatic replay.",
+      "notes": "Native extended-statistics lifecycle. Column/expression operands and multivariate kinds are distinct typed grids. Single expression has no multivariate kinds. Target -1 or0\u201310000; owner/schema/name/comment changes use native DDL. Native virtual generated operands are refused; no fabricated statistics and no implicit ANALYZE. Captured OID/table/kinds/definition remain native. DDN create supports exact source dependency and rediscovered identities. Uses the retained administration review, permissions, transaction/cleanup and no automatic replay.",
       "menu": {
         "category": "maintenance"
       },
@@ -2487,7 +2487,7 @@
           "required": true
         }
       ],
-      "notes": "Native extended-statistics lifecycle. Column/expression operands and multivariate kinds are distinct typed grids. Single expression has no multivariate kinds. Target -1 or0–10000; owner/schema/name/comment changes use native DDL. Native virtual generated operands are refused; no fabricated statistics and no implicit ANALYZE. Captured OID/table/kinds/definition remain native. DDN create supports exact source dependency and rediscovered identities. Uses the retained administration review, permissions, transaction/cleanup and no automatic replay.",
+      "notes": "Native extended-statistics lifecycle. Column/expression operands and multivariate kinds are distinct typed grids. Single expression has no multivariate kinds. Target -1 or0\u201310000; owner/schema/name/comment changes use native DDL. Native virtual generated operands are refused; no fabricated statistics and no implicit ANALYZE. Captured OID/table/kinds/definition remain native. DDN create supports exact source dependency and rediscovered identities. Uses the retained administration review, permissions, transaction/cleanup and no automatic replay.",
       "menu": {
         "category": "maintenance"
       },
@@ -2501,7 +2501,7 @@
       "status": "draft",
       "confirmation": "none",
       "fields": [],
-      "notes": "Native extended-statistics lifecycle. Column/expression operands and multivariate kinds are distinct typed grids. Single expression has no multivariate kinds. Target -1 or0–10000; owner/schema/name/comment changes use native DDL. Native virtual generated operands are refused; no fabricated statistics and no implicit ANALYZE. Captured OID/table/kinds/definition remain native. DDN create supports exact source dependency and rediscovered identities. Uses the retained administration review, permissions, transaction/cleanup and no automatic replay.",
+      "notes": "Native extended-statistics lifecycle. Column/expression operands and multivariate kinds are distinct typed grids. Single expression has no multivariate kinds. Target -1 or0\u201310000; owner/schema/name/comment changes use native DDL. Native virtual generated operands are refused; no fabricated statistics and no implicit ANALYZE. Captured OID/table/kinds/definition remain native. DDN create supports exact source dependency and rediscovered identities. Uses the retained administration review, permissions, transaction/cleanup and no automatic replay.",
       "menu": {
         "category": "open"
       },
@@ -3266,7 +3266,7 @@
           "control": "number",
           "default": 30000,
           "required": false,
-          "help": "1–600000. Stops waiting; checkpoint work may continue."
+          "help": "1\u2013600000. Stops waiting; checkpoint work may continue."
         }
       ],
       "notes": "Standalone native CHECKPOINT on an independent autocommit attachment, bound at review/apply to the actual server/startup/database and effective/authenticated principals. Native superuser or native checkpoint-role authority is required, independently of application administer/execute permissions. Exact CHECKPOINT command tag is required. Receipt separates nontransactional completion and connection release; rollback never undoes a checkpoint. Timeout, cancellation and lost acknowledgement have unknown effect; no automatic replay and no physical durability inference. Synchronous bounded wait; no progress stream or manual cancellation API is advertised.",
@@ -3377,7 +3377,7 @@
       "fields": [
         {
           "field_id": "duration_seconds",
-          "label": "Native test duration (seconds, 1–60)",
+          "label": "Native test duration (seconds, 1\u201360)",
           "control": "number",
           "default": 3
         },
@@ -3418,7 +3418,7 @@
         },
         {
           "field_id": "seconds_per_test",
-          "label": "Seconds per native test (1–60)",
+          "label": "Seconds per native test (1\u201360)",
           "control": "number",
           "default": 1
         },
@@ -4988,6 +4988,574 @@
       "notes": "Task transport: POST the owned server workspace with action=postgresql_host_tools and request={stage: review, operation_id: this ID, draft: typed fields}. Use describe/catalog for fixed stage and installed native capability contracts; start/status/cancel/reconcile/list use retained job identity. This is not a generic visual-admin SQL operation. Native host administration is independent of remote server authentication.",
       "form_reference": "SR-F-030535",
       "produces_log": true
+    },
+    {
+      "operation_id": "grant",
+      "resource_kind": "privilege",
+      "title": "Grant privileges",
+      "menu": {
+        "category": "security",
+        "order": 130
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "confirm",
+      "fields": [
+        {
+          "field_id": "object_type",
+          "label": "Object",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "TABLE",
+              "label": "Table"
+            },
+            {
+              "value": "SEQUENCE",
+              "label": "Sequence"
+            },
+            {
+              "value": "DATABASE",
+              "label": "Database"
+            },
+            {
+              "value": "DOMAIN",
+              "label": "Domain"
+            },
+            {
+              "value": "FOREIGN DATA WRAPPER",
+              "label": "Foreign Data Wrapper"
+            },
+            {
+              "value": "FOREIGN SERVER",
+              "label": "Foreign Server"
+            },
+            {
+              "value": "FUNCTION",
+              "label": "Function"
+            },
+            {
+              "value": "PROCEDURE",
+              "label": "Procedure"
+            },
+            {
+              "value": "ROUTINE",
+              "label": "Routine"
+            },
+            {
+              "value": "LANGUAGE",
+              "label": "Language"
+            },
+            {
+              "value": "LARGE OBJECT",
+              "label": "Large Object"
+            },
+            {
+              "value": "SCHEMA",
+              "label": "Schema"
+            },
+            {
+              "value": "TABLESPACE",
+              "label": "Tablespace"
+            },
+            {
+              "value": "TYPE",
+              "label": "Type"
+            },
+            {
+              "value": "ALL TABLES IN SCHEMA",
+              "label": "All Tables In Schema"
+            },
+            {
+              "value": "ALL SEQUENCES IN SCHEMA",
+              "label": "All Sequences In Schema"
+            },
+            {
+              "value": "ALL FUNCTIONS IN SCHEMA",
+              "label": "All Functions In Schema"
+            },
+            {
+              "value": "ALL PROCEDURES IN SCHEMA",
+              "label": "All Procedures In Schema"
+            },
+            {
+              "value": "ALL ROUTINES IN SCHEMA",
+              "label": "All Routines In Schema"
+            }
+          ]
+        },
+        {
+          "field_id": "schema",
+          "label": "Schema",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "object_type",
+            "in": [
+              "TABLE",
+              "SEQUENCE",
+              "DOMAIN",
+              "FUNCTION",
+              "PROCEDURE",
+              "ROUTINE",
+              "TYPE"
+            ]
+          }
+        },
+        {
+          "field_id": "object",
+          "label": "Name",
+          "control": "text",
+          "required": false,
+          "help": "A large object is its numeric OID.",
+          "visible_when": {
+            "field": "object_type",
+            "in": [
+              "TABLE",
+              "SEQUENCE",
+              "DATABASE",
+              "DOMAIN",
+              "FOREIGN DATA WRAPPER",
+              "FOREIGN SERVER",
+              "FUNCTION",
+              "PROCEDURE",
+              "ROUTINE",
+              "LANGUAGE",
+              "LARGE OBJECT",
+              "SCHEMA",
+              "TABLESPACE",
+              "TYPE"
+            ]
+          }
+        },
+        {
+          "field_id": "arguments",
+          "label": "Argument types",
+          "control": "text",
+          "required": false,
+          "help": "Functions and procedures only; empty when the name is unique.",
+          "visible_when": {
+            "field": "object_type",
+            "in": [
+              "FUNCTION",
+              "PROCEDURE",
+              "ROUTINE"
+            ]
+          }
+        },
+        {
+          "field_id": "schemas",
+          "label": "Schemas",
+          "control": "grid",
+          "required": false,
+          "columns": [
+            {
+              "field_id": "schema",
+              "label": "Schema",
+              "control": "text",
+              "required": true
+            }
+          ],
+          "visible_when": {
+            "field": "object_type",
+            "in": [
+              "ALL TABLES IN SCHEMA",
+              "ALL SEQUENCES IN SCHEMA",
+              "ALL FUNCTIONS IN SCHEMA",
+              "ALL PROCEDURES IN SCHEMA",
+              "ALL ROUTINES IN SCHEMA"
+            ]
+          }
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "grid",
+          "required": true,
+          "columns": [
+            {
+              "field_id": "privilege",
+              "label": "Privilege",
+              "control": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "ALL",
+                  "label": "ALL"
+                },
+                {
+                  "value": "CONNECT",
+                  "label": "CONNECT"
+                },
+                {
+                  "value": "CREATE",
+                  "label": "CREATE"
+                },
+                {
+                  "value": "DELETE",
+                  "label": "DELETE"
+                },
+                {
+                  "value": "EXECUTE",
+                  "label": "EXECUTE"
+                },
+                {
+                  "value": "INSERT",
+                  "label": "INSERT"
+                },
+                {
+                  "value": "MAINTAIN",
+                  "label": "MAINTAIN"
+                },
+                {
+                  "value": "REFERENCES",
+                  "label": "REFERENCES"
+                },
+                {
+                  "value": "SELECT",
+                  "label": "SELECT"
+                },
+                {
+                  "value": "TEMPORARY",
+                  "label": "TEMPORARY"
+                },
+                {
+                  "value": "TRIGGER",
+                  "label": "TRIGGER"
+                },
+                {
+                  "value": "TRUNCATE",
+                  "label": "TRUNCATE"
+                },
+                {
+                  "value": "UPDATE",
+                  "label": "UPDATE"
+                },
+                {
+                  "value": "USAGE",
+                  "label": "USAGE"
+                }
+              ]
+            },
+            {
+              "field_id": "columns",
+              "label": "Columns",
+              "control": "text",
+              "required": false
+            }
+          ]
+        },
+        {
+          "field_id": "grantees",
+          "label": "Grantees",
+          "control": "grid",
+          "required": true,
+          "columns": [
+            {
+              "field_id": "role",
+              "label": "Role or PUBLIC",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "with_grant",
+          "label": "With grant option",
+          "control": "boolean",
+          "required": false
+        }
+      ],
+      "notes": "Object privileges on an existing object (or every object of a family in a schema). NULL ACLs are shown as the family default. Parameter privileges and default privileges are their own kinds.",
+      "form_reference": "SR-F-031140"
+    },
+    {
+      "operation_id": "revoke",
+      "resource_kind": "privilege",
+      "title": "Revoke privileges",
+      "menu": {
+        "category": "security",
+        "order": 131
+      },
+      "tier": 2,
+      "status": "complete",
+      "confirmation": "typed_name",
+      "fields": [
+        {
+          "field_id": "object_type",
+          "label": "Object",
+          "control": "select",
+          "required": true,
+          "options": [
+            {
+              "value": "TABLE",
+              "label": "Table"
+            },
+            {
+              "value": "SEQUENCE",
+              "label": "Sequence"
+            },
+            {
+              "value": "DATABASE",
+              "label": "Database"
+            },
+            {
+              "value": "DOMAIN",
+              "label": "Domain"
+            },
+            {
+              "value": "FOREIGN DATA WRAPPER",
+              "label": "Foreign Data Wrapper"
+            },
+            {
+              "value": "FOREIGN SERVER",
+              "label": "Foreign Server"
+            },
+            {
+              "value": "FUNCTION",
+              "label": "Function"
+            },
+            {
+              "value": "PROCEDURE",
+              "label": "Procedure"
+            },
+            {
+              "value": "ROUTINE",
+              "label": "Routine"
+            },
+            {
+              "value": "LANGUAGE",
+              "label": "Language"
+            },
+            {
+              "value": "LARGE OBJECT",
+              "label": "Large Object"
+            },
+            {
+              "value": "SCHEMA",
+              "label": "Schema"
+            },
+            {
+              "value": "TABLESPACE",
+              "label": "Tablespace"
+            },
+            {
+              "value": "TYPE",
+              "label": "Type"
+            },
+            {
+              "value": "ALL TABLES IN SCHEMA",
+              "label": "All Tables In Schema"
+            },
+            {
+              "value": "ALL SEQUENCES IN SCHEMA",
+              "label": "All Sequences In Schema"
+            },
+            {
+              "value": "ALL FUNCTIONS IN SCHEMA",
+              "label": "All Functions In Schema"
+            },
+            {
+              "value": "ALL PROCEDURES IN SCHEMA",
+              "label": "All Procedures In Schema"
+            },
+            {
+              "value": "ALL ROUTINES IN SCHEMA",
+              "label": "All Routines In Schema"
+            }
+          ]
+        },
+        {
+          "field_id": "schema",
+          "label": "Schema",
+          "control": "text",
+          "required": false,
+          "visible_when": {
+            "field": "object_type",
+            "in": [
+              "TABLE",
+              "SEQUENCE",
+              "DOMAIN",
+              "FUNCTION",
+              "PROCEDURE",
+              "ROUTINE",
+              "TYPE"
+            ]
+          }
+        },
+        {
+          "field_id": "object",
+          "label": "Name",
+          "control": "text",
+          "required": false,
+          "help": "A large object is its numeric OID.",
+          "visible_when": {
+            "field": "object_type",
+            "in": [
+              "TABLE",
+              "SEQUENCE",
+              "DATABASE",
+              "DOMAIN",
+              "FOREIGN DATA WRAPPER",
+              "FOREIGN SERVER",
+              "FUNCTION",
+              "PROCEDURE",
+              "ROUTINE",
+              "LANGUAGE",
+              "LARGE OBJECT",
+              "SCHEMA",
+              "TABLESPACE",
+              "TYPE"
+            ]
+          }
+        },
+        {
+          "field_id": "arguments",
+          "label": "Argument types",
+          "control": "text",
+          "required": false,
+          "help": "Functions and procedures only; empty when the name is unique.",
+          "visible_when": {
+            "field": "object_type",
+            "in": [
+              "FUNCTION",
+              "PROCEDURE",
+              "ROUTINE"
+            ]
+          }
+        },
+        {
+          "field_id": "schemas",
+          "label": "Schemas",
+          "control": "grid",
+          "required": false,
+          "columns": [
+            {
+              "field_id": "schema",
+              "label": "Schema",
+              "control": "text",
+              "required": true
+            }
+          ],
+          "visible_when": {
+            "field": "object_type",
+            "in": [
+              "ALL TABLES IN SCHEMA",
+              "ALL SEQUENCES IN SCHEMA",
+              "ALL FUNCTIONS IN SCHEMA",
+              "ALL PROCEDURES IN SCHEMA",
+              "ALL ROUTINES IN SCHEMA"
+            ]
+          }
+        },
+        {
+          "field_id": "privileges",
+          "label": "Privileges",
+          "control": "grid",
+          "required": true,
+          "columns": [
+            {
+              "field_id": "privilege",
+              "label": "Privilege",
+              "control": "select",
+              "required": true,
+              "options": [
+                {
+                  "value": "ALL",
+                  "label": "ALL"
+                },
+                {
+                  "value": "CONNECT",
+                  "label": "CONNECT"
+                },
+                {
+                  "value": "CREATE",
+                  "label": "CREATE"
+                },
+                {
+                  "value": "DELETE",
+                  "label": "DELETE"
+                },
+                {
+                  "value": "EXECUTE",
+                  "label": "EXECUTE"
+                },
+                {
+                  "value": "INSERT",
+                  "label": "INSERT"
+                },
+                {
+                  "value": "MAINTAIN",
+                  "label": "MAINTAIN"
+                },
+                {
+                  "value": "REFERENCES",
+                  "label": "REFERENCES"
+                },
+                {
+                  "value": "SELECT",
+                  "label": "SELECT"
+                },
+                {
+                  "value": "TEMPORARY",
+                  "label": "TEMPORARY"
+                },
+                {
+                  "value": "TRIGGER",
+                  "label": "TRIGGER"
+                },
+                {
+                  "value": "TRUNCATE",
+                  "label": "TRUNCATE"
+                },
+                {
+                  "value": "UPDATE",
+                  "label": "UPDATE"
+                },
+                {
+                  "value": "USAGE",
+                  "label": "USAGE"
+                }
+              ]
+            },
+            {
+              "field_id": "columns",
+              "label": "Columns",
+              "control": "text",
+              "required": false
+            }
+          ]
+        },
+        {
+          "field_id": "grantees",
+          "label": "Grantees",
+          "control": "grid",
+          "required": true,
+          "columns": [
+            {
+              "field_id": "role",
+              "label": "Role or PUBLIC",
+              "control": "text",
+              "required": true
+            }
+          ]
+        },
+        {
+          "field_id": "grant_option_only",
+          "label": "Revoke grant option only",
+          "control": "boolean",
+          "required": false
+        },
+        {
+          "field_id": "cascade",
+          "label": "Cascade dependent grants",
+          "control": "boolean",
+          "required": false
+        }
+      ],
+      "notes": "Object privileges on an existing object (or every object of a family in a schema). NULL ACLs are shown as the family default. Parameter privileges and default privileges are their own kinds.",
+      "form_reference": "SR-F-031141"
     }
   ]
 }

@@ -1755,3 +1755,73 @@ refuses (error 1142) and the dialog reports the outcome as unknown, correctly, w
 nothing applied. The page also shows an existing second "Verify Endpoint" prompt
 after connecting (its re-verify returns 401 about open sessions); it is unrelated
 to the grants view and was left alone.
+
+Decision 21: PostgreSQL privilege operation (2026-11-25)
+--------------------------------------------------------
+
+PostgreSQL object privileges are now a provider-native operation. Until now the
+``privilege`` kind (the Grant Wizard's work) belonged to the inherited tree and
+``compile_native_admin`` refused it.
+
+* ``providers/postgresql/privileges.py`` compiles ``GRANT`` and ``REVOKE`` for every
+  object family (table, sequence, database, domain, foreign data wrapper, foreign
+  server, function, procedure, routine, language, large object, schema, tablespace,
+  type) and for ``ALL TABLES|SEQUENCES|FUNCTIONS|PROCEDURES|ROUTINES IN SCHEMA``, with
+  column lists, ``WITH GRANT OPTION``, ``REVOKE GRANT OPTION FOR`` and
+  ``CASCADE``/``RESTRICT``. Every identifier is quoted, every privilege word comes
+  from a fixed per-family list, function argument types accept only a plain type
+  list, and ``MAINTAIN`` requires 17+. The operation reads the object's ACL back in
+  the same transaction (``native_observation``). Parameter privileges and default
+  privileges keep their own kinds.
+* Wired into the provider's three dispatch tables (``native_admin``,
+  ``preserved_surface`` x2) with no target resource and confirmation required.
+* ``operations.json`` declares ``grant`` and ``revoke`` on ``privilege``
+  (SR-F-031140, SR-F-031141), **complete**.
+
+Verified live on PostgreSQL 18.3 (``test_postgresql_privileges.py``, 25 tests): table
+grant, grant-option-only revoke and full revoke; column privileges in ``pg_attribute.attacl``;
+overloaded functions (only the named overload changes); sequence, schema, database, domain and
+type; ``ALL TABLES IN SCHEMA``; a revoke refused by the server (dependent grants under RESTRICT)
+changes nothing; a hostile object name stays one quoted identifier. The compiler's refusals
+are covered without a server.
+
+Findings fixed in the provider's listing (found by probing real data, not assumed):
+
+* A NULL ACL means the family default (the owner holds everything, PUBLIC can execute a
+  function), not "no grants"; the listing reported ``[]``. It now reports the default ACL
+  and sets ``privileges_default``. The Python defaults are tested against the server's
+  own ``acldefault()`` for all ten families; ``MAINTAIN`` follows the server version.
+* Column grants live in ``attacl`` and were not on any resource a grants view reads;
+  column resources now carry them.
+* A function's owner name is not in the capture, so its default shows ``(owner)``.
+
+``security.json`` gained ``grants.listing.embedded`` (rows carried on the object itself,
+column children, and the default flag), ``dialog.object_type_by_kind`` (a view is a
+TABLE) and ``dialog.qualifiers_by_kind`` (a schema is not qualified by a schema); a
+grantee grid may now have no host. The view shows a notice when the rows are the default.
+
+**PostgreSQL stays ``draft``.** Marking it complete would make the legacy host refuse
+PostgreSQL registrations, but the provider tree is a per-server opt-in and the inherited
+tree still serves them (owner direction 2026-11-08); the inherited code is not removed
+before its replacement is verified. Not done: a browser click-through on the provider
+tree, ``membership.listing`` (the role listing needs the running app's inherited-tree
+catalog, which the test harness does not have, so the member fields are unverified), a
+function's argument types in the revoke prefill (an overloaded name is refused by the
+server, never guessed), and grantable kinds beyond the existing eight (materialized view,
+foreign and partitioned table, domain, language, foreign data wrapper and server,
+tablespace). Two failures in ``test_ui_descriptor_operations_postgresql.py``
+(``test_role_lifecycle_round_trips``) and ``test_postgresql_batch1_admin.py`` also fail
+without these changes.
+
+Known consequence, needs the owner's pipeline: ``dialect_task_ids()`` is every operation
+whose route is ``provider-native``, and the packaged contract
+``postgresql_dialect_18_3.json`` (197 tasks, with native receipts) does not yet list
+``privilege.grant`` and ``privilege.revoke``, so
+``test_postgresql_metrics.py::test_packaged_postgresql_contracts_have_exact_native_acceptance``
+now reports the contract as ``blocked`` (a comparison of the PostgreSQL test files with
+and without this change shows that as the only new failure). Admitting the two tasks means
+adding them to ``tools/cdeadmin_postgresql_batch6_proofs.py`` and re-running it: it starts
+disposable ``postgres:18.3`` containers, executes every task, and rewrites the dialect and
+metrics contracts and ``provider_manifest.json``. It reads the PostgreSQL 18.3 source from
+``/home/dcalford/Sandbox/donor_release_acquisition`` and writes receipts under
+``/home/dcalford/Sandbox/codex-work-area``, another workspace's area, so it was not run here.

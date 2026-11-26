@@ -49,10 +49,34 @@ export function parseAccount(text) {
     host: unquote(match[4], match[5], match[6], '\'\'').replaceAll('``', '`')};
 }
 
+/** Grants carried on the object itself (listing.embedded): its own entry in the listing holds one row per grant,
+ *  and its child resources (columns) hold theirs. isDefault says the rows are the family's default ACL. */
+export function embeddedGrants(listing, resources, objectId, objectKind, objectName, path) {
+  const spec = listing.embedded;
+  const object = resources.find((resource) => objectId && resource.resource_id === objectId)
+    || resources.find((resource) => resource.resource_kind === objectKind && resource.display_name === objectName
+      && (!path || String(resource.display_path || []).endsWith(String(path))));
+  if(!object) return {rows: [], isDefault: false};
+  const rowOf = (native, column) => ({...toRow(listing, native, (stored) => stored), column: column || ''});
+  const own = (resourceNative(object)[spec.native_field] || []).map((native) => rowOf(native));
+  const objectPath = object.display_path || [];
+  const children = (spec.children || []).flatMap((child) => resources
+    .filter((resource) => resource.resource_kind === child.kind
+      && (resource.display_path || []).length === objectPath.length + 1
+      && objectPath.every((part, index) => resource.display_path[index] === part))
+    .flatMap((resource) => (resourceNative(resource)[child.native_field] || [])
+      .map((native) => rowOf(native, child.column ? resource.display_name : ''))));
+  return {rows: [...own, ...children], isDefault: Boolean(spec.default_flag && resourceNative(object)[spec.default_flag])};
+}
+
 /** The grant rows for one object, read through the descriptor's listing.
  *  objectPath is the object's path in the tree (outermost first), whose tail the listing's fields match. */
-export function grantRows(grants, resources, objectName, objectPath, objectKind) {
+export function grantRows(grants, resources, objectName, objectPath, objectKind, objectId) {
   const listing = grants.listing;
+  if(listing.embedded) {
+    return embeddedGrants(listing, resources, objectId, objectKind, objectName, objectPath).rows
+      .sort((a, b) => `${a.grantee}:${a.privilege}:${a.column}`.localeCompare(`${b.grantee}:${b.privilege}:${b.column}`));
+  }
   const path = objectPath?.length ? objectPath : [objectName];
   const spec = listing.kinds?.[objectKind];
   const objectKey = listing.object_field || listing.object_fields?.at(-1);
@@ -114,6 +138,19 @@ export function heldRows(grants, resources, grantee, principalKind) {
   const listing = grants.listing;
   const codes = listing.privilege_codes;
   const privilegeName = (stored) => (codes ? codes[stored] : stored);
+  if(listing.embedded) {
+    const spec = listing.embedded;
+    return resources.flatMap((resource) => {
+      const own = spec.native_field && resource.resource_kind !== grants.grant_kind ? resourceNative(resource)[spec.native_field] : null;
+      const child = (spec.children || []).find((item) => item.kind === resource.resource_kind);
+      const rows = own || (child ? resourceNative(resource)[child.native_field] : null);
+      if(!Array.isArray(rows)) return [];
+      return rows.filter((native) => native[listing.grantee_field] === grantee).map((native) => ({
+        ...toRow(listing, native, privilegeName), object: (resource.display_path || [resource.display_name]).slice(1).join('.'),
+        scope: resource.resource_kind, column: ''}));
+    }).filter((row) => !(principalKind && row.granteeKind) || row.granteeKind === principalKind.toUpperCase())
+      .sort((a, b) => `${a.object}:${a.privilege}`.localeCompare(`${b.object}:${b.privilege}`));
+  }
   return resources
     .filter((resource) => resource.resource_kind === grants.grant_kind)
     .map((resource) => resourceNative(resource))
@@ -128,20 +165,26 @@ export function heldRows(grants, resources, grantee, principalKind) {
 export function dialogValues(grants, operation, objectKind, objectName, objectPath, row) {
   const dialog = grants.dialog || {};
   const fixed = {...(dialog.fixed || {})};
-  const objectType = objectTypeValue(operation, objectKind);
+  const objectType = dialog.object_type_by_kind?.[objectKind] ?? objectTypeValue(operation, objectKind);
   if(dialog.object_type && objectType) fixed[dialog.object_type] = objectType;
   const path = objectPath?.length ? objectPath : [objectName];
   fixed[dialog.object_by_kind?.[objectKind] || dialog.object] = objectName;
-  (dialog.qualifiers || []).forEach((field, index) => {
-    const offset = path.length - 1 - (dialog.qualifiers.length - index);
+  const qualifiers = dialog.qualifiers_by_kind?.[objectKind] ?? dialog.qualifiers ?? [];
+  qualifiers.forEach((field, index) => {
+    const offset = path.length - 1 - (qualifiers.length - index);
     if(offset >= 0 && !dialog.object_by_kind?.[objectKind]) fixed[field] = path[offset];
   });
   const target = dialog.row;
   if(row && target) {
     if(target.grantee_kind_field && row.granteeKind) fixed[target.grantee_kind_field] = row.granteeKind;
     if(target.grantee_field && row.granteeKind) fixed[target.grantee_field] = row.grantee;
-    if(target.grantee_grid) fixed[target.grantee_grid.field] = [{
-      [target.grantee_grid.user]: parseAccount(row.grantee).user, [target.grantee_grid.host]: parseAccount(row.grantee).host}];
+    if(target.grantee_grid) {
+      const grid = target.grantee_grid;
+      // With a host column the grantee is an account string to split; otherwise it is the name itself.
+      fixed[grid.field] = [grid.host
+        ? {[grid.user]: parseAccount(row.grantee).user, [grid.host]: parseAccount(row.grantee).host}
+        : {[grid.user]: row.grantee}];
+    }
     if(target.privileges_field) {
       const item = target.privilege_key
         ? {[target.privilege_key]: row.privilege, ...(row.column && target.columns_key ? {[target.columns_key]: [row.column]} : {})}
@@ -203,7 +246,10 @@ export default function DescriptorObjectGrants({
     return Array.isArray(found?.display_path) ? found.display_path.map(String) : undefined;
   }, [objectPath, objectId, objectKind, objectName, state.resources]);
   const rows = useMemo(() => (grants && state.status === 'ready' && objectGrantsOffered(state.bundle, objectKind)
-    ? grantRows(grants, state.resources, objectName, path, objectKind) : []), [grants, state, objectKind, objectName, path]);
+    ? grantRows(grants, state.resources, objectName, path, objectKind, objectId) : []), [grants, state, objectKind, objectName, path, objectId]);
+  const isDefault = useMemo(() => Boolean(grants?.listing?.embedded && state.status === 'ready'
+    && embeddedGrants(grants.listing, state.resources, objectId, objectKind, objectName, path).isDefault),
+  [grants, state, objectKind, objectName, path, objectId]);
   const operations = useMemo(() => Object.fromEntries(
     (state.bundle?.kinds?.[grants?.grant_kind]?.operations || []).map((op) => [op.operation_id, op])), [state.bundle, grants]);
 
@@ -232,6 +278,7 @@ export default function DescriptorObjectGrants({
       <Button intent="primary" onClick={() => open('grant')}>{gettext('Grant privileges')}</Button>
       <Button intent="neutral" onClick={() => open('revoke')}>{gettext('Revoke privileges')}</Button>
     </Box>}
+    {isDefault && <Banner status="info">{gettext('No grants are stored for this object, so these are its default privileges.')}</Banner>}
     {rows.length === 0
       ? <Box sx={{fontSize: '0.8125rem'}}>{gettext('No grants on %s.', objectName)}</Box>
       : <Box component="table" aria-label={gettext('Granted privileges')}

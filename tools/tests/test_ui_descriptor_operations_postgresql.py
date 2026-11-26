@@ -7,8 +7,9 @@ validate/plan/apply route: the large-object read, write, truncate and server-fil
 import/export (``providers/postgresql/large_objects.py``) and the maintenance
 actions VACUUM, ANALYZE, REINDEX (table, index, schema, database), CLUSTER, table
 TRUNCATE and REFRESH MATERIALIZED VIEW (``providers/postgresql/maintenance.py``).
-Rename, set schema, owner and grant on tables and the like stay with the preserved
-pgAdmin surface; ``compile_native_admin`` refuses them.
+Rename, set schema and owner on tables and the like stay with the preserved pgAdmin
+surface; ``compile_native_admin`` refuses them. Object privileges (GRANT and REVOKE) are
+provider-native since Decision 21 and are tested in ``test_postgresql_privileges.py``.
 
 Set ``CDEADMIN_ROUNDTRIP_POSTGRESQL`` to ``{"host", "port", "user", "password"?,
 "database"?, "server_file_dir"?}`` for a superuser (large-object server-file
@@ -64,7 +65,9 @@ TESTED = {'read@large-object', 'write@large-object', 'truncate@large-object',
           'count-rows@table', 'reset-statistics@table', 'enable-triggers@table', 'disable-triggers@table',
           'create-partition@table', 'attach-partition@table', 'detach-partition@table',
           'create-partition@partitioned-table', 'attach-partition@partitioned-table',
-          'count-rows@partitioned-table'}
+          'count-rows@partitioned-table',
+          # Live in tools/tests/test_postgresql_privileges.py (every family, ACL read back from the server).
+          'grant@privilege', 'revoke@privilege'}
 
 
 # -- structural: the descriptors name only what the provider admits ------------------------------

@@ -1,7 +1,7 @@
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import Theme from 'sources/Theme';
 import DescriptorObjectGrants, {
-  grantRows, objectGrantsOffered, objectTypeValue, parseAccount, dialogValues, canRevoke, heldRows, granteeSpelling,
+  grantRows, objectGrantsOffered, objectTypeValue, parseAccount, dialogValues, canRevoke, heldRows, granteeSpelling, embeddedGrants,
 } from '../../../pgadmin/static/js/cdeadmin_ui/security/DescriptorObjectGrants';
 import ObjectGrantsSurface, {objectContext} from '../../../pgadmin/static/js/cdeadmin_ui/security/ObjectGrantsSurface';
 import {resetDescriptorClient} from '../../../pgadmin/static/js/cdeadmin_ui/objects';
@@ -287,5 +287,79 @@ describe('DescriptorObjectGrants for a tree node that knows only its id (MySQL)'
   it('still matches by the tail when no path can be found', () => {
     const rows = grantRows(loadEngineBundle('mysql').security.grants, ITEMS.slice(1), 'customers', undefined, 'table');
     expect(rows.map((r) => r.privilege).sort()).toEqual(['DROP', 'SELECT', 'UPDATE']);
+  });
+});
+
+
+describe('PostgreSQL-shaped grants: rows carried on the object, defaults and columns', () => {
+  beforeEach(() => { resetDescriptorClient(); });
+  const acl = (grantee, privilege, extra = {}) => ({grantee, grantee_kind: grantee === 'PUBLIC' ? 'special' : 'role',
+    grantor: 'owner', privilege, grant_option: false, ...extra});
+  const orders = {resource_kind: 'table', resource_id: 'oid:1', display_name: 'orders', display_path: ['db', 'public', 'orders'],
+    native: {privileges: [acl('app', 'SELECT', {grant_option: true}), acl('app', 'INSERT')], privileges_default: false}};
+  const column = {resource_kind: 'column', resource_id: 'oid:1:1', display_name: 'a', display_path: ['db', 'public', 'orders', 'a'],
+    native: {privileges: [acl('PUBLIC', 'SELECT')]}};
+  const plainColumn = {resource_kind: 'column', resource_id: 'oid:1:2', display_name: 'b', display_path: ['db', 'public', 'orders', 'b'],
+    native: {privileges: []}};
+  const elsewhere = {resource_kind: 'table', resource_id: 'oid:2', display_name: 'orders', display_path: ['db', 'other', 'orders'],
+    native: {privileges: [acl('mallory', 'DELETE')], privileges_default: false}};
+  const fn = {resource_kind: 'function', resource_id: 'oid:3', display_name: 'f', display_path: ['db', 'public', 'f'],
+    native: {privileges: [acl('(owner)', 'EXECUTE', {grant_option: true}), acl('PUBLIC', 'EXECUTE')], privileges_default: true}};
+  const ALL = [orders, column, plainColumn, elsewhere, fn];
+  const pg = () => loadEngineBundle('postgresql').security.grants;
+
+  it('reads the object\'s own rows and its columns, and nothing from a same-named object in another schema', () => {
+    const rows = grantRows(pg(), ALL, 'orders', ['db', 'public', 'orders'], 'table', 'oid:1');
+    expect(rows.map((r) => `${r.grantee}:${r.privilege}:${r.column}:${r.grantOption}`)).toEqual([
+      'app:INSERT::false', 'app:SELECT::true', 'PUBLIC:SELECT:a:false']);
+    expect(rows.find((r) => r.grantee === 'PUBLIC').granteeKind).toBe('PUBLIC');
+    expect(rows.find((r) => r.grantee === 'app').granteeKind).toBe('ROLE');
+  });
+
+  it('says when the rows are the default ACL, because none is stored', () => {
+    expect(embeddedGrants(pg().listing, ALL, 'oid:3', 'function', 'f', ['db', 'public', 'f']).isDefault).toBe(true);
+    expect(embeddedGrants(pg().listing, ALL, 'oid:1', 'table', 'orders', undefined).isDefault).toBe(false);
+  });
+
+  it('finds the object by kind and name when the node has no id', () => {
+    const rows = grantRows(pg(), ALL, 'f', ['db', 'public', 'f'], 'function', undefined);
+    expect(rows.map((r) => r.grantee)).toEqual(['(owner)', 'PUBLIC']);
+  });
+
+  it('fills the dialog per kind: a view is a TABLE, a schema has no schema qualifier, a column row carries its column', () => {
+    const operation = loadEngineBundle('postgresql').kinds.privilege.operations.find((op) => op.operation_id === 'revoke');
+    expect(dialogValues(pg(), operation, 'table', 'orders', ['db', 'public', 'orders'])).toEqual({
+      object_type: 'TABLE', object: 'orders', schema: 'public'});
+    expect(dialogValues(pg(), operation, 'view', 'v', ['db', 'public', 'v'])).toEqual({object_type: 'TABLE', object: 'v', schema: 'public'});
+    expect(dialogValues(pg(), operation, 'schema', 'public', ['db', 'public'])).toEqual({object_type: 'SCHEMA', object: 'public'});
+    const row = grantRows(pg(), ALL, 'orders', ['db', 'public', 'orders'], 'table', 'oid:1').find((r) => r.column === 'a');
+    expect(dialogValues(pg(), operation, 'table', 'orders', ['db', 'public', 'orders'], row)).toEqual({
+      object_type: 'TABLE', object: 'orders', schema: 'public',
+      grantees: [{role: 'PUBLIC'}], privileges: [{privilege: 'SELECT', columns: ['a']}]});
+  });
+
+  it('offers a one-click revoke for every row, columns included, because the dialog takes a column list', () => {
+    const rows = grantRows(pg(), ALL, 'orders', ['db', 'public', 'orders'], 'table', 'oid:1');
+    expect(rows.every((row) => canRevoke(pg(), row))).toBe(true);
+  });
+
+  it('lists everything a role holds across objects and columns, never another role\'s', () => {
+    const security = loadEngineBundle('postgresql').security;
+    const held = heldRows(security.grants, ALL, 'app', 'role');
+    expect(held.map((r) => `${r.scope}:${r.object}:${r.privilege}`)).toEqual(['table:public.orders:INSERT', 'table:public.orders:SELECT']);
+    expect(heldRows(security.grants, ALL, 'PUBLIC').map((r) => `${r.scope}:${r.object}`)).toEqual(
+      ['function:public.f', 'column:public.orders.a']);
+  });
+
+  it('renders the default-privileges notice and the rows when the descriptor is complete', async () => {
+    const bundle = loadEngineBundle('postgresql');
+    bundle.security.grants.status = 'complete';
+    const api = {get: jest.fn(async () => ({data: {success: 1, data: bundle}})),
+      post: jest.fn(async () => ({data: {success: 1, data: {items: ALL, next_cursor: null, generation: 'g'}}}))};
+    render(<Theme><DescriptorObjectGrants api={api} endpointUrl="/ws/1" engine="postgresql" objectKind="function"
+      objectName="f" objectId="oid:3" /></Theme>);
+    expect(await screen.findByText(/these are its default privileges/)).toBeInTheDocument();
+    const table = await screen.findByRole('table', {name: 'Granted privileges'});
+    expect(Array.from(table.querySelectorAll('tbody tr')).map((tr) => tr.querySelector('td').textContent)).toEqual(['(owner)', 'PUBLIC']);
   });
 });

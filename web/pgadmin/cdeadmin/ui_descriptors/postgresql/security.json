@@ -2,7 +2,7 @@
   "schema": "cdeadmin.ui-security.v1",
   "engine": "postgresql",
   "status": "draft",
-  "notes": "One principal object: a role, with login as an attribute of its form. Its system attributes (SUPERUSER, CREATEDB, ...) are fields of the role form, not grants, so no system_privileges source is declared. Membership options inherit and set are provider version-gated.",
+  "notes": "One principal object: a role, with login as an attribute of its form. Its system attributes (SUPERUSER, CREATEDB, ...) are fields of the role form, not grants, so no system_privileges source is declared. Membership options inherit and set are provider version-gated. Object privileges: GRANT and REVOKE are provider operations on the privilege kind (tested live on PostgreSQL 18.3 for every object family). The provider carries an object's ACL on the object itself, a NULL ACL is reported as the family's default (flagged privileges_default, since NULL means the owner holds everything, not that nobody does), and column grants sit on the column resources. A function's revoke prefill does not carry its argument types, so an overloaded name is refused by the server rather than guessed. Status stays draft: the provider tree is a per-server opt-in and the inherited tree still serves PostgreSQL registrations, so the legacy host must not refuse them until a browser click-through on the provider tree has been done.",
   "principals": [
     {
       "kind": "role",
@@ -40,7 +40,56 @@
       ]
     },
     "grant_option": true,
-    "default_privileges": "default-privileges"
+    "default_privileges": "default-privileges",
+    "listing": {
+      "embedded": {
+        "native_field": "privileges",
+        "default_flag": "privileges_default",
+        "children": [
+          {
+            "kind": "column",
+            "native_field": "privileges",
+            "column": true
+          }
+        ]
+      },
+      "grantee_field": "grantee",
+      "grantee_kind_field": "grantee_kind",
+      "grantee_kinds": {
+        "role": "ROLE",
+        "user": "ROLE",
+        "special": "PUBLIC"
+      },
+      "privilege_field": "privilege",
+      "column_field": "column",
+      "grant_option_field": "grant_option",
+      "grant_option_equals": true,
+      "grantor_field": "grantor",
+      "held": true
+    },
+    "dialog": {
+      "object_type": "object_type",
+      "object": "object",
+      "qualifiers": [
+        "schema"
+      ],
+      "qualifiers_by_kind": {
+        "schema": [],
+        "database": []
+      },
+      "object_type_by_kind": {
+        "view": "TABLE"
+      },
+      "row": {
+        "grantee_grid": {
+          "field": "grantees",
+          "user": "role"
+        },
+        "privileges_field": "privileges",
+        "privilege_key": "privilege",
+        "columns_key": "columns"
+      }
+    }
   },
   "requires": {
     "inspect": "verified",
