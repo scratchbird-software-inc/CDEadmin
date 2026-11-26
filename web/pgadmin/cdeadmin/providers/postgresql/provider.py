@@ -1713,8 +1713,11 @@ class PostgreSQLProvider:
             native = copy.deepcopy(item['native'])
             native['name'] = item['display_name']
             raw = native.get('catalog_row', {})
-            if item['resource_kind'] == 'aggregate':
+            if item['resource_kind'] in {'aggregate', 'function', 'procedure', 'window-function'}:
+                # The argument types name an overloadable routine (grants, drops).
                 native['identity_arguments'] = raw['identity_arguments']
+                if 'argument_types' in raw:
+                    native['argument_types'] = raw['argument_types']
             if item['resource_kind'] == 'operator':
                 native.update(left_type=raw['left_type_identity'], right_type=raw['right_type_identity'])
             if item['resource_kind'] in {'operator-class', 'operator-family'}:

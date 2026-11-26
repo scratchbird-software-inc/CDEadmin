@@ -211,7 +211,7 @@ def capture(connection, database_oid, *, include_system=False, _in_transaction=F
                     where += f" AND NOT pg_catalog.pg_is_other_temp_schema({namespace_oid})"
                 native = 'to_jsonb(c)'
                 if catalog == 'pg_proc':
-                    native += " || jsonb_build_object('identity_arguments', pg_catalog.pg_get_function_identity_arguments(c.oid))"
+                    native += " || jsonb_build_object('identity_arguments', pg_catalog.pg_get_function_identity_arguments(c.oid), 'argument_types', pg_catalog.oidvectortypes(c.proargtypes))"
                 if catalog == 'pg_operator':
                     native += " || jsonb_build_object('left_type_identity', CASE WHEN c.oprleft=0 THEN NULL ELSE (pg_catalog.pg_identify_object('pg_catalog.pg_type'::regclass,c.oprleft,0)).identity END, 'right_type_identity', (pg_catalog.pg_identify_object('pg_catalog.pg_type'::regclass,c.oprright,0)).identity)"
                 if catalog in {'pg_opclass', 'pg_opfamily'}:

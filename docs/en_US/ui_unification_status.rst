@@ -1881,5 +1881,19 @@ Gaps found, not closed:
 * Setting ``grants.status`` to ``complete`` makes the legacy host refuse PostgreSQL
   object-grant writes (``_refuse_provider_managed``), which inherited-tree users still
   reach; it cannot flip before the inherited tree is retired for grants.
-* Not clicked through: column-level and function grants, the Security Manager
-  (principals), membership.
+* Column and function grants (clicked through 2026-11-26, demo PostgreSQL 18.3, provider
+  tree, ``grants.status`` flipped to complete for the run only and reverted): a column
+  grant previews and applies as ``GRANT SELECT ("name", "city") ON TABLE ...``, lands in
+  ``attacl`` (not table-wide), and the view lists one row per column; revoking a column
+  row previews ``REVOKE SELECT ("city") ...`` and leaves the other column granted. A
+  function shows its default ACL (owner and PUBLIC EXECUTE) with the default banner.
+  Defects found and fixed: the dialog offered a Columns field on a function (the
+  descriptor's ``column_privileges`` now limits it to table and view), and a function was
+  named without its argument types, so an overloaded name could not be granted or revoked.
+  The listing now carries ``argument_types`` for functions, procedures, aggregates and
+  window functions, and ``grants.dialog.object_arguments`` fills the dialog's argument
+  field from it. Verified on two overloads: only the selected overload changed. Sending
+  identity arguments (names included) was tried first and refused by the compiler's
+  readback (``to_regprocedure`` raises on a name-and-type list), hence the types-only field.
+* Still not clicked through: the Security Manager (principals) and membership. The
+  revoke prefill for a default-ACL ``(owner)`` row is unchanged.

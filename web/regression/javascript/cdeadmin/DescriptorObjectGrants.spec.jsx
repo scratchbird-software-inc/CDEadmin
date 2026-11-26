@@ -334,6 +334,26 @@ describe('PostgreSQL-shaped grants: rows carried on the object, defaults and col
     expect(narrowedOperation(bundle, operation, 'no-such-kind')).toBe(operation);
   });
 
+  it('offers a column list only on the kinds the engine grants columns on', () => {
+    const bundle = loadEngineBundle('postgresql');
+    const operation = bundle.kinds.privilege.operations.find((op) => op.operation_id === 'grant');
+    const columnsOf = (op) => op.fields.find((f) => f.field_id === 'privileges').columns.map((c) => c.field_id);
+    expect(columnsOf(narrowedOperation(bundle, operation, 'table'))).toContain('columns');
+    expect(columnsOf(narrowedOperation(bundle, operation, 'view'))).toContain('columns');
+    expect(columnsOf(narrowedOperation(bundle, operation, 'function'))).toEqual(['privilege']);
+    expect(columnsOf(narrowedOperation(bundle, operation, 'schema'))).toEqual(['privilege']);
+  });
+
+  it('names an overloadable object by its argument types, from the listed object', () => {
+    const operation = loadEngineBundle('postgresql').kinds.privilege.operations.find((op) => op.operation_id === 'grant');
+    const path = ['db', 'service', 'priority_label'];
+    expect(dialogValues(pg(), operation, 'function', 'priority_label', path, undefined, {argument_types: 'integer'}))
+      .toEqual({object_type: 'FUNCTION', object: 'priority_label', schema: 'service', arguments: 'integer'});
+    // A kind whose listing has no such field, or an empty argument list, is not given the field wrongly.
+    expect(dialogValues(pg(), operation, 'table', 't', ['db', 'service', 't'], undefined, {})).not.toHaveProperty('arguments');
+    expect(dialogValues(pg(), operation, 'function', 'f0', ['db', 'service', 'f0'], undefined, {argument_types: ''}).arguments).toBe('');
+  });
+
   it('finds the object by kind and name when the node has no id', () => {
     const rows = grantRows(pg(), ALL, 'f', ['db', 'public', 'f'], 'function', undefined);
     expect(rows.map((r) => r.grantee)).toEqual(['(owner)', 'PUBLIC']);

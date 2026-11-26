@@ -231,7 +231,7 @@ def check_security_descriptor(engine, engine_dir, caps, schemas, errors):
             have = {f.get("field_id") for f in (op or {}).get("fields", [])}
             row = dialog.get("row") or {}
             wanted = [dialog.get("object_type"), dialog.get("object"), *dialog.get("qualifiers", []),
-                      *(dialog.get("fixed") or {}), *(dialog.get("object_by_kind") or {}).values(),
+                      *(dialog.get("fixed") or {}), (dialog.get("object_arguments") or {}).get("field"), *(dialog.get("object_by_kind") or {}).values(),
                       row.get("grantee_kind_field"), row.get("grantee_field"), row.get("privileges_field"),
                       *[(row.get("grantee_grid") or {}).get("field")]]
             for field in wanted:

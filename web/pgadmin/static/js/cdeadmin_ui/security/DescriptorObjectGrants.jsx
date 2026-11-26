@@ -162,7 +162,7 @@ export function heldRows(grants, resources, grantee, principalKind) {
 }
 
 /** The dialog values a grants view fixes for one object (and one listed row), as the descriptor's dialog maps them. */
-export function dialogValues(grants, operation, objectKind, objectName, objectPath, row) {
+export function dialogValues(grants, operation, objectKind, objectName, objectPath, row, objectNative) {
   const dialog = grants.dialog || {};
   const fixed = {...(dialog.fixed || {})};
   const objectType = dialog.object_type_by_kind?.[objectKind] ?? objectTypeValue(operation, objectKind);
@@ -174,6 +174,8 @@ export function dialogValues(grants, operation, objectKind, objectName, objectPa
     const offset = path.length - 1 - (qualifiers.length - index);
     if(offset >= 0 && !dialog.object_by_kind?.[objectKind]) fixed[field] = path[offset];
   });
+  const named = dialog.object_arguments;
+  if(named && objectNative?.[named.native_field] != null) fixed[named.field] = String(objectNative[named.native_field]);
   const target = dialog.row;
   if(row && target) {
     if(target.grantee_kind_field && row.granteeKind) fixed[target.grantee_kind_field] = row.granteeKind;
@@ -203,13 +205,17 @@ export function narrowedOperation(bundle, operation, objectKind) {
   const byKind = grants?.object_privileges ? bundle.options?.dialect?.[grants.object_privileges] : null;
   const allowed = byKind && !Array.isArray(byKind) ? byKind[objectKind] : null;
   if(!operation || !Array.isArray(allowed) || !row?.privileges_field || !row.privilege_key) return operation;
+  // A column list is offered only where the engine grants on columns of this kind of object.
+  const columnsAllowed = !grants.column_privileges || Object.hasOwn(grants.column_privileges, objectKind);
   const keep = (option) => {
     const value = String(typeof option === 'object' ? option.value : option);
     return value.toUpperCase().startsWith('ALL') || allowed.includes(value);
   };
   return {...operation, fields: (operation.fields || []).map((field) => (field.field_id === row.privileges_field
-    ? {...field, columns: (field.columns || []).map((column) => (column.field_id === row.privilege_key && Array.isArray(column.options)
-      ? {...column, options: column.options.filter(keep)} : column))}
+    ? {...field, columns: (field.columns || [])
+      .filter((column) => columnsAllowed || column.field_id !== row.columns_key)
+      .map((column) => (column.field_id === row.privilege_key && Array.isArray(column.options)
+        ? {...column, options: column.options.filter(keep)} : column))}
     : field))};
 }
 
@@ -273,10 +279,12 @@ export default function DescriptorObjectGrants({
 
   const open = useCallback((operationId, row) => {
     const operation = narrowedOperation(state.bundle, operations[operationId], objectKind);
-    const fixed = dialogValues(grants, operation, objectKind, objectName, path, row);
+    const objectNative = resourceNative(state.resources.find((resource) => objectId && resource.resource_id === objectId)
+      || state.resources.find((resource) => resource.resource_kind === objectKind && resource.display_name === objectName));
+    const fixed = dialogValues(grants, operation, objectKind, objectName, path, row, objectNative);
     setDialog({operation, fixed, calls: visualAdminCalls(post, {
       resourceKind: grants.grant_kind, operationId, target: null})});
-  }, [operations, state.bundle, objectKind, objectName, path, post, grants]);
+  }, [operations, state.bundle, state.resources, objectKind, objectName, objectId, path, post, grants]);
 
   const applied = useCallback((result) => {
     setDialog(null);

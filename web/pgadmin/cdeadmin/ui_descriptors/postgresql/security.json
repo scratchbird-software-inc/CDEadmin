@@ -70,6 +70,10 @@
     "dialog": {
       "object_type": "object_type",
       "object": "object",
+      "object_arguments": {
+        "field": "arguments",
+        "native_field": "argument_types"
+      },
       "qualifiers": [
         "schema"
       ],

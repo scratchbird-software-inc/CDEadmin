@@ -509,6 +509,16 @@
               "type": "object",
               "description": "constant values the operation needs for object grants"
             },
+            "object_arguments": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["field", "native_field"],
+              "description": "an overloadable object (a function) is named by its argument types: the listed object's native field that holds them goes to the operation's field",
+              "properties": {
+                "field": {"type": "string"},
+                "native_field": {"type": "string"}
+              }
+            },
             "row": {
               "type": "object",
               "additionalProperties": false,
