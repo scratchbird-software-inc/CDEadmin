@@ -167,7 +167,7 @@ const SAMPLE_PLACEHOLDERS_BY_ID = {
   port: 'e.g. 5432',
   username: 'e.g. admin',
   user: 'e.g. admin',
-  role: 'e.g. RDB$ADMIN',
+  role: 'e.g. app_reader',
   database: 'e.g. app_data',
   db: 'e.g. app_data',
   maintenance_db: 'e.g. postgres',

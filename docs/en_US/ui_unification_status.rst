@@ -1833,3 +1833,49 @@ in the preview), while the spec, the form notes and
 2026-11-25: refuse it. ``_password_clauses`` now raises, without echoing the value, and the
 three unit tests that asserted the opposite assert the refusal; passwords stay with the
 inherited Properties dialog. The legacy Security Manager host does not use that compiler.
+
+PostgreSQL provider-tree click-through (2026-11-26)
+---------------------------------------------------
+
+The per-object grants view was clicked through in a headless browser against the
+demo PostgreSQL 18.3 server, browsed through the provider tree (per-server opt-in,
+isolated application data under ``temp-workarea``). ``grants.status`` was set to
+``complete`` only for the run and reverted: PostgreSQL stays ``draft``.
+
+Verified in the browser and against the server catalog:
+
+* Table ``service.assets`` (NULL ACL): the view shows the default-privileges banner
+  and the owner's eight default privileges (including ``MAINTAIN`` on 18).
+* Grant ``SELECT`` to a throwaway role: the SQL preview read
+  ``GRANT SELECT ON TABLE "service"."assets" TO "ct_reader"``; the server ACL then held
+  ``ct_reader=r/cdeadmin_demo`` and the view listed the row (the owner's entries became
+  explicit, without grant option, as PostgreSQL stores them).
+* Revoke from the row (after the fix below): prefilled dialog, typed-name
+  confirmation, preview ``REVOKE SELECT ON TABLE "service"."assets" FROM "ct_reader"
+  RESTRICT``; the server ACL returned to the owner-only entry and the view to eight rows.
+
+Defects found and fixed:
+
+* Revoke with the typed confirmation failed validation (``Unknown form fields:
+  confirmation``): the provider form now declares ``confirmation`` and the compiler
+  refuses a typed value that is not the object name.
+* The grantee field showed a Firebird example (``RDB$ADMIN``) on every engine: the
+  shared sample for a ``role`` field is now neutral.
+* The privilege choice offered every privilege (``CONNECT``, ``USAGE`` ... on a table):
+  the dialog now narrows it to the dialect's per-kind list
+  (``grants.object_privileges``), keeping ``ALL``.
+* The browser was running a bundle older than the source; the frontend must be rebuilt
+  after each change before a click-through.
+
+Gaps found, not closed:
+
+* ``Connect database...`` on a database other than the registered one does not open a
+  per-database connection (409 "PostgreSQL must be connected before opening shared
+  studios"); the provider tree only browses the registration's own database until the
+  inherited per-database connect is run. This is an M2 prerequisite and keeps
+  PostgreSQL ``draft``.
+* Setting ``grants.status`` to ``complete`` makes the legacy host refuse PostgreSQL
+  object-grant writes (``_refuse_provider_managed``), which inherited-tree users still
+  reach; it cannot flip before the inherited tree is retired for grants.
+* Not clicked through: column-level and function grants, the Security Manager
+  (principals), membership.

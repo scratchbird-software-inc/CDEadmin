@@ -201,6 +201,9 @@ def compile_operation(operation, native, draft):
     else:
         if _flag(draft, 'with_grant'):
             raise PostgreSQLNativeAdminError('WITH GRANT OPTION belongs to grant')
+        typed = draft.get('confirmation')
+        if typed not in (None, '') and not bulk and typed != draft.get('object'):
+            raise PostgreSQLNativeAdminError('The typed confirmation does not match the object name')
         statement = ('REVOKE ' + ('GRANT OPTION FOR ' if _flag(draft, 'grant_option_only') else '') + ', '.join(parts)
                      + ' ON ' + on + ' FROM ' + who + (' CASCADE' if _flag(draft, 'cascade') else ' RESTRICT'))
     result = {'statement': statement, 'read_only': False}
@@ -229,7 +232,9 @@ def form(operation, field):
         fields.append(field('with_grant', 'With grant option', 'boolean'))
     else:
         fields += [field('grant_option_only', 'Revoke grant option only', 'boolean'),
-                   field('cascade', 'Cascade dependent grants', 'boolean')]
+                   field('cascade', 'Cascade dependent grants', 'boolean'),
+                   field('confirmation', 'Type the object name to confirm',
+                         help='The dialog collects it; when present it must equal the object name.')]
     return {'form_id': 'postgresql-privileges-' + operation, 'form_key': 'native:postgresql:database:privilege',
             'title': operation.title() + ' privileges', 'fields': fields}
 

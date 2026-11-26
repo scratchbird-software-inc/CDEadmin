@@ -1,7 +1,7 @@
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import Theme from 'sources/Theme';
 import DescriptorObjectGrants, {
-  grantRows, objectGrantsOffered, objectTypeValue, parseAccount, dialogValues, canRevoke, heldRows, granteeSpelling, embeddedGrants,
+  grantRows, objectGrantsOffered, objectTypeValue, parseAccount, dialogValues, canRevoke, heldRows, granteeSpelling, embeddedGrants, narrowedOperation,
 } from '../../../pgadmin/static/js/cdeadmin_ui/security/DescriptorObjectGrants';
 import ObjectGrantsSurface, {objectContext} from '../../../pgadmin/static/js/cdeadmin_ui/security/ObjectGrantsSurface';
 import {resetDescriptorClient} from '../../../pgadmin/static/js/cdeadmin_ui/objects';
@@ -319,6 +319,19 @@ describe('PostgreSQL-shaped grants: rows carried on the object, defaults and col
   it('says when the rows are the default ACL, because none is stored', () => {
     expect(embeddedGrants(pg().listing, ALL, 'oid:3', 'function', 'f', ['db', 'public', 'f']).isDefault).toBe(true);
     expect(embeddedGrants(pg().listing, ALL, 'oid:1', 'table', 'orders', undefined).isDefault).toBe(false);
+  });
+
+  it('offers a table only the privileges the dialect grants on a table, keeping ALL', () => {
+    const bundle = loadEngineBundle('postgresql');
+    const operation = bundle.kinds.privilege.operations.find((op) => op.operation_id === 'grant');
+    const optionsOf = (op) => op.fields.find((f) => f.field_id === 'privileges').columns.find((c) => c.field_id === 'privilege')
+      .options.map((o) => o.value ?? o);
+    expect(optionsOf(operation)).toContain('CONNECT');
+    const table = optionsOf(narrowedOperation(bundle, operation, 'table'));
+    expect(table).toEqual(expect.arrayContaining(['ALL', 'SELECT', 'MAINTAIN']));
+    expect(table).not.toEqual(expect.arrayContaining(['CONNECT']));
+    expect(optionsOf(narrowedOperation(bundle, operation, 'schema')).sort()).toEqual(['ALL', 'CREATE', 'USAGE']);
+    expect(narrowedOperation(bundle, operation, 'no-such-kind')).toBe(operation);
   });
 
   it('finds the object by kind and name when the node has no id', () => {

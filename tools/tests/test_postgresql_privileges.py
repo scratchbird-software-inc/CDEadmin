@@ -66,6 +66,14 @@ def test_revoke_only_options_and_grant_only_options_do_not_mix():
         compile_operation('revoke', {}, draft(with_grant=True))
 
 
+def test_a_typed_confirmation_must_name_the_object_but_is_otherwise_accepted():
+    ok = compile_operation('revoke', {}, draft(confirmation='t'))
+    assert ok['statement'].startswith('REVOKE SELECT ON TABLE "public"."t" FROM')
+    with pytest.raises(PostgreSQLNativeAdminError, match='confirmation does not match'):
+        compile_operation('revoke', {}, draft(confirmation='other'))
+    assert 'REVOKE' not in compile_operation('grant', {}, draft())['statement'][:6]
+
+
 def test_only_a_function_family_takes_argument_types_and_only_plain_ones():
     ok = compile_operation('grant', {}, draft(object_type='FUNCTION', object='f', arguments='integer, "My Type"[]',
                                               privileges=[{'privilege': 'EXECUTE'}]))

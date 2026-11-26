@@ -195,6 +195,24 @@ export function dialogValues(grants, operation, objectKind, objectName, objectPa
   return fixed;
 }
 
+/** The operation with its privilege choices limited to what the engine grants on this kind of object
+ *  (the dialect's per-kind list the descriptor names as grants.object_privileges); ALL stays as it is. */
+export function narrowedOperation(bundle, operation, objectKind) {
+  const grants = bundle?.security?.grants;
+  const row = grants?.dialog?.row;
+  const byKind = grants?.object_privileges ? bundle.options?.dialect?.[grants.object_privileges] : null;
+  const allowed = byKind && !Array.isArray(byKind) ? byKind[objectKind] : null;
+  if(!operation || !Array.isArray(allowed) || !row?.privileges_field || !row.privilege_key) return operation;
+  const keep = (option) => {
+    const value = String(typeof option === 'object' ? option.value : option);
+    return value.toUpperCase().startsWith('ALL') || allowed.includes(value);
+  };
+  return {...operation, fields: (operation.fields || []).map((field) => (field.field_id === row.privileges_field
+    ? {...field, columns: (field.columns || []).map((column) => (column.field_id === row.privilege_key && Array.isArray(column.options)
+      ? {...column, options: column.options.filter(keep)} : column))}
+    : field))};
+}
+
 /** Whether one listed grant can be revoked in a click: the dialog needs to know who and (for a column grant) which columns. */
 export function canRevoke(grants, row) {
   const target = grants.dialog?.row;
@@ -254,11 +272,11 @@ export default function DescriptorObjectGrants({
     (state.bundle?.kinds?.[grants?.grant_kind]?.operations || []).map((op) => [op.operation_id, op])), [state.bundle, grants]);
 
   const open = useCallback((operationId, row) => {
-    const operation = operations[operationId];
+    const operation = narrowedOperation(state.bundle, operations[operationId], objectKind);
     const fixed = dialogValues(grants, operation, objectKind, objectName, path, row);
     setDialog({operation, fixed, calls: visualAdminCalls(post, {
       resourceKind: grants.grant_kind, operationId, target: null})});
-  }, [operations, objectKind, objectName, path, post, grants]);
+  }, [operations, state.bundle, objectKind, objectName, path, post, grants]);
 
   const applied = useCallback((result) => {
     setDialog(null);
