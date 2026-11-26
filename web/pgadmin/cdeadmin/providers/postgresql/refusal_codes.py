@@ -16,12 +16,11 @@ Every refusal is dealt with, by one of three routes (``describe``), so no raise 
 A site may instead pass ``code`` and ``field_id`` explicitly. A test reads every raise site and fails when
 one is neither listed nor matched.
 """
-import json
 import re
 from pathlib import Path
-from typing import NamedTuple
 
-
+from pgadmin.cdeadmin.visual_admin.refusal_vocabulary import (
+    EXPLANATION_LIMIT, Reason, Vocabulary, sentence as _sentence)
 CODES = frozenset({
     'database_not_chosen',
     'confirmation_mismatch',
@@ -48,24 +47,6 @@ KNOWN_MESSAGES = {
         'password_not_carried', 'rolpassword'),
 }
 
-
-
-class Reason(NamedTuple):
-    code: str | None
-    field_id: str | None
-    explanation: str | None = None
-
-
-def classify(message, code=None, field_id=None):
-    """The (code, field_id) a refusal carries: the explicit ones, else the known message's, else none.
-
-    An explicit code must be registered; an unregistered one is a programming error.
-    """
-    if code is not None:
-        if code not in CODES:
-            raise ValueError(f'unregistered refusal code {code!r}')
-        return code, field_id
-    return KNOWN_MESSAGES.get(message, (None, None)) if field_id is None else (None, field_id)
 
 
 # --- patterns for messages built from values -------------------------------------------------------------
@@ -134,58 +115,13 @@ RULES = tuple((code, re.compile(pattern, re.DOTALL)) for code, pattern in (
     ('choice_expected', _L + r' is [A-Za-z0-9_]+(?:(?:, | or )[A-Za-z0-9_ ]+)*'),
 ))
 
-_LITERALS = None
-_WORDING = None
+HERE = Path(__file__).parent
 
+VOCABULARY = Vocabulary(
+    codes=CODES, known=KNOWN_MESSAGES, rules=[(code, pattern.pattern) for code, pattern in RULES],
+    literal_files=[HERE / 'refusal_literals.json'], wording_files=[HERE / 'refusal_wording.json'])
 
-def literals():
-    """The fixed refusal messages registered in refusal_literals.json (read once)."""
-    global _LITERALS
-    if _LITERALS is None:
-        path = Path(__file__).with_name('refusal_literals.json')
-        _LITERALS = frozenset(json.loads(path.read_text(encoding='utf-8'))['messages']) if path.exists() else frozenset()
-    return _LITERALS
-
-
-def wording():
-    """How a registered message is shown instead of as written (refusal_wording.json, read once): a plainer
-    sentence (``text``) or a reason code with an optional field (``code``). A message in neither is shown as it stands."""
-    global _WORDING
-    if _WORDING is None:
-        path = Path(__file__).with_name('refusal_wording.json')
-        data = json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
-        _WORDING = {'text': dict(data.get('text', {})), 'code': dict(data.get('code', {})), 'keep': frozenset(data.get('keep', ()))}
-    return _WORDING
-
-
-EXPLANATION_LIMIT = 300
-
-
-def _sentence(message):
-    """A message reviewed and kept as written, shown as a sentence: a capital letter and a full stop."""
-    text = message.strip()
-    if text[:1].islower():
-        text = text[0].upper() + text[1:]
-    return text if text[-1:] in '.!?' else text + '.'
-
-
-def describe(message, code=None, field_id=None):
-    """Why a refusal happened, whatever raised it: its explicit or known code, else a fixed message shown as it
-    stands, else the rule that matches it, else nothing (the generic sentence)."""
-    message = message if isinstance(message, str) else ''
-    code, field_id = classify(message, code, field_id)
-    if code is not None:
-        return Reason(code, field_id)
-    if message in literals():
-        reworded = wording()['code'].get(message)
-        if reworded:
-            return Reason(reworded['code'], reworded.get('field'))
-        reworded = wording()['text'].get(message)
-        shown = reworded if reworded is not None else _sentence(message)
-        if len(shown) <= EXPLANATION_LIMIT:
-            return Reason('rule_not_met', None, shown)
-    for rule_code, pattern in RULES:
-        match = pattern.fullmatch(message)
-        if match:
-            return Reason(rule_code, (match.groupdict().get('field') or None) if 'field' in pattern.groupindex else None)
-    return Reason(None, None)
+classify = VOCABULARY.classify
+literals = VOCABULARY.literals
+wording = VOCABULARY.wording
+describe = VOCABULARY.describe
