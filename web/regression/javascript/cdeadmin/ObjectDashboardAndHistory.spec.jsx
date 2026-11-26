@@ -381,10 +381,8 @@ describe('ObjectDashboardSurface, Historic Vault Windows, Deep Stats & Rich Prop
     // Verify zero involuntary deep_refresh calls occurred on initial selection!
     expect(fetchCalls.some((c) => c.url.includes('deep_refresh'))).toBe(false);
 
-    // 2. Click "30d" on the Historic Metrics segmented ribbon control -> queries 30d 5m rollups!
-    const seg30d = Array.from(
-      document.querySelectorAll('.sr-island-3b .snb-segment')
-    ).find((el) => el.textContent.trim() === '30d');
+    // 2. Click "30 Days" on the historic window ribbon control -> queries 30d 5m rollups!
+    const seg30d = document.querySelector('.sr-island-3b [aria-label="30 Days"]');
     expect(seg30d).toBeTruthy();
     await act(async () => {
       fireEvent.click(seg30d);

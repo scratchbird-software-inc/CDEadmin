@@ -132,12 +132,12 @@ describe('open_tool handler', () => {
     const openSurface = jest.fn().mockResolvedValue(true);
     pgAdmin.Browser.Nodes = {server: {generate_url: jest.fn(() => '/browser/server/cde_workspace/1/2')}};
     pgAdmin.Browser.CDEadminCommandContext = () => ({openSurface});
-    await openRegisteredTool('bi.questions', endpoint, 'BI questions');
+    await openRegisteredTool('sample.tool', endpoint, 'BI questions');
     expect(openSurface).toHaveBeenCalledTimes(1);
     const [surfaceId, input, restoreContext] = openSurface.mock.calls[0];
-    expect(surfaceId).toBe('bi.questions');
+    expect(surfaceId).toBe('sample.tool');
     expect(input).toEqual({
-      toolInstanceId: 'bi.questions:2', restoreRef: 'bi.questions:2',
+      toolInstanceId: 'sample.tool:2', restoreRef: 'sample.tool:2',
       title: expect.stringContaining('BI questions'),
       context: {providerId: 'sqlite', endpointId: 2}});
     expect(input.title).toContain('Sales DB');
@@ -145,9 +145,25 @@ describe('open_tool handler', () => {
     expect(typeof restoreContext.api.post).toBe('function');
   });
 
+  it('opens a surface that has an application target in that application, not the tool host', () => {
+    const openSurface = jest.fn();
+    pgAdmin.Browser.CDEadminCommandContext = () => ({openSurface});
+    const seen = [];
+    const listen = (event) => seen.push([event.type, event.detail]);
+    window.addEventListener('scratchrobin:open-app-surface', listen);
+    try {
+      expect(openRegisteredTool('bi.questions', endpoint, 'BI questions')).toBe(true);
+    } finally {
+      window.removeEventListener('scratchrobin:open-app-surface', listen);
+    }
+    expect(openSurface).not.toHaveBeenCalled();
+    expect(seen).toHaveLength(1);
+    expect(seen[0][1]).toMatchObject({appId: 'bi-designer', payload: {surface: 'bi.questions', endpointId: 2}});
+  });
+
   it('reports a missing tool host instead of failing silently', () => {
     pgAdmin.Browser.CDEadminCommandContext = () => undefined;
-    expect(() => openRegisteredTool('bi.questions', null, 'BI questions')).toThrow(/tool host is unavailable/);
+    expect(() => openRegisteredTool('sample.tool', null, 'BI questions')).toThrow(/tool host is unavailable/);
     expect(() => openRegisteredTool('', endpoint, 'BI questions')).toThrow(/does not name a surface/);
   });
 
@@ -156,7 +172,7 @@ describe('open_tool handler', () => {
     pgAdmin.Browser.Nodes = {server: {generate_url: () => '/x'}};
     pgAdmin.Browser.notifier = {error};
     pgAdmin.Browser.CDEadminCommandContext = () => ({openSurface: jest.fn().mockRejectedValue(new Error('boom'))});
-    await openRegisteredTool('bi.questions', endpoint, 'BI questions');
+    await openRegisteredTool('sample.tool', endpoint, 'BI questions');
     expect(error).toHaveBeenCalledWith('boom');
   });
 });

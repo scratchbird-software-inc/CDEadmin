@@ -160,7 +160,7 @@ describe('ScratchRobin Settings Expansion — Schemes, Fonts, Action/Menu Editor
       );
     });
 
-    await screen.findByText('Tabbed-Notebook Iconbars Editor (Area 3b & 3b1 Quick Strip)');
+    await screen.findByText('Area 3b1 — Global Quick-Access Icon Strip');
     fireEvent.click(document.querySelector('[data-cdeadmin-qa-key="quick-access-add-icon"]'));
     expect(document.querySelector('[data-cdeadmin-qa-key="quick-access-chip-sql.execute"]')).toBeTruthy();
   });
