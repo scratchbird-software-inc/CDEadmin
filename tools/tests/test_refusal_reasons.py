@@ -464,3 +464,66 @@ def test_the_mysql_provider_closes_the_probe_on_failure_and_exposes_the_vocabula
     assert provider.is_native_administrator('not a mapping') is True  # a non-mapping is treated as an empty request
     from pgadmin.cdeadmin.providers.mysql_family import refusal_codes as mysql_codes
     assert hasattr(provider, 'describe_refusal') and mysql_codes.describe('no such message').code is None
+
+
+# --- MySQL and the shared relational compilers ----------------------------------------------------------------------
+
+PROVIDERS = ROOT / 'web/pgadmin/cdeadmin/providers'
+WORDING = {'relational': PROVIDERS / 'relational_refusal_wording.json', 'mysql': PROVIDERS / 'mysql_family/refusal_wording.json',
+           'postgresql': PROVIDERS / 'postgresql/refusal_wording.json'}
+
+
+def _mysql():
+    from pgadmin.cdeadmin.providers.mysql_family import refusal_codes
+    return refusal_codes
+
+
+def test_every_mysql_and_shared_refusal_is_registered_or_matched_by_a_rule():
+    import refusal_inventory
+    assert refusal_inventory.main(['--check']) == 0, 'run: python3 tools/refusal_inventory.py --write'
+    mysql = _mysql()
+    unmatched = [(scope, template) for scope in ('relational', 'mysql') for template in refusal_inventory.dynamic_templates(scope)
+                 if mysql.describe(template.replace('{}', 'x')).code is None]
+    assert unmatched == [], 'add a rule for: ' + '; '.join(f'{scope}: {template}' for scope, template in unmatched)
+
+
+def test_every_mysql_and_shared_fixed_message_is_in_exactly_one_group_and_the_unreviewed_count_only_falls():
+    import refusal_inventory
+    maximums = json.loads((ROOT / 'tools/refusal_unreviewed_maximums.json').read_text(encoding='utf-8'))
+    for scope in ('relational', 'mysql', 'postgresql'):
+        words = json.loads(WORDING[scope].read_text(encoding='utf-8'))
+        groups = [set(words.get('text', {})), set(words.get('code', {})), set(words.get('keep', ())), set(words.get('unreviewed', ()))]
+        assert sum(len(group) for group in groups) == len(set().union(*groups)), f'{scope}: a message is listed twice'
+        registered = set(refusal_inventory.literals(scope))
+        assert registered == set().union(*groups), f'{scope}: ' + '; '.join(sorted(registered ^ set().union(*groups))[:5])
+        assert len(groups[3]) <= maximums[scope], f'{scope}: {len(groups[3])} unreviewed, the cap is {maximums[scope]}; lower the cap, never raise it'
+        for message, entry in words.get('code', {}).items():
+            assert set(entry) <= {'code', 'field'}, message
+        for message, replacement in words.get('text', {}).items():
+            assert replacement and replacement != message and replacement[0].isupper(), message
+
+
+def test_the_mysql_catalog_and_code_set_agree_and_every_rule_code_has_a_sentence():
+    mysql = _mysql()
+    assert set(catalog('mysql')) == set(mysql.CODES)
+    given = {code for code, _pattern in mysql.RULES} | {code for code, _field in mysql.KNOWN_MESSAGES.values()}
+    assert given <= set(mysql.CODES)
+    words = mysql.wording()
+    assert all(entry['code'] in mysql.CODES for entry in words['code'].values())
+
+
+def test_mysql_gives_a_built_message_the_sentence_for_its_rule_and_a_fixed_one_as_a_sentence():
+    mysql = _mysql()
+    for message, code in (('Native account change failed (1396)', 'native_tool_rejected'),
+                          ('Unsupported filter operator: LIKE', 'unsupported_here'),
+                          ('relational execution failed (OperationalError)', 'provider_unavailable'),
+                          ('name must not be empty', 'value_required'),
+                          ("mysqlslap failed with exit code 1: secret-canary", 'native_tool_rejected')):
+        reason = mysql.describe(message)
+        assert (reason.code, reason.explanation) == (code, None), message
+    first = sorted(mysql.literals())[0]
+    reason = mysql.describe(first)
+    assert reason.code in ('rule_not_met',) or reason.code in mysql.CODES
+    assert mysql.describe('something no MySQL compiler raises').code is None
+    # a message that merely contains a registered text is not shown as it stands
+    assert mysql.describe(first + ' secret-canary').explanation is None
