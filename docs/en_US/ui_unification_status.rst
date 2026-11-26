@@ -2047,3 +2047,37 @@ wording). The rewrites keep each message's meaning and drop claims the code does
 they are my wording and want a read by someone who knows PostgreSQL, in particular the
 reload message after ``ALTER SYSTEM``, the constraint-type list and the enable-state letters.
 Not clicked through in a browser. The catalog has 26 sentences.
+
+
+MySQL refusal reasons (2026-11-26, same day)
+--------------------------------------------
+
+Decision 22 for MySQL: every fixed and built refusal of the MySQL family (without MariaDB) and of
+the shared relational compilers is dealt with, as for PostgreSQL. 1,120 fixed messages were
+reviewed in groups: shared scope 238 (165 given a reason, 2 reworded, 71 kept) and MySQL 882 (512
+given a reason, 166 reworded, 204 kept). The "Select ..." prompts were first coded as a generic
+"required value" and then reworded back to specific sentences ("Select a native MySQL type"
+reads "Choose a MySQL type."), because the generic sentence lost what the user must choose; the
+mechanical rewording drops the words "native" and "typed" and is not hand-checked message by
+message. 128 built templates match rules. The unreviewed group exists (capped in
+``tools/refusal_unreviewed_maximums.json``, which can only fall) and is now empty for every scope.
+The shared funnel keeps the native message with secrets scrubbed (a canary test covers a password
+echoed in an ``IDENTIFIED BY`` clause and a draft secret), the MySQL ``SUPER`` probe was checked
+live (above), and a gate test requires every refusal in scope to be registered or matched and every
+fixed message to be in exactly one wording group.
+
+Checks: ``make ui-descriptors-check`` passes (255 passed, 66 skipped); 34 refusal tests pass; the
+funnel change was run against 366 test files that exercise the shared funnel, the relational
+client or the MySQL provider, with the same 16 failures and 15 errors as the unmodified code.
+Qualification: ``visual_admin/provider.py`` and ``providers/mysql_family/provider.py``, both
+hashed by the MySQL group 9 qualification, changed (``92e2f68af70aa75b`` and
+``960fbdcbf42def67``; ``refusals.py`` ``5ef823d1e5ab0d7f`` and ``servers/__init__.py``
+``35c8b043e708c198`` are unchanged). The qualification still cannot run here. One bounded look at
+its harness found the cause: its fixture call to ``verify_endpoint`` is answered 403
+"Unauthorised access, permission denied", because the test session user does not hold the
+permission the route requires under the current authentication setup. That is the same before and
+after these changes and was not fixed; the record stays "re-hashed, not re-qualified".
+
+Not covered: the other error classes MySQL raises on surfaces that do not use the plan funnel;
+MariaDB, Dolt, TiDB and Vitess (no ``describe_refusal`` yet); the rewording of the 204 kept messages
+beyond a capital and a full stop; any browser click-through of MySQL refusal sentences (none done).

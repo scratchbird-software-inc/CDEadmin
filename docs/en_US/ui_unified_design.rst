@@ -2048,3 +2048,28 @@ Once 1, 2 and 3 are decided, phase 0 can start immediately; nothing in phases 0 
     administrator probes for the other engines (until then only an application
     administrator or a user holding the permission can read a reason there),
     declarative pre-checks (b), and translation of the new strings.
+
+    *Status, MySQL (2026-11-26).* MySQL now has its own catalog
+    (``ui_descriptors/mysql/refusals.json``, 26 sentences) and the same three
+    routes through a shared ``visual_admin/refusal_vocabulary.Vocabulary``,
+    which PostgreSQL now also uses. Scope: the refusals the shared plan funnel
+    catches (``RelationalClientError``, its subclasses and the ``ValueError``
+    the compilers wrap) in the MySQL family without MariaDB (882 fixed
+    messages, 96 built-message templates) and in the compilers every
+    actual-engine provider shares, registered once (238 fixed, 32 templates, in
+    ``relational_refusal_literals.json``) so SQLite, DuckDB and MariaDB do not
+    review them again. The funnel itself changed for every engine on it: it now
+    keeps the native message (it used to discard it) with the draft's password
+    and secret values and any quoted ``IDENTIFIED BY``/``PASSWORD``/``REPLACE``
+    text removed, so *Show reason* has something to show. An engine that defines
+    ``describe_refusal`` gives the generic refusal a reason; only MySQL does so
+    far. The administrator probe is the global ``SUPER`` privilege, read from
+    ``USER_PRIVILEGES`` through a separate reader, never the ``_security``
+    output; a ``SUPER`` that arrives through a role is not seen, and an account
+    merely named root is not taken for an administrator. Checked live on the
+    demo MySQL 9.7: ``root``, and an account granted ``SUPER``, answer yes; a
+    limited account and one named ``root_lookalike`` answer no. Not covered:
+    the other error classes MySQL raises on other surfaces (``Refused``,
+    ``BinlogArchiveError``, ``UtilityHostError`` and similar, which do not pass
+    through this funnel), MariaDB, Dolt, TiDB and Vitess, and the other engines
+    until each defines ``describe_refusal``.
