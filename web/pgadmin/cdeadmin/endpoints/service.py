@@ -2073,6 +2073,9 @@ class EndpointService:
         if not connection.connected():
             raise EndpointRegistrationError(
                 'PostgreSQL must be connected before opening shared studios'
+                if selected_oid is None else
+                'This database is not connected. Use Connect database… on it '
+                'first.'
             )
         from pgadmin.cdeadmin.providers.postgresql.support_policy import (
             admission_error, public_version,

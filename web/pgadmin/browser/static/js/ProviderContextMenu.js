@@ -543,6 +543,12 @@ function dispatch(action, args, context) {
     return node?.callbacks?.refresh?.call(node, null, target);
   }
   case 'verify_endpoint':
+    // A preserved registration browsed through the provider tree connects each
+    // database through the inherited per-database connect (verification is the
+    // inherited server Connect, which this server has already done).
+    if (args.database_target_id && endpoint.data?.cde_provider_tree) {
+      return connectProviderTreeDatabase(serverNode, endpoint, args.database_target_id, item);
+    }
     return serverNode.callbacks.verify_cde_endpoint.call(serverNode, {
       item: endpoint.item,
       databaseTargetId: args.database_target_id,
@@ -796,6 +802,32 @@ function isCredentialRequiredError(error) {
     return true;
   }
   return false;
+}
+
+/**
+ * Connect one database of a preserved registration that the provider tree
+ * browses, then open its node. The server endpoint owns the check; the browser
+ * only reports the outcome.
+ */
+export function connectProviderTreeDatabase(serverNode, endpoint, databaseTargetId, item) {
+  const tree = pgAdmin.Browser.tree;
+  const url = serverNode.generate_url(endpoint.item, 'cde_database_connect', endpoint.data, true);
+  return getApiInstance().post(url, {database_target_id: databaseTargetId}).then((response) => {
+    pgAdmin.Browser.notifier.success(response.data?.info || gettext('Database connected.'));
+    if (item) {
+      // Selecting the node before it was connected cached a refusal; reload it.
+      const node = pgAdmin.Browser.Nodes[tree.itemData(item)?._type];
+      Promise.resolve(node?.callbacks?.refresh?.call(node, null, item)).finally(() => {
+        tree.select(item);
+        tree.open(item);
+      });
+    }
+    return true;
+  }).catch((error) => {
+    const message = error?.response?.data?.errormsg || error?.message || String(error);
+    pgAdmin.Browser.notifier.error(message);
+    return false;
+  });
 }
 
 export function executeProviderAction(menu, itemData, item) {

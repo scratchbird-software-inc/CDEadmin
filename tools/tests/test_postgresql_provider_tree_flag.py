@@ -155,6 +155,27 @@ class WiringTests(unittest.TestCase):
         self.assertIn('record_inherited_connect(server, manager.version',
                       connect)
 
+    def test_a_database_is_connected_through_the_inherited_connect(self):
+        """Connect database... on a provider-tree database node.
+
+        The verification route refuses a preserved registration, so the menu
+        posts to a route of its own that connects the one database through
+        the inherited connection manager.
+        """
+        text = SERVERS_PY.read_text(encoding='utf-8')
+        self.assertIn("'cde_database_connect': [{'post': 'cde_database_connect'}]", text)
+        route = text.split('    def cde_database_connect(self, gid, sid)')[1].split('\n    def ')[0]
+        for needle in ('_is_non_owner(server)', '_is_preserved_postgresql(server)',
+                       'database_oid(data.get(', 'manager.connection(did=did',
+                       'conn.connect()', 'status=409'):
+            self.assertIn(needle, route)
+        menu = (WEB / 'pgadmin' / 'browser' / 'static' / 'js' / 'ProviderContextMenu.js'
+                ).read_text(encoding='utf-8')
+        branch = menu.split("case 'verify_endpoint':")[1].split("case 'disconnect_endpoint'")[0]
+        self.assertIn('args.database_target_id && endpoint.data?.cde_provider_tree', branch)
+        self.assertIn('connectProviderTreeDatabase(', branch)
+        self.assertIn("'cde_database_connect'", menu)
+
     def test_server_menu_offers_both_trees(self):
         text = SERVERS_JS.read_text(encoding='utf-8')
         for name in ('use_provider_tree', 'use_inherited_tree'):

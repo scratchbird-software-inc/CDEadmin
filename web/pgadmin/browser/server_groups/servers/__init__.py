@@ -1301,6 +1301,7 @@ class ServerNode(PGChildNodeView):
         }],
         'verify_endpoint': [{'post': 'verify_endpoint'}],
         'provider_tree': [{'put': 'provider_tree'}],
+        'cde_database_connect': [{'post': 'cde_database_connect'}],
         'cde_routes': [{
             'get': 'cde_routes', 'post': 'cde_routes',
             'put': 'cde_routes', 'delete': 'cde_routes',
@@ -1483,6 +1484,51 @@ class ServerNode(PGChildNodeView):
             if stored else
             gettext('This server now uses the inherited object tree.'),
             data={'cde_provider_tree': stored})
+
+    @pga_login_required
+    def cde_database_connect(self, gid, sid):
+        """Connect one database of a preserved PostgreSQL server.
+
+        The provider tree browses a database through the inherited
+        connection manager, so a database other than the one the server
+        connected to needs its own session first. This is the inherited
+        per-database connect, addressed by the provider database target.
+        """
+        from pgadmin.cdeadmin.providers.postgresql.connection_target import (
+            database_oid,
+        )
+        from pgadmin.cdeadmin.endpoints.service import EndpointService
+        server = get_server(sid)
+        if server is None:
+            return bad_request(self.not_found_error_msg())
+        if _is_non_owner(server):
+            return forbidden(errormsg=gettext(
+                'Only the server owner can connect its databases.'))
+        if not EndpointService._is_preserved_postgresql(server):
+            return bad_request(gettext(
+                'Only a PostgreSQL registration connects databases this way.'))
+        data = request.form if request.form else json.loads(
+            request.data or '{}')
+        try:
+            did = database_oid(data.get('database_target_id'))
+        except ValueError as exc:
+            return bad_request(str(exc))
+        if did is None:
+            return bad_request(gettext('A database target is required.'))
+        manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(sid)
+        if not manager.connection().connected():
+            return make_json_response(
+                status=409, success=0, errormsg=gettext(
+                    'Connect the server before connecting a database.'))
+        conn = manager.connection(did=did, auto_reconnect=True)
+        already_connected = conn.connected()
+        if not already_connected:
+            status, errmsg = conn.connect()
+            if not status:
+                return internal_server_error(errormsg=errmsg)
+        return make_json_response(
+            success=1, info=gettext('Database connected.'),
+            data={'connected': True, 'already_connected': already_connected})
 
     def update_connection_parameter(self, data, server, sharedserver=None):
         """

@@ -1869,11 +1869,15 @@ Defects found and fixed:
 
 Gaps found, not closed:
 
-* ``Connect database...`` on a database other than the registered one does not open a
-  per-database connection (409 "PostgreSQL must be connected before opening shared
-  studios"); the provider tree only browses the registration's own database until the
-  inherited per-database connect is run. This is an M2 prerequisite and keeps
-  PostgreSQL ``draft``.
+* Per-database connect (closed 2026-11-26): ``Connect database...`` on a database other
+  than the registered one returned 409 because the menu posted to the verification route,
+  which refuses a preserved registration. A provider-tree server now posts to
+  ``cde_database_connect``, a route that runs the inherited per-database connect for the
+  target (owner and preserved-registration checks, server must already be connected), then
+  reloads and opens the node. Clicked through: ``cdeadmin_demo`` connected from the menu
+  (a session on that database appeared on the server) and expanded to its children. An
+  unconnected database now says to use ``Connect database...`` first. Selecting an
+  unconnected database still shows no message of its own beyond that 409 text.
 * Setting ``grants.status`` to ``complete`` makes the legacy host refuse PostgreSQL
   object-grant writes (``_refuse_provider_managed``), which inherited-tree users still
   reach; it cannot flip before the inherited tree is retired for grants.
