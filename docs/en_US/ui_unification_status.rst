@@ -1915,9 +1915,24 @@ Gaps found, not closed:
   accepted); the role form's help text carried implementation notes ("pgAdmin renders ...",
   "Provider tree: ...") and the Password field accepted input a plan always refuses (it is
   now read-only with help saying where to set it).
-* Gaps recorded, not closed: the manager shows no ``Privileges held`` for a role that holds
-  a table grant, because held privileges are read from the server-scope listing and table
-  ACLs live in database-scope listings; the same "Provider tree: ..." help text remains in
+* Privileges held at server scope (fixed and clicked through 2026-11-26, same set-up): the
+  manager showed nothing for a role that held a table grant. PostgreSQL keeps ACLs inside
+  each database, so the descriptor now declares ``grants.listing.held_across`` (the database
+  kind, the target id its listing spells, and the databases that cannot be connected to).
+  The held view reads each connected database's listing one at a time at its own endpoint
+  URL (the server refuses a request whose body and URL name different databases), lists
+  what the role holds there with a Database column, and names every database it could not
+  read ("connect them to include their objects") instead of leaving it out. Only successful
+  listings are cached, at most 25 databases are read, and a database whose listing carries no
+  id is named, not requested. A second defect behind it: the server-scope database and
+  tablespace rows came from inherited node queries that do not select their ACLs, so grants
+  such as ``CONNECT`` on a database showed nowhere in the provider tree. The provider now
+  reads ``datacl`` and ``spcacl`` for those rows (NULL stays the default ACL, and a failed
+  read claims no grants). Verified live: a role with ``CONNECT`` on a database, ``SELECT`` on
+  a table and ``EXECUTE`` on a function in one database and ``SELECT`` on a table in another;
+  with one database connected the other was named, and connecting it added its row.
+  Tablespace ACLs are read the same way but were not clicked through.
+* Gaps recorded, not closed: the same "Provider tree: ..." help text remains in
   ten other PostgreSQL form files; a native refusal reaches the user only as the generic
   "refused before dispatch" text with no field named (the refusal contract is bounded and
   secret-free by design, and the UI does not map its codes), so the reason (for instance a

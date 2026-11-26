@@ -161,6 +161,35 @@ export function heldRows(grants, resources, grantee, principalKind) {
     .sort((a, b) => `${a.scope}:${a.object}:${a.privilege}:${a.column}`.localeCompare(`${b.scope}:${b.object}:${b.privilege}:${b.column}`));
 }
 
+/** What a principal holds inside databases, for an engine whose grants live in each database (listing.held_across).
+ *  `load(target)` lists one database's resources and rejects when it cannot (not connected); those databases are
+ *  named in `skipped`, never silently left out. Only successful listings are cached. A database's own entry is
+ *  not repeated here: the server-scope listing already carries it. */
+export async function heldAcrossDatabases(grants, resources, grantee, principalKind, load, cache = new Map(), limit = 25) {
+  const spec = grants.listing?.held_across;
+  if(!spec) return {rows: [], skipped: [], truncated: 0};
+  // The fields are dotted paths into the listed database's native data (PostgreSQL: catalog_metadata.did).
+  const read = (resource, path) => String(path).split('.').reduce((value, key) => value?.[key], resourceNative(resource));
+  const eligible = resources.filter((resource) => resource.resource_kind === spec.kind
+    && !(spec.skip_field && read(resource, spec.skip_field) === spec.skip_equals));
+  const rows = [];
+  const skipped = [];
+  for(const database of eligible.slice(0, limit)) {
+    const id = read(database, spec.id_field);
+    if(id === undefined || id === null) { skipped.push(database.display_name); continue; }
+    const target = `${spec.target_prefix}${id}`;
+    let listing = cache.get(target);
+    if(listing === undefined) {
+      try { listing = await load(target); cache.set(target, listing); } catch(error) { listing = null; }
+    }
+    if(listing === null) { skipped.push(database.display_name); continue; }
+    rows.push(...heldRows(grants, listing, grantee, principalKind)
+      .filter((row) => row.scope !== spec.kind)
+      .map((row) => ({...row, database: database.display_name})));
+  }
+  return {rows, skipped, truncated: Math.max(0, eligible.length - limit)};
+}
+
 /** The dialog values a grants view fixes for one object (and one listed row), as the descriptor's dialog maps them. */
 export function dialogValues(grants, operation, objectKind, objectName, objectPath, row, objectNative) {
   const dialog = grants.dialog || {};

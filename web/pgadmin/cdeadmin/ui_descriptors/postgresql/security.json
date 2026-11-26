@@ -65,7 +65,14 @@
       "grant_option_field": "grant_option",
       "grant_option_equals": true,
       "grantor_field": "grantor",
-      "held": true
+      "held": true,
+      "held_across": {
+        "kind": "database",
+        "target_prefix": "postgresql-database:",
+        "id_field": "catalog_metadata.did",
+        "skip_field": "catalog_metadata.datallowconn",
+        "skip_equals": false
+      }
     },
     "dialog": {
       "object_type": "object_type",

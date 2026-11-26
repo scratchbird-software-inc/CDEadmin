@@ -431,6 +431,19 @@
               "type": "boolean",
               "description": "show, for a selected principal, every grant it holds across all scopes (the only place global grants are visible)"
             },
+            "held_across": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "target_prefix", "id_field"],
+              "description": "an engine whose grants live inside each database (PostgreSQL ACLs on tables, functions): the held view also reads every connected database of this resource kind, at the target the prefix and the listed database's id field spell, and names the databases it could not read",
+              "properties": {
+                "kind": {"type": "string", "description": "resource kind of a database in the server-scope listing"},
+                "target_prefix": {"type": "string", "description": "prefix of a database target id; the database's id field value follows it"},
+                "id_field": {"type": "string", "description": "dotted path in the listed database's native data that completes the target id"},
+                "skip_field": {"type": "string", "description": "dotted path in the listed database's native data that, when it equals skip_equals, marks a database that cannot be connected to (a template)"},
+                "skip_equals": {"description": "value of skip_field that skips the database"}
+              }
+            },
             "embedded": {
               "type": "object",
               "additionalProperties": false,

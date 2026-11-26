@@ -138,6 +138,41 @@ def grant(live, operation, **values):
     return run(live, operation, {'schema': 'public', **values}, kind='privilege')
 
 
+def test_database_and_tablespace_rows_get_their_stored_acl_without_inventing_one():
+    """The inherited node queries do not select the ACL; it is read separately, and NULL stays the default."""
+    from pgadmin.cdeadmin.providers.postgresql.cluster import parse_acl_items
+    from pgadmin.cdeadmin.providers.postgresql.privileges import apply_default_acl
+    from pgadmin.cdeadmin.providers.postgresql.provider import PostgreSQLCatalogSource
+
+    class Connection:
+        def __init__(self, rows):
+            self.rows, self.sql = rows, []
+
+        def execute_dict(self, sql, *_):
+            self.sql.append(sql)
+            return True, {'rows': self.rows}
+
+    rows = [{'did': 5}, {'did': 6}, {'did': 7}]
+    connection = Connection([{'oid': 5, 'acl': None}, {'oid': 6, 'acl': ['r1=c/own', '=Tc/own']}])
+    out = PostgreSQLCatalogSource._with_acls(connection, rows, 'pg_database', 'did', 'datacl', 'datacl')
+    assert out[0]['datacl'] is None and out[1]['datacl'] == ['r1=c/own', '=Tc/own']
+    assert 'datacl' not in out[2]  # not read: no grants are claimed for it
+    assert 'FROM pg_catalog.pg_database' in connection.sql[0] and 'datacl IS NULL' in connection.sql[0]
+    codes = {'C': 'CREATE', 'T': 'TEMPORARY', 'c': 'CONNECT'}
+    held = {(r['grantee'], r['privilege']) for r in parse_acl_items(out[1]['datacl'], codes)}
+    assert held == {('r1', 'CONNECT'), ('PUBLIC', 'TEMPORARY'), ('PUBLIC', 'CONNECT')}
+    native = {}
+    apply_default_acl('database', native, {'datacl': None, 'datdba': 'own'}, 0)
+    assert native['privileges_default'] is True
+    assert ('PUBLIC', 'CONNECT') in {(r['grantee'], r['privilege']) for r in native['privileges']}
+    # A failed read leaves the rows untouched instead of reporting an empty ACL.
+    class Broken:
+        def execute_dict(self, *_):
+            raise RuntimeError('boom')
+    untouched = [{'did': 5}]
+    assert PostgreSQLCatalogSource._with_acls(Broken(), untouched, 'pg_database', 'did', 'datacl', 'datacl') == [{'did': 5}]
+
+
 @live_only
 def test_table_grant_with_grant_option_then_revoke_the_option_then_the_privilege(live, roles):
     reader, _ = roles

@@ -18,7 +18,7 @@
  * and operations, through the same reviewed plan and SQL tab as any editor.
  */
 
-import {useCallback, useEffect, useMemo, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import PropTypes from 'prop-types';
 import gettext from 'sources/gettext';
 import {Box} from '../primitives/Layout';
@@ -31,8 +31,8 @@ import OperationDialog from '../objects/OperationDialog';
 import ProviderObjectEditorHost, {makePost, resourceNative} from '../objects/ProviderObjectEditorHost';
 import {descriptorClient, visualAdminCalls} from '../objects/DescriptorClient';
 import {operationContext} from '../objects/descriptors';
-import {listResources} from './providerList';
-import {granteeSpelling, heldRows} from './DescriptorObjectGrants';
+import {listResources, scopedEndpointUrl} from './providerList';
+import {granteeSpelling, heldAcrossDatabases, heldRows} from './DescriptorObjectGrants';
 
 /** The name a roster row shows: the descriptor's identity fields, joined. */
 export function principalLabel(principal, resource) {
@@ -78,30 +78,39 @@ function Memberships({listing, resource}) {
   </Box>;
 }
 
-function Held({grants, resources, grantee, principalKind}) {
-  const rows = heldRows(grants, resources, grantee, principalKind);
-  if(rows.length === 0) return null;
+function Held({grants, resources, grantee, principalKind, across}) {
+  const own = heldRows(grants, resources, grantee, principalKind);
+  const inDatabases = across?.rows || [];
+  const rows = [...own, ...inDatabases];
+  const skipped = across?.skipped || [];
+  const note = across?.status === 'loading' ? gettext('Reading the connected databases…')
+    : skipped.length > 0 ? gettext('Not included, because they could not be read (connect them to include their objects): %s.', skipped.join(', '))
+      : null;
+  if(rows.length === 0 && !note) return null;
   const listing = grants.listing;
+  const withDatabase = Boolean(grants.listing?.held_across);
   return <Box component="section" aria-label={gettext('Privileges held')} sx={{p: 1}}>
     <Box sx={{fontWeight: 600, mb: 0.5}}>{gettext('Privileges held')}</Box>
-    <Box component="table" sx={{borderCollapse: 'collapse', fontSize: '0.8125rem', width: '100%'}}>
+    {rows.length > 0 && <Box component="table" sx={{borderCollapse: 'collapse', fontSize: '0.8125rem', width: '100%'}}>
       <thead><tr>
-        {['Scope', 'Object', 'Privilege', ...(listing.column_field ? ['Column'] : []),
+        {[...(withDatabase ? ['Database'] : []), 'Scope', 'Object', 'Privilege', ...(listing.column_field ? ['Column'] : []),
           ...(listing.grant_option_field ? ['Grant option'] : [])].map((label) =>
           <Box component="th" key={label} sx={{textAlign: 'left', pr: 2}}>{gettext(label)}</Box>)}
       </tr></thead>
-      <tbody>{rows.map((row, index) => <tr key={`${row.scope}:${row.object}:${row.privilege}:${row.column}:${index}`}>
+      <tbody>{rows.map((row, index) => <tr key={`${row.database || ''}:${row.scope}:${row.object}:${row.privilege}:${row.column}:${index}`}>
+        {withDatabase && <Box component="td" sx={{pr: 2}}>{row.database || ''}</Box>}
         <Box component="td" sx={{pr: 2}}>{row.scope}</Box>
         <Box component="td" sx={{pr: 2}}>{row.object}</Box>
         <Box component="td" sx={{pr: 2}}>{row.privilege}</Box>
         {listing.column_field && <Box component="td" sx={{pr: 2}}>{row.column}</Box>}
         {listing.grant_option_field && <Box component="td" sx={{pr: 2}}>{row.grantOption ? gettext('Yes') : gettext('No')}</Box>}
       </tr>)}</tbody>
-    </Box>
+    </Box>}
+    {note && <Box sx={{fontSize: '0.75rem', mt: 0.5}}>{note}{across?.truncated > 0 ? ' ' + gettext('%s more databases were not read.', across.truncated) : ''}</Box>}
   </Box>;
 }
 
-Held.propTypes = {grants: PropTypes.object.isRequired, resources: PropTypes.array.isRequired, grantee: PropTypes.string.isRequired, principalKind: PropTypes.string};
+Held.propTypes = {grants: PropTypes.object.isRequired, resources: PropTypes.array.isRequired, grantee: PropTypes.string.isRequired, principalKind: PropTypes.string, across: PropTypes.object};
 
 Memberships.propTypes = {listing: PropTypes.object.isRequired, resource: PropTypes.object};
 
@@ -188,6 +197,24 @@ export default function DescriptorSecurityManager({
     setRefresh((count) => count + 1);
   }, []);
 
+  // Where an engine keeps grants inside each database, what a principal holds there is read from the
+  // connected databases one at a time (a database that cannot be read is named, never dropped silently).
+  const acrossCache = useRef(new Map());
+  const [across, setAcross] = useState(null);
+  useEffect(() => { acrossCache.current = new Map(); }, [refresh, post]);
+  const heldGrantee = selected && principal && security?.grants?.listing?.held_across && scope === 'server'
+    ? granteeSpelling(security, principal, selected) : null;
+  useEffect(() => {
+    if(!heldGrantee || state.status !== 'ready') { setAcross(null); return undefined; }
+    let cancelled = false;
+    setAcross({status: 'loading', rows: [], skipped: [], truncated: 0});
+    heldAcrossDatabases(security.grants, state.resources, heldGrantee, principal.kind,
+      (target) => listResources(makePost(api, scopedEndpointUrl(endpointUrl, target), target, {onAuthRequired})), acrossCache.current)
+      .then((result) => { if(!cancelled) setAcross({status: 'ready', ...result}); })
+      .catch(() => { if(!cancelled) setAcross(null); });
+    return () => { cancelled = true; };
+  }, [heldGrantee, state.status, state.resources, security, principal, api, endpointUrl, onAuthRequired, refresh]);
+
   if(state.status === 'loading') {
     return <Box sx={{position: 'relative', minHeight: 160}}><ProgressOverlay message={gettext('Loading security')} /></Box>;
   }
@@ -246,7 +273,7 @@ export default function DescriptorSecurityManager({
         {security.membership?.listing && membershipTarget && <Memberships listing={security.membership.listing} resource={membershipTarget} />}
         {security.membership?.member_of_listing && <Memberships listing={security.membership.member_of_listing} resource={selected} />}
         {security.grants?.listing?.held && <Held grants={security.grants} resources={state.resources}
-          grantee={granteeSpelling(security, principal, selected)} principalKind={principal.kind} />}
+          grantee={granteeSpelling(security, principal, selected)} principalKind={principal.kind} across={across} />}
         <ProviderObjectEditorHost key={`alter:${selected.resource_id}`}
           api={api} endpointUrl={endpointUrl} engine={engine} version={version}
           resourceId={selected.resource_id} resourceKind={kind} displayName={selected.display_name}

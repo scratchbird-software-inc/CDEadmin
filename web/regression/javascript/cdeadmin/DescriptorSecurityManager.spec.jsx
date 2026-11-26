@@ -1,6 +1,7 @@
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import Theme from 'sources/Theme';
 import DescriptorSecurityManager, {principalLabel} from '../../../pgadmin/static/js/cdeadmin_ui/security/DescriptorSecurityManager';
+import {scopedEndpointUrl} from '../../../pgadmin/static/js/cdeadmin_ui/security/providerList';
 import SecurityManagerSurface from '../../../pgadmin/static/js/cdeadmin_ui/security/SecurityManagerSurface';
 import {resetDescriptorClient} from '../../../pgadmin/static/js/cdeadmin_ui/objects';
 import {loadEngineBundle} from '../families/familyFixtures';
@@ -251,5 +252,57 @@ describe('DescriptorSecurityManager access notices (MySQL)', () => {
     mount({api, engine: 'firebird', scope: 'server'});
     await screen.findByRole('button', {name: 'A'});
     expect(screen.queryByText(/not allowed to read/)).not.toBeInTheDocument();
+  });
+});
+
+
+describe('DescriptorSecurityManager held grants inside databases (PostgreSQL)', () => {
+  beforeEach(() => { resetDescriptorClient(); mockEditor.mockClear(); });
+  const acl = (grantee, privilege) => ({grantee, grantee_kind: 'role', grantor: 'owner', privilege, grant_option: false});
+  const database = (name, oid, extra = {}) => ({resource_kind: 'database', resource_id: `db:${oid}`, display_name: name,
+    display_path: [name], native: {catalog_metadata: {did: oid, datallowconn: true, ...extra}}});
+  const reader = {resource_kind: 'role', resource_id: 'role:reader', display_name: 'reader', native: {name: 'reader', rolname: 'reader'}};
+  const SERVER = [reader, database('sales', 16384), database('ops', 16385), database('template0', 4, {datallowconn: false})];
+  const SALES = [{resource_kind: 'table', resource_id: 't:1', display_name: 'orders', display_path: ['sales', 'public', 'orders'],
+    native: {privileges: [acl('reader', 'SELECT')], privileges_default: false}}];
+
+  function apiFor() {
+    const posts = [];
+    return {posts, api: {
+      get: jest.fn(async () => ({data: {success: 1, data: loadEngineBundle('postgresql')}})),
+      post: jest.fn(async (url, payload) => {
+        posts.push(payload);
+        const target = payload.request?.database_target_id;
+        // The server needs the URL to name the same database as the request body.
+        if(target) expect(url).toBe(`/ws/1?database_target_id=${encodeURIComponent(target)}`);
+        if(!target) return {data: {success: 1, data: {items: SERVER, next_cursor: null, generation: 'g'}}};
+        if(target === 'postgresql-database:16384') return {data: {success: 1, data: {items: SALES, next_cursor: null, generation: 'g'}}};
+        throw Object.assign(new Error('This database is not connected.'), {response: {status: 409, data: {errormsg: 'This database is not connected.'}}});
+      }),
+    }};
+  }
+
+  it('lists what the role holds in each connected database and names the databases it could not read', async () => {
+    const {api, posts} = apiFor();
+    render(<Theme><DescriptorSecurityManager endpointUrl="/ws/1" api={api} engine="postgresql" scope="server" /></Theme>);
+    fireEvent.click(await screen.findByRole('button', {name: /^reader/}));
+    const held = await screen.findByRole('region', {name: 'Privileges held'});
+    await waitFor(() => expect(held.textContent).toMatch(/sales/));
+    expect(held.textContent).toMatch(/public\.orders/);
+    expect(held.textContent).toMatch(/SELECT/);
+    expect(held.textContent).toMatch(/could not be read.*: ops\./);
+    expect(held.textContent).not.toMatch(/template0/);
+    const asked = posts.filter((p) => p.action === 'resource_page').map((p) => p.request?.database_target_id).filter(Boolean);
+    expect(asked.sort()).toEqual(['postgresql-database:16384', 'postgresql-database:16385']);
+  });
+});
+
+
+describe('scopedEndpointUrl', () => {
+  it('replaces the server-scope target, keeps other query parts, and adds one when there is none', () => {
+    expect(scopedEndpointUrl('/ws/1?database_target_id=cdeadmin-server-scope', 'postgresql-database:5'))
+      .toBe('/ws/1?database_target_id=postgresql-database%3A5');
+    expect(scopedEndpointUrl('/ws/1?a=b&database_target_id=x&c=d', 't')).toBe('/ws/1?a=b&c=d&database_target_id=t');
+    expect(scopedEndpointUrl('/ws/1', 't')).toBe('/ws/1?database_target_id=t');
   });
 });

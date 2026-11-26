@@ -386,6 +386,8 @@ class PostgreSQLCatalogSource:
             sql = self._renderer(template, tsid=object_id, conn=connection)
         status, result = connection.execute_dict(sql)
         rows = self._rows(status, result)
+        if catalog_kind == 'tablespace':
+            rows = self._with_acls(connection, rows, 'pg_tablespace', 'oid', 'spcacl', 'spcacl')
         if catalog_kind == 'role':
             # The inherited role template names the role rolname.
             rows = [{**row, 'name': row.get('rolname')} for row in rows]
@@ -504,7 +506,28 @@ class PostgreSQLCatalogSource:
             db_restrictions=None,
         )
         status, result = connection.execute_dict(sql)
-        return self._rows(status, result)
+        return self._with_acls(connection, self._rows(status, result), 'pg_database', 'did', 'datacl', 'datacl')
+
+    @staticmethod
+    def _with_acls(connection, rows, catalog, id_key, acl_column, key):
+        """Add each row's stored ACL as aclitem text (``None`` when the column is NULL, which means the
+        default ACL, not "nobody"). The inherited node queries do not select it. A failed read leaves the
+        rows without the key, and so without grants, rather than reporting a false empty list."""
+        if not rows or not callable(getattr(connection, 'execute_dict', None)):
+            return rows
+        try:
+            status, result = connection.execute_dict(
+                f"SELECT oid, CASE WHEN {acl_column} IS NULL THEN NULL "
+                f"ELSE ARRAY(SELECT a::text FROM unnest({acl_column}) a) END AS acl FROM pg_catalog.{catalog}")
+            acls = {int(r['oid']): r.get('acl') for r in (result.get('rows', []) if status and isinstance(result, Mapping) else ())
+                    if isinstance(r, Mapping) and r.get('oid') is not None}
+        except Exception:
+            return rows
+        for row in rows:
+            identity = row.get(id_key)
+            if isinstance(identity, int) and identity in acls:
+                row[key] = acls[identity]
+        return rows
 
     def _schemas(self, manager, connection, route, object_id):
         template = 'schemas/{0}/#{1}#/sql/nodes.sql'.format(
@@ -1975,6 +1998,15 @@ class PostgreSQLProvider:
         if catalog_kind == 'tablespace':
             from .cluster import tablespace_facts
             native['tablespace_facts'] = tablespace_facts(native)
+        if catalog_kind in ('database', 'tablespace'):
+            # The ACL the row carries as aclitem text, in the same rows every other object's grants use.
+            from .cluster import parse_acl_items
+            from .privileges import apply_default_acl
+            column, codes = (('datacl', {'C': 'CREATE', 'T': 'TEMPORARY', 'c': 'CONNECT'}) if catalog_kind == 'database'
+                             else ('spcacl', {'C': 'CREATE'}))
+            if column in row:
+                native['privileges'] = parse_acl_items(row.get(column), codes)
+                apply_default_acl(catalog_kind, native, row, 0)
         if catalog_kind == 'pgagent-job':
             from .pgagent import facts as job_facts
             native['job_facts'] = job_facts(native)

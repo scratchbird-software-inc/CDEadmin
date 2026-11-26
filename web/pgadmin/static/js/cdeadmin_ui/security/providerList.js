@@ -25,3 +25,13 @@ export async function listResources(post) {
   }
   return items;
 }
+
+/**
+ * The endpoint URL for one database: the server only accepts a request whose body names the same
+ * database as the URL's `database_target_id`, so the manager's own (server-scope) URL cannot be reused.
+ */
+export function scopedEndpointUrl(endpointUrl, targetId) {
+  const [path, query = ''] = String(endpointUrl).split('?');
+  const kept = query.split('&').filter((part) => part && !part.startsWith('database_target_id='));
+  return `${path}?${[...kept, `database_target_id=${encodeURIComponent(targetId)}`].join('&')}`;
+}

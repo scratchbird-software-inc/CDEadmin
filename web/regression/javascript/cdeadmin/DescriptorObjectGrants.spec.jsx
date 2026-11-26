@@ -1,7 +1,7 @@
 import {fireEvent, render, screen, waitFor} from '@testing-library/react';
 import Theme from 'sources/Theme';
 import DescriptorObjectGrants, {
-  grantRows, objectGrantsOffered, objectTypeValue, parseAccount, dialogValues, canRevoke, heldRows, granteeSpelling, embeddedGrants, narrowedOperation,
+  grantRows, objectGrantsOffered, objectTypeValue, parseAccount, dialogValues, canRevoke, heldRows, heldAcrossDatabases, granteeSpelling, embeddedGrants, narrowedOperation,
 } from '../../../pgadmin/static/js/cdeadmin_ui/security/DescriptorObjectGrants';
 import ObjectGrantsSurface, {objectContext} from '../../../pgadmin/static/js/cdeadmin_ui/security/ObjectGrantsSurface';
 import {resetDescriptorClient} from '../../../pgadmin/static/js/cdeadmin_ui/objects';
@@ -352,6 +352,67 @@ describe('PostgreSQL-shaped grants: rows carried on the object, defaults and col
     // A kind whose listing has no such field, or an empty argument list, is not given the field wrongly.
     expect(dialogValues(pg(), operation, 'table', 't', ['db', 'service', 't'], undefined, {})).not.toHaveProperty('arguments');
     expect(dialogValues(pg(), operation, 'function', 'f0', ['db', 'service', 'f0'], undefined, {argument_types: ''}).arguments).toBe('');
+  });
+
+  describe('what a principal holds inside databases', () => {
+    const database = (name, oid, extra = {}) => ({resource_kind: 'database', resource_id: `db:${oid}`, display_name: name,
+      display_path: [name], native: {catalog_metadata: {did: oid, datallowconn: true, ...extra}}});
+    const SERVER = [database('sales', 16384), database('ops', 16385), database('template0', 4, {datallowconn: false})];
+    const salesRows = [orders, column, elsewhere,
+      {resource_kind: 'database', resource_id: 'db:16384', display_name: 'sales', display_path: ['sales'],
+        native: {privileges: [acl('app', 'CONNECT')]}}];
+
+    it('reads each connected database, names the ones it could not read, and skips a template', async () => {
+      const asked = [];
+      const load = async (target) => {
+        asked.push(target);
+        if(target === 'postgresql-database:16384') return salesRows;
+        throw new Error('not connected');
+      };
+      const result = await heldAcrossDatabases(pg(), SERVER, 'app', 'role', load);
+      expect(asked).toEqual(['postgresql-database:16384', 'postgresql-database:16385']);
+      expect(result.skipped).toEqual(['ops']);
+      expect(result.truncated).toBe(0);
+      expect(result.rows.map((r) => `${r.database}:${r.scope}:${r.object}:${r.privilege}`)).toEqual([
+        'sales:table:public.orders:INSERT', 'sales:table:public.orders:SELECT']);
+    });
+
+    it('does not repeat the database\'s own entry, which the server-scope listing carries', async () => {
+      const result = await heldAcrossDatabases(pg(), SERVER, 'app', 'role', async () => salesRows);
+      expect(result.rows.some((r) => r.scope === 'database')).toBe(false);
+    });
+
+    it('caches a successful listing only, so a database connected later is read next time', async () => {
+      const cache = new Map();
+      let up = false;
+      const load = jest.fn(async () => { if(!up) throw new Error('not connected'); return salesRows; });
+      const first = await heldAcrossDatabases(pg(), [SERVER[0]], 'app', 'role', load, cache);
+      expect(first.skipped).toEqual(['sales']);
+      up = true;
+      const second = await heldAcrossDatabases(pg(), [SERVER[0]], 'app', 'role', load, cache);
+      expect(second.skipped).toEqual([]);
+      await heldAcrossDatabases(pg(), [SERVER[0]], 'app', 'role', load, cache);
+      expect(load).toHaveBeenCalledTimes(2);
+    });
+
+    it('reads at most the limit and says how many it left', async () => {
+      const many = Array.from({length: 5}, (_, index) => database(`d${index}`, 20000 + index));
+      const result = await heldAcrossDatabases(pg(), many, 'app', 'role', async () => [], new Map(), 3);
+      expect(result.truncated).toBe(2);
+    });
+
+    it('names a database whose listing carries no id instead of asking for an undefined target', async () => {
+      const load = jest.fn(async () => salesRows);
+      const result = await heldAcrossDatabases(pg(), [{resource_kind: 'database', resource_id: 'x', display_name: 'odd', native: {}}],
+        'app', 'role', load);
+      expect(result.skipped).toEqual(['odd']);
+      expect(load).not.toHaveBeenCalled();
+    });
+
+    it('is nothing for an engine that keeps its grants in the server-scope listing', async () => {
+      const mysql = loadEngineBundle('mysql').security.grants;
+      expect(await heldAcrossDatabases(mysql, SERVER, 'app', 'role', async () => salesRows)).toEqual({rows: [], skipped: [], truncated: 0});
+    });
   });
 
   it('finds the object by kind and name when the node has no id', () => {
