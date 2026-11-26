@@ -1932,9 +1932,9 @@ Gaps found, not closed:
   a table and ``EXECUTE`` on a function in one database and ``SELECT`` on a table in another;
   with one database connected the other was named, and connecting it added its row.
   Tablespace ACLs are read the same way but were not clicked through.
-* Help text cleanup (2026-11-26): 143 user-facing strings in the PostgreSQL forms (database,
+* Help text cleanup (2026-11-26): 138 user-facing strings in the PostgreSQL forms (database,
   index, routine, sequence, server, table, trigger, type, view) named implementation
-  internals: "Read-only property shown by pgAdmin in properties mode only" (92 times),
+  internals: "Read-only property shown by pgAdmin in properties mode only" (71 times),
   "Provider tree: ..." notes, the ``*.ui.js`` file a field came from, endpoint names such as
   ``get_columns``, and claims about pgAdmin behaviour the provider tree does not have
   ("pgAdmin confirms first", "pgAdmin warns"). Each is rewritten as plain guidance that keeps
