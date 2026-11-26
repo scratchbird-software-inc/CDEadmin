@@ -382,34 +382,20 @@ def test_firebird_users_lifecycle_compilation_and_server_sec_discovery():
     assert 'COMMENT ON USER "FB_ANALYST" USING PLUGIN "Srp" IS NULL' in alter_prev
 
 
-def test_postgresql_cluster_role_password_redaction_and_acl_parsers():
-    created = pg_cluster.compile_operation(
-        'role',
-        'create',
-        {},
-        {
-            'rolname': 'pg_auditor',
-            'rolcanlogin': True,
-            'rolpassword': "S3cr3t'Pass",
-            'rolmembership': [{'role': 'pg_read_all_data', 'admin': False}],
-        },
-    )
-    assert "PASSWORD '<redacted>'" in created['preview_statement']
-    assert 'S3cr3t' not in created['preview_statement']
-    assert "PASSWORD 'S3cr3t''Pass'" in created['statement']
-
-    altered = pg_cluster.compile_operation(
-        'role',
-        'alter',
-        {'name': 'pg_auditor', 'catalog_metadata': {'rolcanlogin': True}},
-        {
-            'rolname': 'pg_auditor',
-            'rolpassword': 'Rotated!Password',
-        },
-    )
-    assert "PASSWORD '<redacted>'" in altered['preview_statement']
-    assert 'Rotated!Password' not in altered['preview_statement']
-    assert "PASSWORD 'Rotated!Password'" in altered['statement']
+def test_postgresql_cluster_role_password_refusal_and_acl_parsers():
+    # A plan never carries a password (owner decision 2026-11-25): create and alter both refuse it,
+    # without echoing the value; the inherited Properties dialog sets passwords.
+    for operation, native, draft in (
+            ('create', {}, {'rolname': 'pg_auditor', 'rolcanlogin': True, 'rolpassword': "S3cr3t'Pass"}),
+            ('alter', {'name': 'pg_auditor', 'catalog_metadata': {'rolcanlogin': True}},
+             {'rolname': 'pg_auditor', 'rolpassword': 'Rotated!Password'})):
+        with pytest.raises(Exception, match='never carries a password') as refused:
+            pg_cluster.compile_operation('role', operation, native, draft)
+        assert 'S3cr3t' not in str(refused.value) and 'Rotated' not in str(refused.value)
+    # Without a password the same role compiles, and nothing mentions one.
+    created = pg_cluster.compile_operation('role', 'create', {}, {
+        'rolname': 'pg_auditor', 'rolcanlogin': True, 'rolmembership': [{'role': 'pg_read_all_data', 'admin': False}]})
+    assert 'PASSWORD' not in str(created)
 
     # Minimal dict backward compatibility vs enriched role_facts
     minimal_input = {

@@ -315,13 +315,13 @@ def _labels(name, draft):
 
 
 def _password_clauses(draft):
-    """Return (exec_clause, preview_clause) or (None, None) for rolpassword."""
+    """A password is refused: a plan never carries one (design owner decision 2026-11-25, restoring the
+    documented behaviour); passwords are set with the inherited Properties dialog. Returns (None, None)."""
     pwd = draft.get('rolpassword')
     if _blank(pwd):
         return None, None
-    if not isinstance(pwd, str) or '\x00' in pwd:
-        raise PostgreSQLNativeAdminError('password must be valid text')
-    return 'PASSWORD ' + _literal(pwd, 'password'), "PASSWORD '<redacted>'"
+    raise PostgreSQLNativeAdminError(
+        'A plan never carries a password; set it with the inherited Properties dialog')
 
 
 def _revocations(name, draft, key, direction, label):

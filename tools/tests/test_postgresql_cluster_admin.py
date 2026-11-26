@@ -65,10 +65,10 @@ def test_role_create_with_every_clause_and_no_password():
         "'app'",
         'COMMENT ON ROLE "app user" IS \'it\'\'s\'']
     assert len(parse_sql(text)) == 6
-    compiled_pwd = compile_kind('role', 'create', {'rolname': 'x', 'rolpassword': 's3'})
-    assert "PASSWORD 's3'" in compiled_pwd['statement']
-    assert 's3' not in compiled_pwd['preview_statement']
-    assert "PASSWORD '<redacted>'" in compiled_pwd['preview_statement']
+    # A plan never carries a password (owner decision 2026-11-25); the inherited dialog sets it.
+    with pytest.raises(PostgreSQLNativeAdminError, match='never carries a password') as refused:
+        compile_kind('role', 'create', {'rolname': 'x', 'rolpassword': 's3'})
+    assert 's3' not in str(refused.value).replace('never carries', '')
 
 
 def test_role_alter_emits_only_chosen_attributes():
@@ -196,6 +196,5 @@ def test_role_family_shapes_inherit_set_labels_and_known_attributes():
     with pytest.raises(PostgreSQLNativeAdminError, match='nothing to change'):
         compile_kind('role', 'alter', {'rolcanlogin': True, 'rolconnlimit': 3},
                      full)
-    altered_pwd = compile_kind('role', 'alter', {'rolpassword': 'x'}, full)
-    assert altered_pwd['statement'] == "ALTER ROLE \"app_owner\" WITH PASSWORD 'x'"
-    assert altered_pwd['preview_statement'] == "ALTER ROLE \"app_owner\" WITH PASSWORD '<redacted>'"
+    with pytest.raises(PostgreSQLNativeAdminError, match='never carries a password'):
+        compile_kind('role', 'alter', {'rolpassword': 'x'}, full)

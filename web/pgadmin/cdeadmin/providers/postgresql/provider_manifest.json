@@ -134,8 +134,8 @@
     "exact_engine_contracts": {
       "state": "qualified",
       "reference_version": "18.3",
-      "qualification_scope": "197 generated native SQL compiler tasks; 52 core statistics/diagnostic families and 604 native columns; preserved HTTP forms and full product/platform acceptance remain separate",
-      "native_receipt_sha256": "bef218b1479558653c937db2e8e581e47589cb3fb70e95f2c72fe002e1252e57",
+      "qualification_scope": "199 generated native SQL compiler tasks; 52 core statistics/diagnostic families and 604 native columns; preserved HTTP forms and full product/platform acceptance remain separate",
+      "native_receipt_sha256": "e5fef209f1c5843dba0010b46323101a5b62e56a8b9487888456339fa778a06c",
       "metrics_receipt_sha256": "519ccf9274419cbb50a5435e15b22d2999475302fda965e3c7db116fcae6d1fc"
     },
     "live_evidence_reference": "cdeadmin-postgresql-provider-tree-live:18.3:20261111",

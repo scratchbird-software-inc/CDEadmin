@@ -1813,15 +1813,23 @@ tablespace). Two failures in ``test_ui_descriptor_operations_postgresql.py``
 (``test_role_lifecycle_round_trips``) and ``test_postgresql_batch1_admin.py`` also fail
 without these changes.
 
-Known consequence, needs the owner's pipeline: ``dialect_task_ids()`` is every operation
-whose route is ``provider-native``, and the packaged contract
-``postgresql_dialect_18_3.json`` (197 tasks, with native receipts) does not yet list
-``privilege.grant`` and ``privilege.revoke``, so
-``test_postgresql_metrics.py::test_packaged_postgresql_contracts_have_exact_native_acceptance``
-now reports the contract as ``blocked`` (a comparison of the PostgreSQL test files with
-and without this change shows that as the only new failure). Admitting the two tasks means
-adding them to ``tools/cdeadmin_postgresql_batch6_proofs.py`` and re-running it: it starts
-disposable ``postgres:18.3`` containers, executes every task, and rewrites the dialect and
-metrics contracts and ``provider_manifest.json``. It reads the PostgreSQL 18.3 source from
-``/home/dcalford/Sandbox/donor_release_acquisition`` and writes receipts under
-``/home/dcalford/Sandbox/codex-work-area``, another workspace's area, so it was not run here.
+Contract admitted (2026-11-25, run at the owner's direction): the two tasks were added to
+``tools/cdeadmin_postgresql_batch6_proofs.py`` and the pipeline re-run. It executed all 199
+provider-native tasks on a disposable ``postgres:18.3`` primary and standby, ran
+``test_ui_descriptor_operations_postgresql.py`` against it (57 passed), regenerated
+``postgresql_dialect_18_3.json`` (199 tasks, one native proof each for ``privilege.grant`` and
+``privilege.revoke``) and ``provider_manifest.json`` (199 tasks, new receipt digest), and the
+contract descriptor reports ``passed``. It wrote its receipts (``summary.json``,
+``native-metrics-receipt.json``) into the other workspace's qualification directory
+(``/home/dcalford/Sandbox/codex-work-area/cdeadmin-six-engine-implementation/postgresql-qualification``);
+the originals are kept in ``temp-workarea/pg-contract-backup``. A comparison of all PostgreSQL
+test files with and without this work shows identical failure sets (7 failed, 8 collection
+errors, all pre-existing).
+
+The pipeline's role gate exposed a conflict that predated this work: commit ``d910d1348``
+made the provider tree's role create and alter compile a ``PASSWORD`` clause (redacted only
+in the preview), while the spec, the form notes and
+``test_role_lifecycle_round_trips`` say a plan never carries a password. Owner decision
+2026-11-25: refuse it. ``_password_clauses`` now raises, without echoing the value, and the
+three unit tests that asserted the opposite assert the refusal; passwords stay with the
+inherited Properties dialog. The legacy Security Manager host does not use that compiler.

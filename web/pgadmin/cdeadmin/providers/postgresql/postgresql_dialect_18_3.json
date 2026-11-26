@@ -43,7 +43,7 @@
       "evidence_kind": "parser_acceptance",
       "authority": "PostgreSQL18.3 native parser",
       "artifact": "summary.json",
-      "sha256": "bef218b1479558653c937db2e8e581e47589cb3fb70e95f2c72fe002e1252e57",
+      "sha256": "e5fef209f1c5843dba0010b46323101a5b62e56a8b9487888456339fa778a06c",
       "format": "native SQL execution receipts; successful execution requires native parsing",
       "license_id": "PostgreSQL"
     },
@@ -52,7 +52,7 @@
       "evidence_kind": "live_execution",
       "authority": "PostgreSQL18.3 native execution",
       "artifact": "summary.json",
-      "sha256": "bef218b1479558653c937db2e8e581e47589cb3fb70e95f2c72fe002e1252e57",
+      "sha256": "e5fef209f1c5843dba0010b46323101a5b62e56a8b9487888456339fa778a06c",
       "format": "native SQL compiler task receipts",
       "license_id": "PostgreSQL"
     }
@@ -88278,7 +88278,7 @@
         "handler"
       ],
       "native_statement_sha256s": [
-        "937739f69b7ac8ca36ee7effea86199f184e05326dc74e8cc128c1deed72dd16"
+        "ab1cd4f604d207b7b59945be646de9b6b3b42a525f674e0e9d324b471e5feaf4"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -88295,7 +88295,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "bd938e9f3ae25a067a50ed536ddbe5113b5e6765de6e31fad3bdc6ffadc79c3d"
+        "db4e62e5a9d635a762b5fe065c70d45c67d9f0a09d3215b81d54e449cc93d42b"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -88311,7 +88311,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "4685ca310262afcca87eb1032d7237ebba424eb09a25db36bd77cefac0a4a7c1"
+        "28bbde7cb128bf19e30dd0f907dd0da17a0034361374fb42c4153133989e2419"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -88328,7 +88328,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "b2f453a1573cd2cc1985829fb1c37456727410f3b1ced4fc64ba9cfd61cfe6e4"
+        "8338f8ffbe973d47f7817d04360d0368196e39833c500c8872e92d1b8ebdd71e"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -88346,7 +88346,7 @@
         "definition"
       ],
       "native_statement_sha256s": [
-        "bb76f55bbd4204938e8ec7186d57048467ad46355cf4b62dbeacc8cffce13975"
+        "ab15c49f4255a9c85c6415a79b6fc6781aa1877c654dd93c7373098a19f7fbc6"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -88363,7 +88363,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "66359aa0ca47e639aab7b880c32f2be6a9b1f18e62482985a44af4106fa44ccf"
+        "d32448caf8cbe5673eee304b838b83ffab66ab96c5b408eff9915979843dc454"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -88482,10 +88482,10 @@
       "native_statement_sha256s": [
         "48eee8969c4fa1ae174f9ca9cf10727e37a081290f984ffac839a5c1c8f200f8",
         "4d21514e51a246dcafcf8bec1bd9aa8048fd4e2fa6de98c8aae5888eec48c772",
+        "4ebab5d7cf907c14e76e4a70e1f683ee6ac1c5d277bbac6de5e420c8133db739",
         "5bcd99c6193c7eb36bb0580b0a07d9c3ec833521857e5c8561eb12195d339299",
         "9035a6850505f53f160c386cdb1c5139750fd2b44ab5a219de4eb0f49cbbb660",
-        "c21bd1b3364a3e3876840695af9fbc7028d830cffb6d03b4c28a36000e76b590",
-        "f49fb7918ce3290c32a7cb47f44f20b9109e81c8ddc3bbf7e1d30d4d58533490"
+        "fd0d179ef3d65aa2c1e65d8633db763b1e63948ad5753c28de83122b5d3cc8db"
       ],
       "native_execution_count": 6,
       "proof_ids": [
@@ -88598,7 +88598,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "9fe4fb655f8672eebe1488ab5e78a696aa6d7dacd92eff35478e8b80ab3b9814"
+        "cb6fa11e166a5509f0e23a6726084d190c79511288c57ff071013a4da30e6b25"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -88618,7 +88618,7 @@
         "function"
       ],
       "native_statement_sha256s": [
-        "18023b5b03942b033c1f3cfac18c0d79bb71a6184037748ec2533ebd2d156e12"
+        "255d516f59179e2461c9e301da927b12f48071bf6b4d5b664c0fede96d5a5fc9"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -88635,7 +88635,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "67fedabaf67b65652aa0ea5ceec33d367fe679f88371b6005f485e3733999ecd"
+        "11fe6113079611f6fb0736e4eaeffe03a8f78c97d636f39107f198afad8b117e"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -88651,7 +88651,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "1598139b7e621b647c9f92f0e53b1a3ace3a8d4f352bb5dcb04306246969924e"
+        "19d35ab2d6357ce072af8d288b4fbeff0ed60c580825b2d2cf70d0dcc492097a"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -88667,11 +88667,11 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "3c0beeb39523712abeedf303279d2e30523e703585d8da272927b8a5ca325532",
-        "3f410d76722d29bfcbb1a002e650d4a6abc9670c14c37407f3029a122eabf75f",
-        "9b3df9858f3fcd62d36d02e69f98c3507acae7ce5d722508a900573657d8bd7d",
-        "9d2162e6b6264e7d2e8a93741b361b3b7038685c6b9a7bd349ff1a86660acebb",
-        "9e3d91a6bd2a5039e4bed37d7d21c3fc1f8f6e50453200f7d1450156160039b3"
+        "0d71fc3b755185de2602a8dda5bd716e66915b8aa622189415b00fceae744a14",
+        "4f7f657abbda941c5a2f5c1cf845243deaf02116138f431f563a8dcd629bb9a5",
+        "62017fc401861911c46e76761bd19fb386e065a31155dbfd8ebae451d9bc60fc",
+        "e37eb046c6d772c5aea71d686a815a732920cd56a58a64bf8a10e22b4b450431",
+        "f8dc7ecf1ed79d61f6064406a6cb8f5d3a26b76b527a470963d5709d55a3e8cc"
       ],
       "native_execution_count": 5,
       "proof_ids": [
@@ -88703,7 +88703,7 @@
         "name"
       ],
       "native_statement_sha256s": [
-        "28cf14998e940de10f7307830d991ae5473fbf8cc922ca4591cc877d2439039c"
+        "aafd311307e2632ddf8e9ba2531d930c13ddb2f43fb29ffead3a12ca12f0c426"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -88720,7 +88720,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "10f477e179fd3fd93b7ef4c4f841c5420300b99757f04a33d43a4147cbbf77e7"
+        "e3b1954ff5c31f4206257cb87c7c571b870433f2c5676405766880cc2946af3b"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -88752,7 +88752,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "9dae7982f8fe3262bb6a79ce7baa8a3a8436b6ac538aedc23edd9629aa323f81"
+        "2994bd63512deeea4f84aaaaac1994da45a7dcec85957953e3a1668b7cc329e5"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -88768,7 +88768,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "e255f116835d2453511971aec281d5421860169c5108de249ee67f0ea0870e34"
+        "a2d30a4450f593460aea42c6d7050ae7334af028bd025bc7069ba811eb428b9b"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -88801,7 +88801,7 @@
         "privileges"
       ],
       "native_statement_sha256s": [
-        "5f54d1a61ac0a73e2a271dabdc41e2fdb7f80351f42abc5c29de358afc0603f5"
+        "67faa57f7f842bcd68fe5a475b7e79a90c440039539f43a620d42c0c9ef14fdb"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -88817,7 +88817,7 @@
         "object_type"
       ],
       "native_statement_sha256s": [
-        "dd88bcc3efa83f44a794e00078f41d6b97020880c285e90792b1b999090d67c4"
+        "e0fbff9004d129fec60dd9337af2aec5fc9a754b3cf49657a3c4dd4a9fcf234a"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -88834,7 +88834,7 @@
         "privileges"
       ],
       "native_statement_sha256s": [
-        "1225cceaaa2492070fe24a2768fb7bae4c51e9b833f5b7908d2f43a4d2475725"
+        "068540262ed2d494aaf468a34aba9a1ea0a0a2168e482710b962ce0d8340c4f4"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -88954,7 +88954,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "018a36955c44905bee69611d5ae586955e8fe0a0684f3ce708f742934e64bcff"
+        "6c6cc5b85e9cfdbeb1e04481151b99f0e1f8ba0eca8ef7e40f664dba0050ca10"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -88974,7 +88974,7 @@
         "elements"
       ],
       "native_statement_sha256s": [
-        "506481f1f413c4b66b172724ec5c1691ce0d64c602dc69937ff36cf2bb618278"
+        "8ab019635f2f8f24454aed549a4aa93bce2d2a5047e0f11ffb8dc2a4e4d384ac"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -88991,7 +88991,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "c5c2d5bf1988d41a767b5d3cb04887c8f8c4d4d622f2273216640d637c5138de"
+        "16db38b071cd3fc99e1d59df865d47ca7ce7bfeb87cc296a708fe1a331f7be1d"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -89173,7 +89173,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "7e70e7afdeca8cc9301f2743f1bf3a66aee20be53cd72f8166a1c65397b69267"
+        "94b68f0ce122b191340bf04bf2fbdab11d2929f9b2327a9a3144551dcdeb2b65"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -89239,9 +89239,9 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "007eb53e2b094c8259e1506cd217fab80dd6ffb83a79b389b95f40793df50dab",
         "5a317629a0358a098cf172eaec8a2e048659b5c36ac6b50ce4ea3ede93efb300",
-        "6220454d28f35cb2c09bd36e1bf26bd3c66605f3f8538ef51cf74a008853fe52"
+        "6220454d28f35cb2c09bd36e1bf26bd3c66605f3f8538ef51cf74a008853fe52",
+        "9470f27ccb6638a88f06a6f2fe7b23436a1c3e505dbef714c092f4444e16ead5"
       ],
       "native_execution_count": 3,
       "proof_ids": [
@@ -89315,7 +89315,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "d326d9fb1de0fdeab6dcdf3cc5343b4638570eabdb8144a991be020ab4160aa1"
+        "363536560b9adf89bed475f5d83994c32053f850261c2529a11abd97458296e5"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -89486,7 +89486,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "93560fd9d1582eae5c67a4494fe8662b7544dba2f9d6939d057c03b5bb340363"
+        "7deb91b6b85e0a5bff774ee2fbaeb38827906e43beb916181f66d66533054fe1"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -89504,7 +89504,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "7c81606a7320fe818afd4ee2eadc7bf8d872762f7bc95aead486ed0ad71bca96"
+        "4b7a53c99e654a5c636b973fa7b42a2d4bfdb2a123a8b1c76f1089154f51e465"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -89520,7 +89520,7 @@
         "server_file"
       ],
       "native_statement_sha256s": [
-        "baea980c3750806626807f4d6e8f3a8436999c2e6cdf76061350322af48ced5f"
+        "850e5371304752cbd0d69aa3c23e99de7081b6ddbcbac20283d591b929dd9b25"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -89571,7 +89571,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "fb9689a76377e70aa4bf6d01bf9b6bd4b7d6ed2583c2723f5eb13df8f5d69aca"
+        "0a9f5680b9e29fff0dbfdd408785629c38dceb4c787748ef54a34575b36bc800"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -89696,7 +89696,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "5429ce0825b3a6fecfa5d0a67e1054c6adde316c829ef98b2fe8f4c24a0fd224"
+        "63012e9cc1c7ff21ba58fba79a89567e4676644017f26b76965c89818f895f25"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -89715,7 +89715,7 @@
         "data_type"
       ],
       "native_statement_sha256s": [
-        "168df760bd0322e5ebb455fe357f6d451602a02d0cf6c8ddd1cf2335aa75085f"
+        "ec00c1ad457d2b3a1c6a6f498cc016f9db07cc4ae53c3ce9d7e4aca3c82488b7"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -89732,7 +89732,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "2cb06046d3b5027a080d5b7480e4f11f3f83a9a47f5e7211d972caebe5873ca6"
+        "14d35b287b11091038ae10aae843055b8756ce38b33da83bd3323a2633c71339"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -89748,7 +89748,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "4bc22486a05857f04ce6578b9f069a7abfdfb0b3a6da61c012b258e7ae864b82"
+        "684fac575883c5b0acc9b1132220fb197ac6ae49ff0221560368f8181aa1b932"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -89767,7 +89767,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "7231f472eeb5df94d64eb9f7a9ce52f2a43879081823ccb25a44b592623f5a33"
+        "9ef164bef6dfffc1df7375dc7b35fb95f6d3c30f18c37ddd6741e6848e5c191c"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -89785,7 +89785,7 @@
         "index_method"
       ],
       "native_statement_sha256s": [
-        "9c9ecc2d22afe3021badcbd9b3e7f88a47e4248ca6d8b13d8c48e629c917663f"
+        "f9fadb309828cb620f1e31c75a8745967b48bc11278594b45a9bed4ec6e4a192"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -89802,7 +89802,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "ab58c9d2ecaeca33c9d90ec3eb7b765876fa38bae05ece03aec9e3e936f36206"
+        "75038401ba7b12bec5fd30d49cd512916569fdd3ae3178a1353097c933eab374"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -89818,7 +89818,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "68c6f84b93dcc8ba4d7e723d73867768701f5da7485e04487c1ab4ed6d963dbc"
+        "95da83902cc4ceb0db20807d9781662dbdf69f81a51f7582d2aa8312e348d08e"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -89836,7 +89836,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "6bbf9a770912f40c183534c3b991b5fa8db64043573c97bad63bba735a277ddd"
+        "1ddad0eb8275c1ef78122bc0fdb318f6b8c6516775adcc8a78357f804307ec17"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -89855,7 +89855,7 @@
         "right_type"
       ],
       "native_statement_sha256s": [
-        "937b41cd2c7bf1b1582516a03ad2789294db43f99478545c28d235bee12b04f9"
+        "ed2e1263516f217b2b29719ffc360a801f75f1dbd588a3e652e546bd503a6f7c"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -89872,7 +89872,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "905d7e7387f12e64cf0e547c02f1efed5eb73de109f3a899ec0f76828a1bd381"
+        "e2a79309f485e35776ac4d1ce1bbff7834e796d6b0fd71ac69de6ff431717015"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -89888,7 +89888,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "3649ae95669f6d5f210f834a6549cbb294ccf00a16fd654bd6a74fc03d1878f6"
+        "375db3a0b26679e765f534b0763bd317b1fec51d46a5de5f2db04ede0411b901"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -89905,7 +89905,7 @@
         "roles"
       ],
       "native_statement_sha256s": [
-        "648868d7e24cce0c461629341069e1cf19ba74bcff5dd42e5eff18405ff05eca"
+        "3783931ae150ec7c69fc5ec6addfc0e5ebeef1268283014cc76e3654b2973932"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -89936,7 +89936,7 @@
         "roles"
       ],
       "native_statement_sha256s": [
-        "785471994d3d556a1d78193b5c9eb97b04ca4fafdce3f56f438ec62c081a0c8f"
+        "4617710f9f16e8d7fd6c399e9c514829beadf4ca1ad12ff82cd636b1b4fa61e6"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -89953,7 +89953,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "fb3226ba253f476944cf97e3e8c14ed802ed2b5df75f01b79c55128fdab0460d"
+        "94731c7ac7aac9b410f82f3af00d3db2dea171df49e77feb9f3b9998b1c9065e"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -89969,7 +89969,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "b2c051260f32d381efee2984f74f8d81325df26a1eb60901fb4ca716130ec920"
+        "bcb2a890220dde640a1c444277ba3f5b30faa6956ede1d1313fb7b1adceed641"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -89985,7 +89985,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "cfea8ecba2640265224b14ed73e2d84a9a6100619d88bf5ec0d8ff6f29e43700"
+        "e6160a18392a974db552f44d091d120d1b9283a5eed7616f82a0c8864e56ecc3"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -90035,7 +90035,7 @@
         "schema"
       ],
       "native_statement_sha256s": [
-        "4825475f8089bfbd6d148cb07409875bf6a6607b8de83c0a61eebe008121531f"
+        "1ea2a8c80b58bc1b00115396864b9c3555a5b4a5e9db02fc5dd788b9046d706d"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -90070,7 +90070,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "9655c588fb4f4be76972650cb6b022e02e0b1da3c470892e74b80f692322346e"
+        "e60553b1818b47d09e602dd522b0ff2334279ce551175c4de0b8b20dbd0f6b6a"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -90086,7 +90086,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "64a313542c4a1cb47922fb64b7116706b3e575a18eb11c74fb4f2803e82842a5"
+        "92d3c6a2dc1f9534b25d106403374f06c28d567a279b0f0a37b547731bf33f60"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -90102,7 +90102,7 @@
         "jobname"
       ],
       "native_statement_sha256s": [
-        "29b40b8008092dcff646c0befe67571dbb8110e5d6d6617753dbab29b5d98ef9"
+        "7f74cde21090bcdb47c914cc593655a3dfd033d9113c7548272032ad78447723"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -90170,7 +90170,43 @@
         "confirmation"
       ],
       "native_statement_sha256s": [
-        "7204c05362a7c2b90b4c49ac51c78ab68caed1126f0ca2b38c7d771aa9cc071e"
+        "62a4f28fe15dbf0a1630fa1ba67c40f0e5824806908910b92f0859803ba1776e"
+      ],
+      "native_execution_count": 1,
+      "proof_ids": [
+        "postgresql18.3-task-parser",
+        "postgresql18.3-task-execution"
+      ]
+    },
+    {
+      "task_id": "postgresql.privilege.grant",
+      "source": "pgadmin.cdeadmin.providers.postgresql.native_admin.compile_native_admin:privilege:grant",
+      "source_format": "provider_native_compiler_reference",
+      "required_bindings": [
+        "object_type",
+        "privileges",
+        "grantees"
+      ],
+      "native_statement_sha256s": [
+        "b2d9a7b83add2a34fa5dff410a5bcf30f564ae7606ed9746fa182f675afbc370"
+      ],
+      "native_execution_count": 1,
+      "proof_ids": [
+        "postgresql18.3-task-parser",
+        "postgresql18.3-task-execution"
+      ]
+    },
+    {
+      "task_id": "postgresql.privilege.revoke",
+      "source": "pgadmin.cdeadmin.providers.postgresql.native_admin.compile_native_admin:privilege:revoke",
+      "source_format": "provider_native_compiler_reference",
+      "required_bindings": [
+        "object_type",
+        "privileges",
+        "grantees"
+      ],
+      "native_statement_sha256s": [
+        "b16139b8993d3db36a55cc1cf07ead44559a992271606ef51588f49bae24928d"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -90289,8 +90325,8 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "403dd801f049138dc68e8df2ed048de8a07a604e665391395c1365b1327c0a6f",
-        "b4c38076c324e22e77930d5f6413091f0606e4e7494506dbb53389a6ab912002"
+        "4299087774738c6b01028c1dadc647cdb09b77f591c8bc499541c2d702163374",
+        "a81a3ab6c5ac62bfd55b423bd2ae0613e180eb95dc1b6a0978feda03a7d18516"
       ],
       "native_execution_count": 2,
       "proof_ids": [
@@ -90306,7 +90342,7 @@
         "rolname"
       ],
       "native_statement_sha256s": [
-        "80545c6dd7f9c9ebf58b5f6ec018e3045ee892ac7a858ae5eb8fef9f9dda3273"
+        "cca79e2c7ea0dd62ba1ceaaccfcae5434f7a383a7af7a93c481e6f75e868431d"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -90323,7 +90359,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "9a8f8b47fff1bf2592834fd40c7298b6720e2cce6f97703e161a057c13b0b39e"
+        "f275a646098a808e090687e4c2593eecc9c783c0e60b41fc37e839f6b54a1a84"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -90341,7 +90377,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "dedf16d7a2f0573002e05ab33af425866ba3db077a55588c88cfcd102fec49b7"
+        "c20d08dfc5cc7af9b119c0f103179e0c51f3d700a2d91b56fe89e6ea3b030f07"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -90359,7 +90395,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "47db38d7e284d5cae5b2e40b32f2193af4e1817bc6267e10094ee4ddb37761c6"
+        "ee4de0a6466cc8ba9fd38c29c1032d159147a164060349023e769b0cccad56b4"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -90393,7 +90429,7 @@
         "table"
       ],
       "native_statement_sha256s": [
-        "f7634aa118e32092add44772b35855b1f15e02de6a49f707a34e8bc0f90333a6"
+        "8f799db819715b8dc6fb34a216861e6e60aa17ddb541fa53f3e8e1a0a96c09da"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -90478,7 +90514,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "afad0f3ea446a774ea08b27b363367524b68fec383b11e1ee020f84bebbf6d9a"
+        "80eaf91136ed2d2d04bad7547c907b9011d106dc5874ac71cce45fe9d1752cca"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -90510,7 +90546,7 @@
         "name"
       ],
       "native_statement_sha256s": [
-        "c684075785d80d0c76cd97fb9ff8bda3cc5c06e575624afd3912332554405460"
+        "27d6060c68f06d1bd1b70633bc44a9e103e572319cac74784a0181e7b98a2950"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -90575,9 +90611,9 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "5eb72593b86fc73180e95edf3d5e11ae9d304ab69dd8ff65ad359b49bb865cd3",
         "618aaee4bb4b881b48eaa192f7c18e6d6f2e0f2fbd2e22f7787c43096083c51c",
-        "b3b421b28312ed33cfcf9956e458245e73db51de2f6b827eb888376236a56a77"
+        "713df437719f9d8d0f35010d1ec7bdf59fb74928a5a2dde870c378b498751488",
+        "c0d1682648fd3b3ebd57d9437a6626c1bf4718b895ed53c89064551127c58fd5"
       ],
       "native_execution_count": 3,
       "proof_ids": [
@@ -90594,7 +90630,7 @@
         "schema"
       ],
       "native_statement_sha256s": [
-        "c6bd20a14144368324f767244dcb1286841255dd6e5e0a2fbeaf1d991f206027"
+        "64061fd05fd855bd900a75ecf7227e602d83f8b1ad6e7735683c9f0fa8ff4f91"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -90737,7 +90773,7 @@
         "confirmation"
       ],
       "native_statement_sha256s": [
-        "f7b658c8aabe7d8466daf11760c68e0609f588d0343c12e195a7fa236326b742"
+        "703906f8395b01d318aca0c1ebf7976542b5b288b8e0205b42477ae05672bfa1"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -90753,7 +90789,7 @@
         "name"
       ],
       "native_statement_sha256s": [
-        "a8686e9b7cd2c7212e8b8edd90d19f083da6fd8696580a1c8383cc6102c1a950"
+        "ae300b7683f858b012505149b8ff3e4d8d2a9689429f304813d3874e00b60f09"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -90814,7 +90850,7 @@
         "pub"
       ],
       "native_statement_sha256s": [
-        "4ab538956ed54230ebccc20f2bb0db6e35dbc1ba90495322336451281f7b78fe"
+        "9d302a1b4bb8959d11685aeae2638aa21357f93dd2a311371f05510c2598c1ce"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -90847,7 +90883,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "107b187b14f5d660d21fa0f4e93d0a288e68c5322e542100cea458c6a1a5422c",
+        "8e80ccafaf44bcf5e137e4fdd202e5888c06fe90400c3ba1ffd618560ff0b3e5",
         "95f58a41ce35c367c8ea5a0a5a5b60bb5311cedbc3135373da62ef16ded82b0b"
       ],
       "native_execution_count": 2,
@@ -90881,7 +90917,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "2ec952861e3adf6ee0491b71e25ee1385e1ec4b208d5ff66830a225dda8333fb"
+        "0c30b2c32b12f9754c0ead05694dd13cc457affffd97237625b7e729d323b345"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -90932,7 +90968,7 @@
       ],
       "native_statement_sha256s": [
         "12f9f24bd8a2af62dce44876364545b32160bac1ee31e54df198febc9d64dd81",
-        "aa8e76b11dc16bbc220c45564345aa8befe83a72fefe90ba350b4f0d88a058fd",
+        "d062b741e3806d5d7d5e1b40262b38c3cc96976685a1df96f54159e6622cf170",
         "fd8bad0688f1672566c92684a2a5e96344a6927d566300cd282c255ddd33809a"
       ],
       "native_execution_count": 3,
@@ -90950,7 +90986,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "dc7b313f8385dcb3294eb046d061b914da9c595dec88dedd9414da76b09613f0"
+        "2b8c1de111e8e281cbb2d413c1e6bdbfdd45bec5fa1e046340ca98efe686724d"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -91050,7 +91086,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "9f484333b8a74035ec67822b321956b3a35b3c0e62eb2e9044dae12d8970a1a3"
+        "3293dab0cfc070bb46690e9a9881e5c59ec99a890e31d3755c9599ddc1cebd88"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -91101,7 +91137,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "ea5484e9342c73624573debd128bbfeaa19548cc455674d5b4da4f8514ba8157"
+        "d4a79a63b008867cb57911f2f3e8e5a82d9592ce8dd6f256b164473513138a50"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -91118,7 +91154,7 @@
         "spclocation"
       ],
       "native_statement_sha256s": [
-        "0441a45681e4a1a90ab8f51d6303b6e85579d5b7f3d8cf187f94ec15d55bf605"
+        "208f11446820439258482fec554c7f40525e13892ec6ed53e31dcf2d95950eee"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -91135,7 +91171,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "bdcfcee9ebb9915f079029fbfdda8b5e0b05a539cbd57e05796acd88be075e0e"
+        "8199ad18e90c96e9ed91678ba7cfce033843ba11bbcd9e1429d8ce7d2d43988b"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -91153,8 +91189,8 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "be878b30825e82c2caa0275d5307e2d303c877468dd90ea2164dcd6dcf881759",
-        "ca6fcb59e0205606240bf64c31bd82fec4557535734cb7d3d9e668eb9fe1c55d"
+        "25178fcab110304cbd17ab27e726237617e333a18b66834a07c1142385d4607d",
+        "79533fe204bc9b614953309bc6dc02437eadad91777bfbf83666c95ef4d7cfa2"
       ],
       "native_execution_count": 2,
       "proof_ids": [
@@ -91326,7 +91362,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "3a897eebbd6fa8c2526c54b0a416e7540aafde9a4e5b5990f9e3538b5396a414"
+        "d0aa107ce8fa62cb09bf500fc666fb9d2ca14e41fa810ed1dde9a84a13a18164"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -91378,7 +91414,7 @@
         "language"
       ],
       "native_statement_sha256s": [
-        "7f9c7f24f27cbce918e9553bafded2f7040d845d339d75ce26001f2fc2240842"
+        "164aafa18224896c0dc31d1f6987c48ba47554ec5bf6dd98ca9d4d6c085f754d"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -91395,7 +91431,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "415c4310f921f50170c270c9c7bd5bd18f13094aa306c6d809bd5ef529c81a29"
+        "8708c7474f438227d248c368174c23da4011f92b4df99cc8c42607ba80c2b1b1"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -91411,7 +91447,7 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "fc08780fe6853d80f44a7f966e322d038ca3b083e6a9aa4cfc70c7d75f72ff92"
+        "2a59be7f7a3b1eba09c298a74e548de875fd121364e433c172b6c753dd74852d"
       ],
       "native_execution_count": 1,
       "proof_ids": [
@@ -91481,10 +91517,10 @@
         "target_resource"
       ],
       "native_statement_sha256s": [
-        "1cf064bf5fa97dd6302194427cddd4f4fd09f768dddaad176e3fd0030a17b638",
-        "23fb116f44d207e58b1104397fa6c7dda90957657ef00e778c6c77f4425b8917",
         "42d942d9e5a324d3c930c0a1b7a30c56adb1d07970dea4a5c7fad201292a4438",
         "509f1da897687aab5602caa43b01f5f75ebccd0e548857e281366b416281dc26",
+        "a102a757dbc85c3c9297335e0da3f55c20cb6d8d1229dc904f046d4770f42563",
+        "a4463c76f19aa00be99038b41d115217e5395723afe380790eff352ec4c5ea82",
         "e856df4b3a0b787cf3e2f6d6bfa2f2bb4587e24ff6f30c03e3523b4dd38f9b93",
         "f9c5dfc57216f6c9cfcb5b881a25d01755a402c8cdcc5fe662753bb36b99d3e6"
       ],
@@ -91591,8 +91627,8 @@
       ],
       "native_statement_sha256s": [
         "467f857340a935babdc64a8a40282692653ab821094e55d6d6797ea3b0f7f96b",
-        "535e7efa3fe5781c11bec16a1a0ec0b019f0ecc480eb46c137e32586c57ab496",
-        "c08be9b47aa0fcfb6ac202a1fbdb82ac44f02980cb53e44c542e2bac20c67492",
+        "75b763a89e16e47b29f17ac5bf45b209f2cc7ba54bfb8e55f217ccbfca4858fd",
+        "a0e7fdd0251656389da73e2248ffabe380e7bd0f2be8f25070bf8a5e440b5703",
         "ee6d3e29614cd4b5b0b57d9c93dd7eea980381b98ffa64f66a726f4ca3fb27b4"
       ],
       "native_execution_count": 4,
@@ -91638,9 +91674,9 @@
     }
   ],
   "compiler_sources": {
-    "web/pgadmin/cdeadmin/providers/postgresql/native_admin.py": "2a712f01ecdeea9615a3b8c43775a534727707db0710a1f68115fe189d596d8c",
+    "web/pgadmin/cdeadmin/providers/postgresql/native_admin.py": "0dea49a9a6aa5d3c743c95ab47002853a7fcd5fd1d114f8df96361b000105411",
     "web/pgadmin/cdeadmin/providers/postgresql/large_objects.py": "edd6d6918ba32593478858dbf37fd33791aae53c0731eb87620e713d9143a324",
-    "web/pgadmin/cdeadmin/providers/postgresql/preserved_surface.py": "e81bcdf5f3b66f4c36a245e8098032d88fc615cd822439122bcfa8aee04ada2c"
+    "web/pgadmin/cdeadmin/providers/postgresql/preserved_surface.py": "44057e2a860df58641da6b9c95eaa0d6eb368aabad13a419afdf9cc4f07409a2"
   },
   "coverage": {
     "scope": "cdeadmin_generated_tasks",
@@ -91767,6 +91803,8 @@
       "postgresql.pgagent-job.run-now",
       "postgresql.prepared-transaction.inspect",
       "postgresql.prepared-transaction.resolve",
+      "postgresql.privilege.grant",
+      "postgresql.privilege.revoke",
       "postgresql.procedure.alter",
       "postgresql.procedure.create",
       "postgresql.procedure.drop",
@@ -91854,8 +91892,8 @@
       "postgresql.view.create",
       "postgresql.view.drop"
     ],
-    "authoritative_task_count": 197,
-    "implemented_task_count": 197,
+    "authoritative_task_count": 199,
+    "implemented_task_count": 199,
     "qualification_scope": "Provider SQL compiler tasks only. Preserved HTTP forms, physical-tool jobs, platform qualification and full-product completion retain separate acceptance."
   },
   "live_evidence_ids": [

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Generate exact PostgreSQL 18.3 dialect & metrics contracts across all 197 provider-native tasks.
+"""Generate exact PostgreSQL 18.3 dialect & metrics contracts across all 199 provider-native tasks.
 
 Runs against owned loopback `postgres:18.3` containers (primary + physical standby),
-executes all 197 `dialect_task_ids()` through `PostgreSQLProvider.apply_admin_operation`
+executes all 199 `dialect_task_ids()` through `PostgreSQLProvider.apply_admin_operation`
 with live commit verification, runs `metric_gate`, regenerates
 `postgresql_dialect_18_3.json` and `postgresql_metrics_18_3.json`, updates
 `provider_manifest.json` provenance digests, and verifies `engine_contract_descriptor()`.
@@ -296,6 +296,14 @@ def _run_extra_tasks(host: str, port: int, password: str, standby_port: int) -> 
                 'privileges': [{'privilege': 'SET'}],
                 'roles': [{'role': role}],
             }, {}, use_server=True)
+
+            # 9b. privilege (grant, revoke): object privileges on an existing object (Decision 21)
+            privilege_task = {
+                'object_type': 'SCHEMA', 'object': schema,
+                'privileges': [{'privilege': 'USAGE'}], 'grantees': [{'role': role}],
+            }
+            apply_task('privilege', 'grant', privilege_task, {})
+            apply_task('privilege', 'revoke', privilege_task, {})
 
             # 10. extended-statistics (create, inspect, alter, drop)
             conn.execute(f'CREATE TABLE "{schema}".st_tbl (a int, b int)')
