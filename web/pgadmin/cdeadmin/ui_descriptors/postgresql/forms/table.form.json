@@ -56,7 +56,7 @@
       "modes": [
         "alter"
       ],
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "relowner",
@@ -84,7 +84,7 @@
       "modes": [
         "alter"
       ],
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "relpersistence",
@@ -131,7 +131,7 @@
           "modes": [
             "alter"
           ],
-          "help": "Read-only property shown by pgAdmin in properties mode only."
+          "help": "Shown when editing; it cannot be changed."
         },
         {
           "field_id": "cltype",
@@ -142,7 +142,7 @@
             "catalog",
             "column_types"
           ],
-          "help": "Any native type with its modifiers (numeric(10,2), text[], myschema.mytype); admitted by PostgreSQL's own parser. There is no type picker on the provider tree."
+          "help": "Any native type with its modifiers (numeric(10,2), text[], myschema.mytype); admitted by PostgreSQL's own parser. There is no type picker: type the name."
         },
         {
           "field_id": "inheritedid",
@@ -461,7 +461,7 @@
           "modes": [
             "alter"
           ],
-          "help": "Read-only property shown by pgAdmin in properties mode only."
+          "help": "Shown when editing; it cannot be changed."
         },
         {
           "field_id": "is_fk",
@@ -471,7 +471,7 @@
           "modes": [
             "alter"
           ],
-          "help": "Read-only property shown by pgAdmin in properties mode only."
+          "help": "Shown when editing; it cannot be changed."
         },
         {
           "field_id": "is_inherited",
@@ -481,7 +481,7 @@
           "modes": [
             "alter"
           ],
-          "help": "Read-only property shown by pgAdmin in properties mode only."
+          "help": "Shown when editing; it cannot be changed."
         },
         {
           "field_id": "tbls_inherited",
@@ -491,7 +491,7 @@
           "modes": [
             "alter"
           ],
-          "help": "Read-only property shown by pgAdmin in properties mode only."
+          "help": "Shown when editing; it cannot be changed."
         },
         {
           "field_id": "is_sys_column",
@@ -501,7 +501,7 @@
           "modes": [
             "alter"
           ],
-          "help": "Read-only property shown by pgAdmin in properties mode only."
+          "help": "Shown when editing; it cannot be changed."
         },
         {
           "field_id": "description",
@@ -624,7 +624,7 @@
           "modes": [
             "alter"
           ],
-          "help": "Read-only property shown by pgAdmin in properties mode only."
+          "help": "Shown when editing; it cannot be changed."
         },
         {
           "field_id": "is_sys_obj",
@@ -634,7 +634,7 @@
           "modes": [
             "alter"
           ],
-          "help": "Read-only property shown by pgAdmin in properties mode only."
+          "help": "Shown when editing; it cannot be changed."
         },
         {
           "field_id": "comment",
@@ -750,7 +750,7 @@
           "modes": [
             "alter"
           ],
-          "help": "Read-only property shown by pgAdmin in properties mode only."
+          "help": "Shown when editing; it cannot be changed."
         },
         {
           "field_id": "is_sys_obj",
@@ -760,7 +760,7 @@
           "modes": [
             "alter"
           ],
-          "help": "Read-only property shown by pgAdmin in properties mode only."
+          "help": "Shown when editing; it cannot be changed."
         },
         {
           "field_id": "comment",
@@ -813,7 +813,7 @@
           "label": "Auto FK index?",
           "control": "boolean",
           "default": true,
-          "help": "Create mode only; forced off while creating the whole table (pgAdmin). Read-only when an index exists."
+          "help": "Create mode only; forced off while creating the whole table. Read-only when an index exists."
         },
         {
           "field_id": "coveringindex",
@@ -837,7 +837,7 @@
           "label": "Columns",
           "control": "grid",
           "required": true,
-          "help": "pgAdmin header form: Local column / References (table) / Referencing (column). Rows can only be added or removed while the constraint is new; after the first row the referenced table is locked.",
+          "help": "Each row is Local column / References (table) / Referencing (column). Rows can only be added or removed while the constraint is new; after the first row the referenced table is locked.",
           "columns": [
             {
               "field_id": "local_column",
@@ -865,7 +865,7 @@
                 "catalog",
                 "columns"
               ],
-              "help": "Columns of the referenced table (get_columns?tid=references)."
+              "help": "Columns of the referenced table."
             },
             {
               "field_id": "references_table_name",
@@ -1001,7 +1001,7 @@
           "modes": [
             "alter"
           ],
-          "help": "Read-only property shown by pgAdmin in properties mode only."
+          "help": "Shown when editing; it cannot be changed."
         },
         {
           "field_id": "is_sys_obj",
@@ -1011,7 +1011,7 @@
           "modes": [
             "alter"
           ],
-          "help": "Read-only property shown by pgAdmin in properties mode only."
+          "help": "Shown when editing; it cannot be changed."
         },
         {
           "field_id": "comment",
@@ -1096,7 +1096,7 @@
           "modes": [
             "alter"
           ],
-          "help": "Read-only property shown by pgAdmin in properties mode only."
+          "help": "Shown when editing; it cannot be changed."
         },
         {
           "field_id": "is_sys_obj",
@@ -1106,7 +1106,7 @@
           "modes": [
             "alter"
           ],
-          "help": "Read-only property shown by pgAdmin in properties mode only."
+          "help": "Shown when editing; it cannot be changed."
         },
         {
           "field_id": "comment",
@@ -1231,7 +1231,7 @@
           "modes": [
             "alter"
           ],
-          "help": "Read-only property shown by pgAdmin in properties mode only."
+          "help": "Shown when editing; it cannot be changed."
         },
         {
           "field_id": "is_sys_obj",
@@ -1241,7 +1241,7 @@
           "modes": [
             "alter"
           ],
-          "help": "Read-only property shown by pgAdmin in properties mode only."
+          "help": "Shown when editing; it cannot be changed."
         },
         {
           "field_id": "comment",
@@ -1268,7 +1268,7 @@
             "index_access_methods"
           ],
           "native_keyword": "USING",
-          "help": "Changing it clears the column rows (pgAdmin confirms first)."
+          "help": "Changing it clears the column rows."
         },
         {
           "field_id": "fillfactor",
@@ -1305,7 +1305,7 @@
           "label": "Columns/Expressions",
           "control": "grid",
           "required": true,
-          "help": "pgAdmin header form: Is expression / Column / Expression. Operator list depends on the column type (get_operator?col_type); operator classes depend on the access method.",
+          "help": "Each row is a column or an expression. The operator list depends on the column type; operator classes depend on the access method.",
           "columns": [
             {
               "field_id": "is_exp",
@@ -1520,7 +1520,7 @@
       "version": {
         "minimum": "10"
       },
-      "help": "Existing PARTITION BY clause (pgAdmin note control)."
+      "help": "Existing PARTITION BY clause."
     },
     {
       "field_id": "partitions",
@@ -1534,7 +1534,7 @@
         "field": "is_partitioned",
         "truthy": true
       },
-      "help": "Provider tree (2026-11-11): on create, each row creates a partition (or attaches an existing table when Operation is attach) after the table; on edit a new row creates or attaches. Removing a row never detaches: use Detach partition on the partition itself (owner direction). Default: no other partition fits. From/To (range), In (list), Modulus/Remainder (hash): write values as SQL literals, quoted where PostgreSQL needs it; the bound is admitted only when the server's parser accepts it.",
+      "help": "On create, each row creates a partition (or attaches an existing table when Operation is attach) after the table; on edit a new row creates or attaches. Removing a row never detaches: use Detach partition on the partition itself. Default: no other partition fits. From/To (range), In (list), Modulus/Remainder (hash): write values as SQL literals, quoted where PostgreSQL needs it; the bound is admitted only when the server's parser accepts it.",
       "columns": [
         {
           "field_id": "oid",
@@ -1544,7 +1544,7 @@
           "modes": [
             "alter"
           ],
-          "help": "Read-only property shown by pgAdmin in properties mode only."
+          "help": "Shown when editing; it cannot be changed."
         },
         {
           "field_id": "is_attach",
@@ -1568,7 +1568,7 @@
           "label": "Name",
           "control": "text",
           "required": true,
-          "help": "When attaching, pgAdmin offers the suitable tables (get_attach_tables) instead of free text."
+          "help": "The name of the partition; when attaching, the existing table to attach."
         },
         {
           "field_id": "amname",
@@ -1772,7 +1772,7 @@
         "tables"
       ],
       "native_keyword": "INHERITS",
-      "help": "Selecting a parent copies its columns into the Columns grid; disabled when 'Of type' is set or the table is partitioned. Properties mode shows the same id as text."
+      "help": "Selecting a parent copies its columns into the Columns grid; disabled when 'Of type' is set or the table is partitioned."
     },
     {
       "field_id": "inherited_tables_cnt",
@@ -1784,7 +1784,7 @@
         "alter"
       ],
       "group": "Inheritance",
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "relhassubclass",
@@ -1796,7 +1796,7 @@
         "alter"
       ],
       "group": "Inheritance",
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "typname",
@@ -1809,7 +1809,7 @@
         "composite_types"
       ],
       "native_keyword": "OF",
-      "help": "Disabled when inheriting from tables; changing it replaces the column definitions (pgAdmin confirms first) and clears constraints and partition keys."
+      "help": "Disabled when inheriting from tables; changing it replaces the column definitions and clears constraints and partition keys."
     },
     {
       "field_id": "rlspolicy",
@@ -1909,7 +1909,7 @@
         "alter"
       ],
       "group": "Storage",
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "vacuum_settings_str",
@@ -1921,7 +1921,7 @@
         "alter"
       ],
       "group": "Storage",
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "like_relation",
@@ -2121,7 +2121,7 @@
       "control": "grid",
       "tab": "Engine",
       "group": "Autovacuum",
-      "help": "Fixed rows (one per autovacuum_* storage parameter from the vacuum settings endpoint); only Value is editable.",
+      "help": "Fixed rows (one per autovacuum_* storage parameter); only Value is editable.",
       "visible_when": {
         "field": "autovacuum_custom",
         "truthy": true
@@ -2221,7 +2221,7 @@
       "modes": [
         "alter"
       ],
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "relacl",
@@ -2290,7 +2290,7 @@
       "modes": [
         "alter"
       ],
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "rows_cnt",
@@ -2312,7 +2312,7 @@
       "modes": [
         "alter"
       ],
-      "help": "Provider tree (M7, 2026-11-11): RESET (fillfactor); the validator drops an empty number, so the reset is its own flag."
+      "help": "Check to reset the fill factor to its default (RESET (fillfactor)); clearing the number does not."
     },
     {
       "field_id": "reset_toast_tuple_target",
@@ -2351,7 +2351,7 @@
           "required": true
         }
       ],
-      "help": "Provider tree (M7, 2026-11-11): REVOKE ALL ON TABLE ... FROM grantee."
+      "help": "Revokes all privileges on the table from the grantee (REVOKE ALL ON TABLE ... FROM grantee)."
     },
     {
       "field_id": "ftsrvname",
@@ -2360,7 +2360,7 @@
       "required": false,
       "tab": "General",
       "reference_kind": "foreign-server",
-      "help": "Foreign tables only (provider tree, M7, 2026-11-11): SERVER name; required when creating a foreign table."
+      "help": "Foreign tables only: the SERVER name; required when creating a foreign table."
     },
     {
       "field_id": "ftoptions",

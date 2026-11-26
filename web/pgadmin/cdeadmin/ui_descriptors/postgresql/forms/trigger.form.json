@@ -43,7 +43,7 @@
           "label": "Event trigger"
         }
       ],
-      "help": "trigger uses trigger.ui.js (TriggerSchema + EventSchema); event uses event_trigger.ui.js.",
+      "help": "Choose a table or view trigger, or an event trigger.",
       "ui_only": true
     },
     {
@@ -62,7 +62,7 @@
       "modes": [
         "alter"
       ],
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "eventowner",
@@ -89,7 +89,7 @@
         "field": "variant",
         "equals": "trigger"
       },
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "is_sys_obj",
@@ -104,7 +104,7 @@
         "field": "variant",
         "equals": "event"
       },
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "description",
@@ -220,7 +220,7 @@
         "field": "evnt_update",
         "truthy": true
       },
-      "help": "Read-only once the trigger exists. Provider tree: UPDATE OF these columns."
+      "help": "Read-only once the trigger exists. The trigger fires on UPDATE OF these columns."
     },
     {
       "field_id": "whenclause",
@@ -331,7 +331,7 @@
         "trigger_functions"
       ],
       "native_keyword": "EXECUTE FUNCTION",
-      "help": "pgAdmin loads get_triggerfunctions; read-only once the trigger exists."
+      "help": "Read-only once the trigger exists."
     },
     {
       "field_id": "tgargs",
@@ -342,7 +342,7 @@
         "field": "variant",
         "equals": "trigger"
       },
-      "help": "Read-only once the trigger exists. Provider tree: comma-separated text values."
+      "help": "Read-only once the trigger exists. Comma-separated text values."
     },
     {
       "field_id": "enabled",
@@ -424,7 +424,7 @@
         "equals": "event"
       },
       "native_keyword": "WHEN TAG IN",
-      "help": " Provider tree: comma-separated command tags (WHEN TAG IN)."
+      "help": "Comma-separated command tags (WHEN TAG IN)."
     },
     {
       "field_id": "prosrc",
@@ -436,7 +436,7 @@
         "field": "variant",
         "equals": "trigger"
       },
-      "help": "Inline body; enabled only on EDB with trigger function 'Inline EDB-SPL' (ppas is out of beta scope). Provider tree: inline trigger code is an EDB feature; a value is refused, name a trigger function."
+      "help": "Inline trigger code is an EDB Advanced Server feature; a value is refused here. Name a trigger function instead."
     },
     {
       "field_id": "tgoldtable",

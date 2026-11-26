@@ -38,7 +38,7 @@
       "modes": [
         "alter"
       ],
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "indisunique",
@@ -63,7 +63,7 @@
       "control": "grid",
       "tab": "General",
       "required": true,
-      "help": "pgAdmin header form: Is expression / Column / Expression. Rows can be added or removed only while the index is new. Sort order and NULLs apply to btree only; operator classes are filtered by access method.",
+      "help": "Each row is a column or an expression. Rows can be added or removed only while the index is new. Sort order and NULLs apply to btree only; operator classes are filtered by access method.",
       "columns": [
         {
           "field_id": "is_exp",
@@ -151,7 +151,7 @@
       "modes": [
         "alter"
       ],
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "indisprimary",
@@ -162,7 +162,7 @@
       "modes": [
         "alter"
       ],
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "is_sys_idx",
@@ -173,7 +173,7 @@
       "modes": [
         "alter"
       ],
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "description",
@@ -194,7 +194,7 @@
         "index_access_methods"
       ],
       "native_keyword": "USING",
-      "help": "Read-only once the index exists; changing it clears the column rows (pgAdmin confirms first)."
+      "help": "Read-only once the index exists; changing it clears the column rows."
     },
     {
       "field_id": "include",
@@ -292,7 +292,7 @@
         "field": "amname",
         "equals": "gin"
       },
-      "help": "This value is specified in kilobytes. Provider tree: a storage parameter; reset it with the Reset storage parameters grid on edit."
+      "help": "This value is specified in kilobytes. A storage parameter; reset it on edit with the Reset storage parameters grid."
     },
     {
       "field_id": "pages_per_range",
@@ -305,7 +305,7 @@
         "field": "amname",
         "equals": "brin"
       },
-      "help": "Number of table blocks that make up one block range for each entry of a BRIN index. Provider tree: a storage parameter; reset it with the Reset storage parameters grid on edit."
+      "help": "Number of table blocks that make up one block range for each entry of a BRIN index. A storage parameter; reset it on edit with the Reset storage parameters grid."
     },
     {
       "field_id": "buffering",
@@ -333,7 +333,7 @@
         "field": "amname",
         "equals": "gist"
       },
-      "help": " Provider tree: a storage parameter; reset it with the Reset storage parameters grid on edit."
+      "help": "A storage parameter; reset it on edit with the Reset storage parameters grid."
     },
     {
       "field_id": "deduplicate_items",
@@ -350,7 +350,7 @@
         "field": "amname",
         "equals": "btree"
       },
-      "help": " Provider tree: a storage parameter; reset it with the Reset storage parameters grid on edit."
+      "help": "A storage parameter; reset it on edit with the Reset storage parameters grid."
     },
     {
       "field_id": "fastupdate",
@@ -364,7 +364,7 @@
         "field": "amname",
         "equals": "gin"
       },
-      "help": " Provider tree: a storage parameter; reset it with the Reset storage parameters grid on edit."
+      "help": "A storage parameter; reset it on edit with the Reset storage parameters grid."
     },
     {
       "field_id": "autosummarize",
@@ -377,7 +377,7 @@
         "field": "amname",
         "equals": "brin"
       },
-      "help": " Provider tree: a storage parameter; reset it with the Reset storage parameters grid on edit."
+      "help": "A storage parameter; reset it on edit with the Reset storage parameters grid."
     },
     {
       "field_id": "reset_parameters",

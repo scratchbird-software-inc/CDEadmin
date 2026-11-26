@@ -43,7 +43,7 @@
           "label": "Materialized view"
         }
       ],
-      "help": "Selects view.ui.js (ordinary) or mview.ui.js (materialized) field set.",
+      "help": "Choose an ordinary or a materialized view.",
       "ui_only": true
     },
     {
@@ -62,7 +62,7 @@
       "modes": [
         "alter"
       ],
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "owner",
@@ -88,7 +88,7 @@
       "modes": [
         "alter"
       ],
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "comment",
@@ -197,7 +197,7 @@
         "field": "variant",
         "equals": "materialized"
       },
-      "help": "Alterable only on PostgreSQL 15+. Provider tree: on edit, SET ACCESS METHOD (PostgreSQL 15 and later)."
+      "help": "Alterable only on PostgreSQL 15+; on edit it runs SET ACCESS METHOD."
     },
     {
       "field_id": "fillfactor",
@@ -225,7 +225,7 @@
         "field": "variant",
         "equals": "materialized"
       },
-      "help": "Provider tree: a cleared number never reaches the provider, so the fill factor is reset through this flag."
+      "help": "Check to reset the fill factor to its default; clearing the number does not."
     },
     {
       "field_id": "toast_tuple_target",
@@ -275,7 +275,7 @@
         "field": "variant",
         "equals": "materialized"
       },
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "definition",
@@ -285,7 +285,7 @@
       "language": "sql",
       "required": true,
       "native_keyword": "AS SELECT",
-      "help": "Changing the column list of a view drops and re-creates it (pgAdmin warns); changing a materialized view's definition drops and re-creates it."
+      "help": "Changing the column list of a view drops and re-creates it; changing a materialized view's definition drops and re-creates it."
     },
     {
       "field_id": "autovacuum_custom",
@@ -432,7 +432,7 @@
       "modes": [
         "alter"
       ],
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "datacl",

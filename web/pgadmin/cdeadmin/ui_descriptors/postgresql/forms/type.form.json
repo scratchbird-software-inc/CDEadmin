@@ -66,7 +66,7 @@
           "label": "Multirange"
         }
       ],
-      "help": "domain uses domain.ui.js; the others use type.ui.js where typtype carries the same choice (c/e/b/r/p; m is shown for existing types only). Read-only once the type exists.",
+      "help": "The kind of type. Read-only once the type exists.",
       "ui_only": true
     },
     {
@@ -85,7 +85,7 @@
       "modes": [
         "alter"
       ],
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "owner",
@@ -166,7 +166,7 @@
         "field": "variant",
         "equals": "domain"
       },
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "is_sys_type",
@@ -188,7 +188,7 @@
           "multirange"
         ]
       },
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "description",
@@ -241,7 +241,7 @@
           "label": "Multirange"
         }
       ],
-      "help": "Backend id for the variant (same choice as 'variant'); read-only once the type exists. Provider tree: a multirange is created with its range type and refused on its own."
+      "help": "The same choice as Variant, as the catalog spells it; read-only once the type exists. A multirange is created with its range type and refused on its own."
     },
     {
       "field_id": "basetype",
@@ -341,7 +341,7 @@
         "equals": "composite"
       },
       "native_keyword": "AS (...)",
-      "help": "Members are unique by name. Length/precision cells enable per type (same rules as table columns). Provider tree: on edit the grid is the full set; new members are added, members left out are dropped, a changed type is altered.",
+      "help": "Members are unique by name. Length/precision cells enable per type (same rules as table columns). On edit the grid is the full set; new members are added, members left out are dropped, a changed type is altered.",
       "columns": [
         {
           "field_id": "member_name",
@@ -392,7 +392,7 @@
       },
       "reorderable": true,
       "native_keyword": "AS ENUM",
-      "help": "Labels are unique; reorder and delete only while the type is new (ALTER TYPE ADD VALUE after). Provider tree: on edit the list is the full set; a new label is added after its predecessor; PostgreSQL cannot drop or rename a value through the list.",
+      "help": "Labels are unique; reorder and delete only while the type is new (ALTER TYPE ADD VALUE after). On edit the list is the full set; a new label is added after its predecessor; PostgreSQL cannot drop or rename a value through the list.",
       "columns": [
         {
           "field_id": "label",
@@ -434,7 +434,7 @@
         "operator_classes"
       ],
       "native_keyword": "SUBTYPE_OPCLASS",
-      "help": "Filtered by the chosen subtype (get_subopclass). Read-only once the type exists."
+      "help": "Filtered by the chosen subtype. Read-only once the type exists."
     },
     {
       "field_id": "rngcanonical",
@@ -451,7 +451,7 @@
         "functions"
       ],
       "native_keyword": "CANONICAL",
-      "help": "Candidates from get_canonical(name). Read-only once the type exists."
+      "help": "Candidate canonical functions for the type. Read-only once the type exists."
     },
     {
       "field_id": "rngsubdiff",
@@ -468,7 +468,7 @@
         "functions"
       ],
       "native_keyword": "SUBTYPE_DIFF",
-      "help": "Candidates from get_stypediff(subtype, opclass). Read-only once the type exists."
+      "help": "Candidate subtype difference functions for the subtype and operator class. Read-only once the type exists."
     },
     {
       "field_id": "rngmultirangetype",
@@ -506,7 +506,7 @@
           "multirange"
         ]
       },
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "member_list",
@@ -521,7 +521,7 @@
         "field": "variant",
         "equals": "composite"
       },
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "enum_list",
@@ -536,7 +536,7 @@
         "field": "variant",
         "equals": "enum"
       },
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "rename_values",
@@ -628,7 +628,7 @@
           "help": "Read-only once an existing constraint is validated."
         }
       ],
-      "help": " Provider tree: on edit the grid is the full set; a new row adds, a row left out drops, a validated flag turned on validates."
+      "help": "On edit the grid is the full set; a new row adds, a row left out drops, a validated flag turned on validates."
     },
     {
       "field_id": "rename_constraints",
@@ -1018,7 +1018,7 @@
           "multirange"
         ]
       },
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "typacl",

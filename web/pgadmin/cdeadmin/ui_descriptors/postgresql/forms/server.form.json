@@ -47,7 +47,7 @@
       "modes": [
         "alter"
       ],
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "name",
@@ -65,7 +65,7 @@
         "catalog",
         "server_groups"
       ],
-      "help": "Options are the pgAdmin server groups; hidden when registering through an engine profile. Provider tree: supplied by the registration host (profile, intent, verification) or the server group the registration opened under; not entered here.",
+      "help": "Options are the server groups; hidden when registering through an engine profile. Set by the registration, not entered here.",
       "ui_only": true,
       "required": false,
       "hidden": true
@@ -83,7 +83,7 @@
       "modes": [
         "create"
       ],
-      "help": "Select the native interface used by this endpoint. Engines with multiple interfaces expose each interface as a separate protocol-owned profile. Changing it resets port, connect/verify switches and route defaults (depChange not expressible here). Provider tree: supplied by the registration host (profile, intent, verification) or the server group the registration opened under; not entered here.",
+      "help": "Select the native interface used by this endpoint. Engines with multiple interfaces expose each interface as a separate protocol-owned profile. Changing it resets port, connect/verify switches and route defaults. Set by the registration, not entered here.",
       "ui_only": true,
       "hidden": true
     },
@@ -95,7 +95,7 @@
       "modes": [
         "create"
       ],
-      "help": "Hidden field set by the registration workflow (endpoint / create_database / register_existing). Provider tree: supplied by the registration host (profile, intent, verification) or the server group the registration opened under; not entered here.",
+      "help": "Set by the registration workflow, not entered here.",
       "ui_only": true,
       "required": false,
       "hidden": true
@@ -110,7 +110,7 @@
         "alter"
       ],
       "group": "Sharing",
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "server_type",
@@ -125,7 +125,7 @@
         "catalog",
         "supported_servers"
       ],
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "connected",
@@ -136,7 +136,7 @@
       "modes": [
         "alter"
       ],
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "version",
@@ -147,7 +147,7 @@
       "modes": [
         "alter"
       ],
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "bgcolor",
@@ -155,7 +155,7 @@
       "control": "text",
       "tab": "Connection",
       "group": "Colour",
-      "help": "Hex colour (pgAdmin 'color' control; no colour control in the descriptor set, see gaps). Disabled while connected."
+      "help": "Hex colour. Disabled while connected."
     },
     {
       "field_id": "fgcolor",
@@ -163,7 +163,7 @@
       "control": "text",
       "tab": "Connection",
       "group": "Colour",
-      "help": "Hex colour (pgAdmin 'color' control). Disabled while connected."
+      "help": "Hex colour. Disabled while connected."
     },
     {
       "field_id": "connect_now",
@@ -174,7 +174,7 @@
         "create"
       ],
       "default": true,
-      "help": "Shown for legacy_preserved profiles; provider_endpoint profiles show 'Verify endpoint now?' instead. Sent as the servers-API connect_now key."
+      "help": "Shown for registrations that use the saved PostgreSQL connection; other endpoints show 'Verify endpoint now?' instead."
     },
     {
       "field_id": "cde_verify_now",
@@ -184,7 +184,7 @@
       "modes": [
         "create"
       ],
-      "help": "Shown for provider_endpoint profiles only (visibility depends on the profile workflow, not on a field). Provider tree: supplied by the registration host (profile, intent, verification) or the server group the registration opened under; not entered here.",
+      "help": "Shown for endpoints verified by ScratchRobin. Set by the registration, not entered here.",
       "ui_only": true,
       "required": false,
       "hidden": true
@@ -195,7 +195,7 @@
       "control": "boolean",
       "tab": "Connection",
       "group": "Sharing",
-      "help": "Visible only to admins in pgAdmin server mode; read-only when the server is owned by another user."
+      "help": "Visible only to administrators in server mode; read-only when the server is owned by another user."
     },
     {
       "field_id": "shared_username",
@@ -220,7 +220,7 @@
       "modes": [
         "alter"
       ],
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "host",
@@ -279,7 +279,7 @@
       "modes": [
         "alter"
       ],
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "gss_encrypted",
@@ -290,21 +290,21 @@
       "modes": [
         "alter"
       ],
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "password",
       "label": "Password",
       "control": "password",
       "tab": "Authentication",
-      "help": "In edit mode the password field is enabled only if Save Password is set to true. Hidden when the profile declares typed secret fields. Sent once to the servers API; never read back."
+      "help": "In edit mode the password field is enabled only if Save Password is on. It is sent once and never read back."
     },
     {
       "field_id": "save_password",
       "label": "Save password?",
       "control": "boolean",
       "tab": "Authentication",
-      "help": "Disabled when the pgAdmin configuration forbids saving passwords or Kerberos is on."
+      "help": "Disabled when the configuration forbids saving passwords or Kerberos is on."
     },
     {
       "field_id": "role",
@@ -320,7 +320,7 @@
       "control": "boolean",
       "tab": "Authentication",
       "group": "SSH tunnel",
-      "help": "Disabled when the pgAdmin build has no SSH tunnel support; read-only while connected."
+      "help": "Disabled when this build has no SSH tunnel support; read-only while connected."
     },
     {
       "field_id": "tunnel_host",
@@ -429,7 +429,7 @@
         "field": "connect_now",
         "truthy": true
       },
-      "help": "Disabled when the pgAdmin configuration forbids saving tunnel passwords."
+      "help": "Disabled when the configuration forbids saving tunnel passwords."
     },
     {
       "field_id": "tunnel_keep_alive",
@@ -467,7 +467,7 @@
       "label": "DB restriction",
       "control": "text",
       "tab": "Advanced",
-      "help": "pgAdmin switches the control on db_res_type: a creatable multi-select of database names, or an SQL editor returning names. The descriptor exposes it as text (see gaps). Provider tree: a comma-separated list of database names, or SQL when the type is SQL."
+      "help": "A comma-separated list of database names, or SQL returning names when the type is SQL."
     },
     {
       "field_id": "passexec_cmd",
@@ -508,7 +508,7 @@
       "tab": "Engine",
       "group": "libpq connection parameters",
       "native_keyword": "libpq keywords",
-      "help": "libpq keywords (sslmode, connect_timeout, sslcert, ... see options). Defaults: sslmode=prefer, connect_timeout=10. Rows cannot be added or removed while connected. The value cell type follows the keyword's vartype (string/file/enum/integer/bool/password); version-gated keywords show a 'Supported version >= N' placeholder.",
+      "help": "libpq keywords (sslmode, connect_timeout, sslcert, ...). Defaults: sslmode=prefer, connect_timeout=10. Rows cannot be added or removed while connected. Keywords that need a newer server version show a 'Supported version >= N' placeholder.",
       "columns": [
         {
           "field_id": "name",
@@ -706,7 +706,7 @@
       "label": "Tags",
       "control": "grid",
       "tab": "Tags",
-      "help": "Maximum count comes from pgAdmin's max_server_tags_allowed; colour is random on add.",
+      "help": "Maximum count comes from the max_server_tags_allowed setting; colour is random on add.",
       "columns": [
         {
           "field_id": "text",

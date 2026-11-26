@@ -81,7 +81,7 @@
         "field": "variant",
         "equals": "user"
       },
-      "help": "None creates an account with no password (owner direction 2026-10-29)."
+      "help": "None creates an account with no password."
     },
     {
       "field_id": "password",

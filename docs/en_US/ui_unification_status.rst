@@ -1932,8 +1932,21 @@ Gaps found, not closed:
   a table and ``EXECUTE`` on a function in one database and ``SELECT`` on a table in another;
   with one database connected the other was named, and connecting it added its row.
   Tablespace ACLs are read the same way but were not clicked through.
-* Gaps recorded, not closed: the same "Provider tree: ..." help text remains in
-  ten other PostgreSQL form files; a native refusal reaches the user only as the generic
+* Help text cleanup (2026-11-26): 143 user-facing strings in the PostgreSQL forms (database,
+  index, routine, sequence, server, table, trigger, type, view) named implementation
+  internals: "Read-only property shown by pgAdmin in properties mode only" (92 times),
+  "Provider tree: ..." notes, the ``*.ui.js`` file a field came from, endpoint names such as
+  ``get_columns``, and claims about pgAdmin behaviour the provider tree does not have
+  ("pgAdmin confirms first", "pgAdmin warns"). Each is rewritten as plain guidance that keeps
+  the PostgreSQL meaning, and the unverifiable claims are dropped. Two Dolt and TiDB role
+  help lines citing an owner-direction date are fixed the same way. ``datbuiltinlocale``
+  keeps "provider" because that is PostgreSQL's own locale-provider term. A new test,
+  ``test_ui_descriptor_help_text.py`` (part of ``make ui-descriptors-check``), fails when any
+  engine's help, label, title or placeholder names such internals; notes, gaps and reasons
+  are developer-facing and not checked. ``tools/draft_postgresql_descriptors.py`` is stale
+  (its output differs from the committed forms by hundreds of lines), so its docstring now
+  says the committed forms are the source of truth and it must not be run over them.
+* Gaps recorded, not closed: a native refusal reaches the user only as the generic
   "refused before dispatch" text with no field named (the refusal contract is bounded and
   secret-free by design, and the UI does not map its codes), so the reason (for instance a
   missing database choice) is not shown; ``Reassign owned objects`` was opened but not run.

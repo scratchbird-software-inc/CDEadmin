@@ -82,7 +82,7 @@
           "label": "None"
         }
       ],
-      "help": "None creates an account with no password (owner direction 2026-10-29).",
+      "help": "None creates an account with no password.",
       "group": "Authentication",
       "visible_when": {
         "field": "variant",

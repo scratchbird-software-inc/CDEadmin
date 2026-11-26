@@ -27,7 +27,7 @@
       "modes": [
         "alter"
       ],
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "seqowner",
@@ -77,7 +77,7 @@
       "modes": [
         "alter"
       ],
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "comment",
@@ -95,7 +95,7 @@
         "alter"
       ],
       "native_keyword": "RESTART WITH",
-      "help": "Sets the sequence object's current value. The next nextval will return exactly the specified value, and sequence advancement commences with the following nextval. Provider tree: setval(..., value, false)."
+      "help": "Sets the sequence object's current value. The next nextval will return exactly the specified value, and sequence advancement commences with the following nextval. Applied as setval(..., value, false)."
     },
     {
       "field_id": "restart_initial",
@@ -136,7 +136,7 @@
       "control": "boolean",
       "required": false,
       "tab": "General",
-      "help": "Provider tree: a cleared number never reaches the provider, so the lower bound is removed through this flag."
+      "help": "Check to remove the lower bound; clearing the number does not."
     },
     {
       "field_id": "maximum",
@@ -151,7 +151,7 @@
       "control": "boolean",
       "required": false,
       "tab": "General",
-      "help": "Provider tree: removes the upper bound."
+      "help": "Check to remove the upper bound."
     },
     {
       "field_id": "cache",
@@ -177,7 +177,7 @@
         "minimum": "15"
       },
       "native_keyword": "UNLOGGED",
-      "help": " Provider tree: checked = UNLOGGED (PostgreSQL 15 and later)."
+      "help": "Checked means UNLOGGED (PostgreSQL 15 and later)."
     },
     {
       "field_id": "owned_table",
@@ -210,7 +210,7 @@
       "modes": [
         "alter"
       ],
-      "help": "Provider tree: ALTER SEQUENCE ... OWNED BY NONE."
+      "help": "Check to detach the sequence from its owning column (OWNED BY NONE)."
     },
     {
       "field_id": "acl",
@@ -221,7 +221,7 @@
       "modes": [
         "alter"
       ],
-      "help": "Read-only property shown by pgAdmin in properties mode only."
+      "help": "Shown when editing; it cannot be changed."
     },
     {
       "field_id": "relacl",

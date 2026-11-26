@@ -6,6 +6,12 @@ PostgreSQL's workflow is legacy_preserved, so its forms cannot be dumped from a
 provider contract the way tools/draft_ui_descriptors.py does for the other
 engines. This script holds the transcription so it can be regenerated when a
 *.ui.js schema changes. Usage: python3 tools/draft_postgresql_descriptors.py
+
+Superseded as a source of truth (2026-11-26): the committed forms have been
+edited directly since this script was last run (provider-tree fields, rewritten
+help text, role and server changes), and its output differs from them by
+hundreds of lines. Running it overwrites those edits. Use it only to draft a
+form for a new object into a scratch directory, never over the committed forms.
 """
 import json
 from pathlib import Path
