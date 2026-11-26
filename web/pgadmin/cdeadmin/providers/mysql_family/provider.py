@@ -1940,6 +1940,18 @@ class MySQLPilotProvider(NativeEditorProvider, ActualEnginePilotProvider):
     def __init__(self, context, permissions, client):
         super().__init__(context, permissions, client, MYSQL_PROFILE)
 
+    def describe_refusal(self, message):
+        """Why a native refusal happened, in MySQL's vocabulary (Decision 22)."""
+        from .refusal_codes import describe
+        return describe(message)
+
+    def is_native_administrator(self, request):
+        """Whether the connected account holds SUPER, on the reader's own session; any failure answers no."""
+        try:
+            return bool(self.client.describe_administrator(request if isinstance(request, dict) else {}))
+        except Exception:
+            return False
+
     def read_visual_admin_rows(self, request):
         if not isinstance(self.client, MySQLDBAPIClient):
             return super().read_visual_admin_rows(request)
@@ -3832,6 +3844,29 @@ def _security(connection, request):
         cursor.close()
 
 
+def _administrator(connection, request):
+    """Whether the connected account holds the global SUPER privilege (Decision 22: such an account may read a
+    logged refusal reason). USER_PRIVILEGES lists the account's own global grants only, so a SUPER that arrives
+    through a role is not seen; an account merely named root is not taken for an administrator. Anything unclear
+    answers no."""
+    cursor = connection.cursor()
+    try:
+        cursor.execute('SELECT CURRENT_USER()')
+        row = cursor.fetchone()
+        user, separator, host = str(row[0]).rpartition('@') if row else ('', '', '')
+        if not separator or not user:
+            return False
+        def quote(value):
+            return "'" + value.replace("'", "''") + "'"
+        cursor.execute(
+            "SELECT COUNT(*) FROM information_schema.USER_PRIVILEGES WHERE GRANTEE = %s AND PRIVILEGE_TYPE = 'SUPER'",
+            (f'{quote(user)}@{quote(host)}',))
+        row = cursor.fetchone()
+        return bool(row) and int(row[0]) > 0
+    finally:
+        cursor.close()
+
+
 def _create_client(profile, permissions, context):
     mysql_values = None
     if profile is MYSQL_PROFILE:
@@ -3865,6 +3900,7 @@ def _create_client(profile, permissions, context):
             connection, request, profile
         ),
         security_reader=_security,
+        extensions=({'administrator_reader': _administrator} if profile is MYSQL_PROFILE else {}),
         credential_arguments=(
             {
                 'database_password': 'password',

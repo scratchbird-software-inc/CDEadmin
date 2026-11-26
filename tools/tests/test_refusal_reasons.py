@@ -322,3 +322,145 @@ def test_every_message_shown_as_it_stands_reads_as_a_sentence():
         if message in words['code'] or shown is None:
             continue
         assert shown[0].isupper() and shown[-1] in '.!?', shown
+
+
+# --- the shared funnel keeps the real message, scrubbed (all actual-engine providers) ----------------------------
+
+def _facade(planner, fields, draft):
+    from types import SimpleNamespace
+    from pgadmin.cdeadmin.visual_admin.provider import ProviderVisualAdministration
+
+    class Facade(ProviderVisualAdministration):
+        engine_id, profile_version = 'mysql', '9.7.0'
+        context = SimpleNamespace(endpoint_id='e', mode='direct')
+        permissions = SimpleNamespace(require=lambda *_: None)
+
+        def __init__(self):
+            pass
+
+        def _operation(self, _payload):
+            return {'resource_kind': 'user'}, {
+                'operation_id': 'create', 'graphical_form_authority': 'engine-catalog', 'mutation_class': 'read',
+                'confirmation_required': False, 'required_permissions': []}
+
+        def _require_mutation(self, _mutation):
+            pass
+
+        def _operation_supported(self, *_):
+            return True
+
+        def validate(self, _payload, retain_sensitive=False):
+            return {'valid': True, 'errors': [], 'draft': dict(draft)}
+
+        def _operation_fields(self, _resource, _operation, _draft):
+            return fields
+
+        def _planner_callback(self):
+            return planner
+
+    return Facade()
+
+
+def test_the_funnel_keeps_the_native_message_with_the_drafts_secrets_removed():
+    from pgadmin.cdeadmin.sdk import RelationalClientError
+
+    def planner(_request):
+        raise RelationalClientError("Access denied for CREATE USER 'u'@'%' IDENTIFIED BY 'Other-Canary'; "
+                                    "the value Secr3t-Canary was refused and PASSWORD('Third-Canary') too")
+    facade = _facade(planner, [{'field_id': 'name'}, {'field_id': 'password', 'control': 'password'}],
+                     {'name': 'u', 'password': 'Secr3t-Canary'})
+    with pytest.raises(VisualAdminValidationError) as caught:
+        facade.plan({'resource_kind': 'user', 'operation_id': 'create', 'draft': {}})
+    message = str(caught.value)
+    for canary in ('Secr3t-Canary', 'Other-Canary', 'Third-Canary'):
+        assert canary not in message, canary
+    assert 'Access denied for CREATE USER' in message and '<redacted>' in message
+    assert caught.value.errors == [{'field_id': None, 'code': 'native_review_refused'}]
+    # what the store keeps is that message, and the response still says none of it
+    assert 'Canary' not in json.dumps(response(caught.value, '0123456789abcdef', {}))
+
+
+def test_the_scrub_hides_short_values_only_where_quoted_and_nested_secrets_too():
+    from pgadmin.cdeadmin.visual_admin.refusal_log import scrub, secret_values
+    assert scrub("bad value 'ab' near abc", ['ab']) == "bad value '<redacted>' near abc"
+    fields = [{'field_id': 'rows', 'sensitive': True}, {'field_id': 'name'}]
+    assert sorted(secret_values(fields, {'rows': [{'p': 'one-secret'}, 'two-secret'], 'name': 'open'})) == ['one-secret', 'two-secret']
+    assert scrub('nothing to hide', []) == 'nothing to hide'
+
+
+def test_the_shared_funnel_gives_an_engine_that_describes_its_refusals_a_reason():
+    from types import SimpleNamespace
+    from pgadmin.cdeadmin.sdk.actual_engine import ActualEnginePilotProvider
+    holder = SimpleNamespace(describe_refusal=lambda message: refusal_codes_reason(message))
+
+    def refusal_codes_reason(message):
+        from pgadmin.cdeadmin.visual_admin.refusal_vocabulary import Reason
+        return Reason('value_required', 'name') if message == 'name must not be empty' else Reason(None, None)
+    attach = ActualEnginePilotProvider._with_refusal_reason
+    generic = VisualAdminValidationError('name must not be empty', [{'field_id': None, 'code': 'native_review_refused'}])
+    improved = attach(holder, generic)
+    assert improved.errors == [{'field_id': 'name', 'code': 'value_required'}] and str(improved) == 'name must not be empty'
+    # an unknown message, a coded refusal and an engine with no hook all keep the refusal as it is
+    other = VisualAdminValidationError('unknown', [{'field_id': None, 'code': 'native_review_refused'}])
+    assert attach(holder, other) is other
+    coded = VisualAdminValidationError('x', [{'field_id': 'a', 'code': 'unknown_fields'}])
+    assert attach(holder, coded) is coded
+    assert attach(SimpleNamespace(), generic) is generic
+
+
+# --- the MySQL administrator probe ----------------------------------------------------------------------------
+
+class _Cursor:
+    def __init__(self, current, super_count):
+        self.current, self.super_count, self.sql, self.params, self.closed = current, super_count, [], [], False
+
+    def execute(self, sql, params=None):
+        self.sql.append(sql)
+        self.params.append(params)
+        self.last = sql
+
+    def fetchone(self):
+        if 'CURRENT_USER' in self.last:
+            return None if self.current is None else (self.current,)
+        return (self.super_count,)
+
+    def close(self):
+        self.closed = True
+
+
+def _probe(current, super_count):
+    from pgadmin.cdeadmin.providers.mysql_family.provider import _administrator
+    cursor = _Cursor(current, super_count)
+    result = _administrator(type('Connection', (), {'cursor': lambda self: cursor})(), {})
+    return result, cursor
+
+
+def test_the_mysql_probe_says_yes_only_for_an_account_holding_super_and_names_it_exactly():
+    result, cursor = _probe('admin@%', 1)
+    assert result is True and cursor.closed
+    assert cursor.params[1] == ("'admin'@'%'",)
+    assert 'USER_PRIVILEGES' in cursor.sql[1] and "PRIVILEGE_TYPE = 'SUPER'" in cursor.sql[1]
+    assert _probe('limited@localhost', 0)[0] is False
+    # an account merely called root, with no SUPER, is not an administrator
+    assert _probe('root@evil', 0)[0] is False
+    # a quote in the name cannot change what is asked
+    result, cursor = _probe("o'brien@%", 0)
+    assert result is False and cursor.params[1] == ("'o''brien'@'%'",)
+    # anything unclear answers no
+    assert _probe(None, 1)[0] is False and _probe('nohost', 1)[0] is False and _probe('@h', 1)[0] is False
+
+
+def test_the_mysql_provider_closes_the_probe_on_failure_and_exposes_the_vocabulary():
+    from pgadmin.cdeadmin.providers.mysql_family.provider import MySQLPilotProvider
+
+    class Broken:
+        def describe_administrator(self, _request):
+            raise RuntimeError('boom')
+    provider = object.__new__(MySQLPilotProvider)
+    provider.client = Broken()
+    assert provider.is_native_administrator({'_provider_route': {}}) is False
+    provider.client = type('Yes', (), {'describe_administrator': lambda self, request: True})()
+    assert provider.is_native_administrator({'_provider_route': {}}) is True
+    assert provider.is_native_administrator('not a mapping') is True  # a non-mapping is treated as an empty request
+    from pgadmin.cdeadmin.providers.mysql_family import refusal_codes as mysql_codes
+    assert hasattr(provider, 'describe_refusal') and mysql_codes.describe('no such message').code is None

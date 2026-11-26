@@ -26,7 +26,7 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-from pgadmin.cdeadmin.visual_admin import ProviderVisualAdministration
+from pgadmin.cdeadmin.visual_admin import ProviderVisualAdministration, VisualAdminValidationError
 from pgadmin.cdeadmin.sdk.browse import BrowseUnavailable, native_of
 from pgadmin.cdeadmin.resources.properties import (
     normalize_resource_properties,
@@ -451,7 +451,25 @@ class ActualEnginePilotProvider:
         """Ask the target adapter for a native, non-executing plan."""
         payload = _mapping(request)
         self._visual_admin_session_context(payload)
-        return self._visual_admin.plan(payload)
+        try:
+            return self._visual_admin.plan(payload)
+        except VisualAdminValidationError as exc:
+            raise self._with_refusal_reason(exc) from None
+
+    def _with_refusal_reason(self, error):
+        """The refusal with the reason its engine gives it (Decision 22), when the engine defines
+        ``describe_refusal`` and the refusal is the generic native one; any other is returned as it is."""
+        describe = getattr(self, 'describe_refusal', None)
+        entries = list(getattr(error, 'errors', ()) or ())
+        if not callable(describe) or len(entries) != 1 or entries[0].get('code') != 'native_review_refused':
+            return error
+        reason = describe(str(error))
+        if reason.code is None:
+            return error
+        entry = {'field_id': reason.field_id, 'code': reason.code}
+        if reason.explanation:
+            entry['explanation'] = reason.explanation
+        return VisualAdminValidationError(str(error), [entry])
 
     def apply_visual_admin(self, request):
         """Execute a retained provider plan through the target adapter."""

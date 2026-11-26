@@ -19,6 +19,50 @@ REFERENCE = re.compile(r'[0-9a-f]{16}')
 MESSAGE_LIMIT = 2000
 
 
+# A native error can echo the statement it refused, including a password. Whatever is stored is scrubbed first:
+# the value of every password or secret field of the draft, and the quoted text after the clauses that carry one.
+_SECRET_CLAUSES = tuple(re.compile(pattern, re.IGNORECASE | re.DOTALL) for pattern in (
+    r"(IDENTIFIED\s+(?:WITH\s+\w+\s+)?(?:BY|AS)\s+)(['\"]).*?\2",
+    r"(\bPASSWORD\s*(?:=\s*|\(\s*)?)(['\"]).*?\2",
+    r"(\bREPLACE\s+)(['\"]).*?\2",
+))
+REDACTED = '<redacted>'
+
+
+def scrub(message, secrets=()):
+    """The message with every given secret value and every quoted password clause replaced by ``<redacted>``."""
+    text = str(message)
+    for value in sorted({str(value) for value in secrets if isinstance(value, str) and value}, key=len, reverse=True):
+        if len(value) >= 4:
+            text = text.replace(value, REDACTED)
+        else:
+            # a very short value would garble the message if replaced everywhere; hide it where it is quoted
+            text = text.replace(f"'{value}'", f"'{REDACTED}'").replace(f'"{value}"', f'"{REDACTED}"')
+    for clause in _SECRET_CLAUSES:
+        text = clause.sub(lambda match: f"{match.group(1)}{match.group(2)}{REDACTED}{match.group(2)}", text)
+    return text
+
+
+def secret_values(fields, admitted):
+    """The string values of the draft's password and secret fields, nested rows included."""
+    sensitive = {field['field_id'] for field in fields if field.get('sensitive') or field.get('control') == 'password'}
+    found = []
+
+    def walk(value):
+        if isinstance(value, str):
+            found.append(value)
+        elif isinstance(value, dict):
+            for item in value.values():
+                walk(item)
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                walk(item)
+    for key, value in (admitted or {}).items():
+        if key in sensitive:
+            walk(value)
+    return found
+
+
 class RefusalReasons:
     def __init__(self, limit=500, ttl=86400, clock=time.time):
         self._entries = OrderedDict()

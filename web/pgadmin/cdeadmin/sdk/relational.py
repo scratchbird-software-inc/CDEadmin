@@ -1031,6 +1031,17 @@ class RelationalDBAPIClient:
             )
         return adapter
 
+    def describe_administrator(self, request):
+        """Whether the connected account administers the engine (the equivalent of a superuser), by the engine's
+        own ``administrator_reader`` in the config extensions, on the caller's own session. An engine with no such
+        reader answers no."""
+        reader = self.config.extensions.get('administrator_reader')
+        if not callable(reader):
+            return False
+        connection = self._connect(request)
+        with self._temporary_attachment(connection):
+            return bool(reader(connection, request))
+
     def describe_security(self, request):
         if self.config.security_reader is None:
             raise RelationalClientError(

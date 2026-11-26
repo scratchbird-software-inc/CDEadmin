@@ -430,8 +430,13 @@ class ProviderVisualAdministration:
         from pgadmin.cdeadmin.sdk import RelationalClientError
         try:
             native = _mapping(planner(provider_request), 'native plan')
-        except RelationalClientError:
-            raise VisualAdminValidationError('Native review is unavailable',
+        except RelationalClientError as exc:
+            # The refusal's own message is kept for those allowed to read it (Decision 22), with the draft's
+            # secrets and any quoted password clause removed; it is never sent to the user as written.
+            from .refusal_log import scrub, secret_values
+            fields = self._operation_fields(resource, operation, admitted_draft)
+            raise VisualAdminValidationError(
+                scrub(str(exc) or 'Native review is unavailable', secret_values(fields, admitted_draft)),
                 [{'field_id': None, 'code': 'native_review_refused'}]) from None
         command_preview = native.get('command_preview')
         if command_preview is not None and not isinstance(
