@@ -9,6 +9,10 @@
 
 SHELL = /bin/sh
 
+# Prefer the project virtual environment (it carries the pinned test and
+# gate dependencies such as pypdf); fall back to the interpreter on PATH.
+PYTHON := $(if $(wildcard $(CURDIR)/.venv/bin/python3),$(CURDIR)/.venv/bin/python3,python3)
+
 APP_NAME := $(shell grep ^APP_NAME web/branding.py | awk -F"=" '{print $$NF}' | tr -d '[:space:]' | tr -d "'" | awk '{print tolower($$0)}')
 APP_RELEASE := $(shell grep ^APP_RELEASE web/version.py | awk -F"=" '{print $$NF}' | tr -d '[:space:]')
 APP_REVISION := $(shell grep ^APP_REVISION web/version.py | awk -F"=" '{print $$NF}' | tr -d '[:space:]')
@@ -117,7 +121,7 @@ CHECK_GATES := cdeadmin-contracts-check cdeadmin-architecture-gate ui-descriptor
 check-gates: $(CHECK_GATES)
 
 check: install-node bundle linter check-pep8 check-gates
-	cd web && yarn run test:js-once && python regression/runtests.py
+	cd web && yarn run test:js-once && $(PYTHON) regression/runtests.py
 
 check-audit:
 	cd web && yarn run audit
@@ -143,13 +147,13 @@ check-pep8:
 	pycodestyle --config=.pycodestyle tools/
 
 check-python:
-	cd web && python regression/runtests.py --exclude feature_tests
+	cd web && $(PYTHON) regression/runtests.py --exclude feature_tests
 
 check-resql:
-	cd web && python regression/runtests.py --pkg resql --exclude feature_tests
+	cd web && $(PYTHON) regression/runtests.py --pkg resql --exclude feature_tests
 
 check-feature: install-node bundle
-	cd web && python regression/runtests.py --pkg feature_tests
+	cd web && $(PYTHON) regression/runtests.py --pkg feature_tests
 
 check-js: install-node linter
 	cd web && yarn run test:js-once
@@ -161,74 +165,74 @@ check-js-coverage:
 # deliberately required and must be outside this source tree.
 cdeadmin-baseline:
 	@test -n "$(CDEADMIN_BASELINE_OUTPUT)" || { echo "CDEADMIN_BASELINE_OUTPUT is required"; exit 2; }
-	python3 tools/cdeadmin_baseline.py --source . \
+	$(PYTHON) tools/cdeadmin_baseline.py --source . \
 		--output "$(CDEADMIN_BASELINE_OUTPUT)" --require-clean
 
 cdeadmin-baseline-test:
-	python3 -m unittest discover -s tools/tests -p 'test_cdeadmin_*.py'
+	$(PYTHON) -m unittest discover -s tools/tests -p 'test_cdeadmin_*.py'
 
 # One entry point for verification; see tools/cdeadmin_verify.py.
 # make verify TIERS="quick unit" ENGINES=sqlite,duckdb
 TIERS ?= quick
 verify:
-	python3 tools/cdeadmin_verify.py $(foreach tier,$(TIERS),--tier $(tier)) \
+	$(PYTHON) tools/cdeadmin_verify.py $(foreach tier,$(TIERS),--tier $(tier)) \
 		$(if $(ENGINES),--engines $(ENGINES),)
 
 ui-descriptors-check:
-	python3 tools/validate_ui_descriptors.py --counts --enforce-counts tools/ui_lint_maximums.json
-	python3 -m pytest -q -p no:cacheprovider tools/tests/test_ui_descriptor_service.py tools/tests/test_ui_descriptor_tools.py tools/tests/test_ui_descriptor_security.py tools/tests/test_ui_descriptor_security_firebird_live.py tools/tests/test_ui_descriptor_postgresql_schema_ids.py tools/tests/test_ui_descriptor_roundtrip_sqlite.py tools/tests/test_ui_descriptor_roundtrip_duckdb.py tools/tests/test_ui_descriptor_operations_sqlite.py tools/tests/test_ui_descriptor_operations_duckdb.py tools/tests/test_ui_descriptor_roundtrip_firebird.py tools/tests/test_ui_descriptor_roundtrip_mariadb.py tools/tests/test_ui_descriptor_roundtrip_dolt.py tools/tests/test_ui_descriptor_roundtrip_tidb.py tools/tests/test_ui_descriptor_server_forms.py tools/tests/test_ui_descriptor_operations_firebird.py tools/tests/test_ui_descriptor_operations_mariadb.py tools/tests/test_ui_descriptor_operations_postgresql.py tools/tests/test_ui_descriptor_engine_filtering.py tools/tests/test_ui_descriptor_help_text.py tools/tests/test_refusal_reasons.py
+	$(PYTHON) tools/validate_ui_descriptors.py --counts --enforce-counts tools/ui_lint_maximums.json
+	$(PYTHON) -m pytest -q -p no:cacheprovider tools/tests/test_ui_descriptor_service.py tools/tests/test_ui_descriptor_tools.py tools/tests/test_ui_descriptor_security.py tools/tests/test_ui_descriptor_security_firebird_live.py tools/tests/test_ui_descriptor_postgresql_schema_ids.py tools/tests/test_ui_descriptor_roundtrip_sqlite.py tools/tests/test_ui_descriptor_roundtrip_duckdb.py tools/tests/test_ui_descriptor_operations_sqlite.py tools/tests/test_ui_descriptor_operations_duckdb.py tools/tests/test_ui_descriptor_roundtrip_firebird.py tools/tests/test_ui_descriptor_roundtrip_mariadb.py tools/tests/test_ui_descriptor_roundtrip_dolt.py tools/tests/test_ui_descriptor_roundtrip_tidb.py tools/tests/test_ui_descriptor_server_forms.py tools/tests/test_ui_descriptor_operations_firebird.py tools/tests/test_ui_descriptor_operations_mariadb.py tools/tests/test_ui_descriptor_operations_postgresql.py tools/tests/test_ui_descriptor_engine_filtering.py tools/tests/test_ui_descriptor_help_text.py tools/tests/test_refusal_reasons.py
 
 cdeadmin-architecture-gate:
-	python3 tools/cdeadmin_architecture_gate.py --source . \
+	$(PYTHON) tools/cdeadmin_architecture_gate.py --source . \
 		--policy tools/cdeadmin_architecture_policy.json
 
 cdeadmin-contracts-generate:
-	python3 tools/cdeadmin_generate_contracts.py
+	$(PYTHON) tools/cdeadmin_generate_contracts.py
 
 cdeadmin-contracts-check:
-	python3 tools/cdeadmin_generate_contracts.py --check
-	python3 tools/cdeadmin_contract_kit.py \
+	$(PYTHON) tools/cdeadmin_generate_contracts.py --check
+	$(PYTHON) tools/cdeadmin_contract_kit.py \
 		--manifest tools/tests/fixtures/cdeadmin_contracts/postgresql/provider_manifest.json
-	python3 tools/cdeadmin_contract_kit.py \
+	$(PYTHON) tools/cdeadmin_contract_kit.py \
 		--manifest tools/tests/fixtures/cdeadmin_contracts/fixture/provider_manifest.json
-	python3 tools/cdeadmin_contract_kit.py \
+	$(PYTHON) tools/cdeadmin_contract_kit.py \
 		--manifest web/pgadmin/cdeadmin/providers/postgresql/provider_manifest.json
-	python3 tools/cdeadmin_provider_testkit.py \
+	$(PYTHON) tools/cdeadmin_provider_testkit.py \
 		--manifest tools/tests/fixtures/cdeadmin_contracts/fixture/provider_manifest.json \
 		--provider tools/tests/fixtures/cdeadmin_contracts/fixture/provider.py \
 		--deny-network
 
 cdeadmin-endpoint-persistence-test:
-	python3 -m unittest tools.tests.test_cdeadmin_endpoint_persistence -v
+	$(PYTHON) -m unittest tools.tests.test_cdeadmin_endpoint_persistence -v
 
 cdeadmin-provider-registry-test:
-	python3 -m unittest tools.tests.test_cdeadmin_provider_registry -v
+	$(PYTHON) -m unittest tools.tests.test_cdeadmin_provider_registry -v
 
 cdeadmin-postgresql-provider-test:
-	python3 -m unittest tools.tests.test_cdeadmin_postgresql_provider -v
+	$(PYTHON) -m unittest tools.tests.test_cdeadmin_postgresql_provider -v
 
 cdeadmin-mongodb-provider-test:
-	python3 -m unittest \
+	$(PYTHON) -m unittest \
 		tools.tests.test_cdeadmin_mongodb_provider \
 		tools.tests.test_cdeadmin_provider_tooling -v
 
 cdeadmin-redis-provider-test:
-	python3 -m unittest \
+	$(PYTHON) -m unittest \
 		tools.tests.test_cdeadmin_redis_provider \
 		tools.tests.test_cdeadmin_provider_tooling \
 		tools.tests.test_cdeadmin_actual_engine_pilots -v
 
 cdeadmin-resource-explorer-test:
-	python3 -m unittest tools.tests.test_cdeadmin_resource_explorer -v
+	$(PYTHON) -m unittest tools.tests.test_cdeadmin_resource_explorer -v
 
 cdeadmin-data-studio-test:
-	python3 -m unittest tools.tests.test_cdeadmin_data_studio -v
+	$(PYTHON) -m unittest tools.tests.test_cdeadmin_data_studio -v
 
 cdeadmin-result-renderer-test:
-	python3 -m unittest tools.tests.test_cdeadmin_result_renderers -v
+	$(PYTHON) -m unittest tools.tests.test_cdeadmin_result_renderers -v
 
 cdeadmin-semantic-model-test:
-	python3 -m unittest \
+	$(PYTHON) -m unittest \
 		tools.tests.test_cdeadmin_semantic_models \
 		tools.tests.test_cdeadmin_provider_workspace \
 		tools.tests.test_cdeadmin_result_renderers -v
@@ -236,7 +240,7 @@ cdeadmin-semantic-model-test:
 # Per-engine live semantic verification: make cdeadmin-semantic-live ENGINE=sqlite
 ENGINE ?= duckdb
 cdeadmin-semantic-live:
-	python3 tools/cdeadmin_relational_provider_live_verify.py \
+	$(PYTHON) tools/cdeadmin_relational_provider_live_verify.py \
 		--engine $(ENGINE) \
 		--output /tmp/cdeadmin-semantic-live-$(ENGINE).json
 
@@ -247,19 +251,19 @@ cdeadmin-semantic-live-sqlite:
 	$(MAKE) cdeadmin-semantic-live ENGINE=sqlite
 
 cdeadmin-operation-bus-test:
-	python3 -m unittest tools.tests.test_cdeadmin_operation_bus -v
+	$(PYTHON) -m unittest tools.tests.test_cdeadmin_operation_bus -v
 
 cdeadmin-security-isolation-test:
-	python3 -m unittest tools.tests.test_cdeadmin_security_isolation -v
+	$(PYTHON) -m unittest tools.tests.test_cdeadmin_security_isolation -v
 
 cdeadmin-quality-infrastructure-test:
-	python3 -m unittest tools.tests.test_cdeadmin_quality_infrastructure -v
+	$(PYTHON) -m unittest tools.tests.test_cdeadmin_quality_infrastructure -v
 
 cdeadmin-product-identity-test:
-	python3 -m unittest tools.tests.test_cdeadmin_product_identity -v
+	$(PYTHON) -m unittest tools.tests.test_cdeadmin_product_identity -v
 
 cdeadmin-product-identity-check:
-	python3 tools/cdeadmin_product_identity.py --source . \
+	$(PYTHON) tools/cdeadmin_product_identity.py --source . \
 		--policy tools/cdeadmin_product_identity_policy.json
 
 # Shared recipe for the cdeadmin *-coverage targets. $1 is the coverage
@@ -267,11 +271,11 @@ cdeadmin-product-identity-check:
 # target sets COV_INCLUDE to its --include globs.
 define coverage_run
 rm -f /tmp/$1_coverage
-python3 -m coverage run \
+$(PYTHON) -m coverage run \
 	--data-file=/tmp/$1_coverage \
 	--include='$(COV_INCLUDE)' \
 	-m unittest $2
-python3 -m coverage report \
+$(PYTHON) -m coverage report \
 	--data-file=/tmp/$1_coverage \
 	--include='$(COV_INCLUDE)' \
 	--fail-under=$3
@@ -284,45 +288,45 @@ cdeadmin-product-identity-coverage:
 
 cdeadmin-branding-inventory:
 	@test -n "$(CDEADMIN_BRANDING_OUTPUT)" || { echo "CDEADMIN_BRANDING_OUTPUT is required"; exit 2; }
-	python3 tools/cdeadmin_product_identity.py --source . \
+	$(PYTHON) tools/cdeadmin_product_identity.py --source . \
 		--policy tools/cdeadmin_product_identity_policy.json \
 		--output "$(CDEADMIN_BRANDING_OUTPUT)"
 
 cdeadmin-profile-migration-test:
-	python3 -m unittest tools.tests.test_cdeadmin_profile_migration -v
+	$(PYTHON) -m unittest tools.tests.test_cdeadmin_profile_migration -v
 
 cdeadmin-profile-migration-coverage: COV_INCLUDE = */web/pgadmin/cdeadmin/migration/*.py,*/web/migrations/versions/cde_profile_migration_v1_.py
 cdeadmin-profile-migration-coverage:
 	$(call coverage_run,cdeadmin_profile_migration,tools.tests.test_cdeadmin_profile_migration,80)
 
 cdeadmin-transport-foundations-test:
-	python3 -m unittest \
+	$(PYTHON) -m unittest \
 		tools.tests.test_cdeadmin_transport_foundations -v
 
 cdeadmin-transport-gate:
-	python3 tools/cdeadmin_transport_gate.py --source .
+	$(PYTHON) tools/cdeadmin_transport_gate.py --source .
 
 cdeadmin-transport-coverage: COV_INCLUDE = */web/pgadmin/cdeadmin/transports/*.py,*/tools/cdeadmin_transport_gate.py
 cdeadmin-transport-coverage:
 	$(call coverage_run,cdeadmin_transport,tools.tests.test_cdeadmin_transport_foundations,80)
 
 cdeadmin-actual-engine-pilots-test:
-	python3 -m unittest \
+	$(PYTHON) -m unittest \
 		tools.tests.test_cdeadmin_actual_engine_pilots -v
 
 cdeadmin-relational-driver-verification-test:
-	python3 -m unittest \
+	$(PYTHON) -m unittest \
 		tools.tests.test_cdeadmin_relational_driver_verify -v
 
 cdeadmin-relational-driver-verification:
-	python3 tools/cdeadmin_relational_driver_verify.py --engine all
+	$(PYTHON) tools/cdeadmin_relational_driver_verify.py --engine all
 
 cdeadmin-actual-engine-gate:
-	python3 tools/cdeadmin_actual_engine_gate.py --source .
+	$(PYTHON) tools/cdeadmin_actual_engine_gate.py --source .
 
 cdeadmin-actual-engine-donor-gate:
 	@test -n "$(CDEADMIN_DONOR_ROOT)" || { echo "CDEADMIN_DONOR_ROOT is required"; exit 2; }
-	python3 tools/cdeadmin_actual_engine_gate.py --source . \
+	$(PYTHON) tools/cdeadmin_actual_engine_gate.py --source . \
 		--donor-root "$(CDEADMIN_DONOR_ROOT)"
 
 cdeadmin-actual-engine-coverage: COV_INCLUDE = */web/pgadmin/cdeadmin/sdk/*.py,*/web/pgadmin/cdeadmin/providers/mysql_family/*.py,*/web/pgadmin/cdeadmin/providers/mongodb/*.py,*/web/pgadmin/cdeadmin/providers/neo4j/*.py,*/web/pgadmin/cdeadmin/providers/clickhouse/*.py,*/web/pgadmin/cdeadmin/providers/duckdb/*.py,*/tools/cdeadmin_actual_engine_gate.py
@@ -330,15 +334,15 @@ cdeadmin-actual-engine-coverage:
 	$(call coverage_run,cdeadmin_actual_engine,tools.tests.test_cdeadmin_actual_engine_pilots,80)
 
 cdeadmin-reference-corpus-test:
-	python3 -m unittest \
+	$(PYTHON) -m unittest \
 		tools.tests.test_cdeadmin_reference_corpus -v
 
 cdeadmin-reference-corpus-gate:
-	python3 tools/cdeadmin_reference_corpus.py --source .
+	$(PYTHON) tools/cdeadmin_reference_corpus.py --source .
 
 cdeadmin-reference-corpus-donor-gate:
 	@test -n "$(CDEADMIN_DONOR_ROOT)" || { echo "CDEADMIN_DONOR_ROOT is required"; exit 2; }
-	python3 tools/cdeadmin_reference_corpus.py --source . \
+	$(PYTHON) tools/cdeadmin_reference_corpus.py --source . \
 		--donor-root "$(CDEADMIN_DONOR_ROOT)"
 
 cdeadmin-reference-corpus-coverage: COV_INCLUDE = */tools/cdeadmin_reference_corpus.py
@@ -346,62 +350,62 @@ cdeadmin-reference-corpus-coverage:
 	$(call coverage_run,cdeadmin_reference_corpus,tools.tests.test_cdeadmin_reference_corpus,80)
 
 cdeadmin-parity-test:
-	python3 -m unittest \
+	$(PYTHON) -m unittest \
 		tools.tests.test_cdeadmin_parity_runner -v
 
 cdeadmin-parity-gate:
-	python3 tools/cdeadmin_parity_runner.py --source .
+	$(PYTHON) tools/cdeadmin_parity_runner.py --source .
 
 cdeadmin-parity-reference-gate:
-	python3 tools/cdeadmin_parity_runner.py --source . \
+	$(PYTHON) tools/cdeadmin_parity_runner.py --source . \
 		--require-reference-complete
 
 cdeadmin-parity-release-gate:
-	python3 tools/cdeadmin_parity_runner.py --source . --require-release
+	$(PYTHON) tools/cdeadmin_parity_runner.py --source . --require-release
 
 cdeadmin-parity-coverage: COV_INCLUDE = */tools/cdeadmin_parity_runner.py
 cdeadmin-parity-coverage:
 	$(call coverage_run,cdeadmin_parity,tools.tests.test_cdeadmin_parity_runner,75)
 
 cdeadmin-workspace-shell-test:
-	python3 -m unittest \
+	$(PYTHON) -m unittest \
 		tools.tests.test_cdeadmin_workspace_shells -v
 
 cdeadmin-workspace-shell-gate:
-	python3 tools/cdeadmin_workspace_shell_gate.py --source .
+	$(PYTHON) tools/cdeadmin_workspace_shell_gate.py --source .
 
 cdeadmin-workspace-shell-coverage: COV_INCLUDE = */tools/cdeadmin_workspace_shell_gate.py
 cdeadmin-workspace-shell-coverage:
 	$(call coverage_run,cdeadmin_workspace_shell,tools.tests.test_cdeadmin_workspace_shells,80)
 
 cdeadmin-scratchbird-consumer-test:
-	python3 -m unittest \
+	$(PYTHON) -m unittest \
 		tools.tests.test_cdeadmin_scratchbird_consumer -v
 
 cdeadmin-scratchbird-consumer-gate:
-	python3 tools/cdeadmin_scratchbird_consumer.py --source .
+	$(PYTHON) tools/cdeadmin_scratchbird_consumer.py --source .
 
 cdeadmin-scratchbird-consumer-coverage: COV_INCLUDE = */tools/cdeadmin_scratchbird_consumer.py
 cdeadmin-scratchbird-consumer-coverage:
 	$(call coverage_run,cdeadmin_scratchbird_consumer,tools.tests.test_cdeadmin_scratchbird_consumer,80)
 
 cdeadmin-upstream-acceptance-test:
-	python3 -m unittest \
+	$(PYTHON) -m unittest \
 		tools.tests.test_cdeadmin_upstream_acceptance -v
 
 cdeadmin-upstream-acceptance-gate:
-	python3 tools/cdeadmin_upstream_acceptance.py --source .
+	$(PYTHON) tools/cdeadmin_upstream_acceptance.py --source .
 
 cdeadmin-upstream-acceptance-coverage: COV_INCLUDE = */tools/cdeadmin_upstream_acceptance.py
 cdeadmin-upstream-acceptance-coverage:
 	$(call coverage_run,cdeadmin_upstream_acceptance,tools.tests.test_cdeadmin_upstream_acceptance,80)
 
 cdeadmin-quality-gate:
-	python3 tools/cdeadmin_quality_gate.py --source . \
+	$(PYTHON) tools/cdeadmin_quality_gate.py --source . \
 		--policy tools/cdeadmin_quality_policy.json
 
 cdeadmin-bundle-regression-gate:
-	python3 tools/cdeadmin_quality_gate.py --source . \
+	$(PYTHON) tools/cdeadmin_quality_gate.py --source . \
 		--policy tools/cdeadmin_quality_policy.json \
 		--require-built-bundle
 
@@ -423,7 +427,7 @@ cdeadmin-jest-contract-coverage:
 cdeadmin-dependency-licenses:
 	@test -n "$(CDEADMIN_LICENSE_OUTPUT)" || { echo "CDEADMIN_LICENSE_OUTPUT is required"; exit 2; }
 	@test -n "$(CDEADMIN_BASELINE_ID)" || { echo "CDEADMIN_BASELINE_ID is required"; exit 2; }
-	python3 tools/cdeadmin_dependency_licenses.py \
+	$(PYTHON) tools/cdeadmin_dependency_licenses.py \
 		--output "$(CDEADMIN_LICENSE_OUTPUT)" \
 		--baseline-id "$(CDEADMIN_BASELINE_ID)" \
 		$(foreach root,$(CDEADMIN_NODE_ROOTS),--node-root "$(root)")
