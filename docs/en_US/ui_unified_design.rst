@@ -1856,3 +1856,101 @@ Once 1, 2 and 3 are decided, phase 0 can start immediately; nothing in phases 0 
     metadata-only inspection (Decision 10), and how a grant on one object is
     reached from that object's own Security tab (principle 1; the matrix is
     the same data from the grantee side).
+
+22. Reasons for native refusals (found in the PostgreSQL provider-tree
+    click-through, 2026-11-26; **not yet ruled**). When a provider refuses a
+    draft while compiling its plan, the user sees one fixed sentence ("The
+    operation was refused before dispatch. Review the indicated fields or
+    create a new plan.") and no field is indicated. A missing database choice
+    in *Drop owned objects*, a typed confirmation that does not match, and a
+    role password the plan will never carry were all indistinguishable. The
+    refusal contract is deliberately secret-free; the question is how to say
+    *why* without breaking that.
+
+    *Finding.* Where the reason is lost, and what already exists:
+
+    - ``visual_admin/refusals.py`` builds the plan-time refusal: status 422,
+      the fixed ``errormsg``, and ``data.refusal.errors`` reduced to
+      ``{field_id, code}`` (a ``code`` that is not an identifier becomes
+      ``invalid_field``). The provider's own message is kept on the exception
+      and dropped here. ``test_refusals_are_typed_and_do_not_return_drafts_or_sensitive_messages``
+      pins that a message and a value never come back, and
+      ``refusals.py`` is one of the files hashed into the MySQL group 9
+      qualification record, so changing it invalidates that evidence.
+    - Two funnels turn provider refusals into this: ``visual_admin/provider.py``
+      ``plan()`` (any ``RelationalClientError`` becomes "Native review is
+      unavailable", no field) and the PostgreSQL ``plan_visual_admin`` (a
+      provider error becomes a refusal with ``field_id`` empty unless the
+      message names a delegated child). Sizes: about 546
+      ``PostgreSQLNativeAdminError`` / ``_refuse`` raise sites in the
+      PostgreSQL compilers, 77 of which interpolate a value, and about 3,960
+      ``raise RelationalClientError`` sites across all providers.
+    - The *validate* phase already carries messages
+      (``{field_id, code, message}``, for example "Unknown form fields: ...")
+      and the client shows them (``DescriptorClient``: ``message || code``).
+      Only the plan phase is code-only.
+    - After dispatch the contract already shows the server's own words: the
+      2026-11-11 rule shows SQLSTATE and the server's message (at most 500
+      characters) for a rejection the provider vouches for. That text is
+      written by the database server. A pre-dispatch refusal is written by our
+      compilers, and some interpolate values or native tool output
+      (``Native postgres -C rejected postgresql.conf: {err}``,
+      ``{operation!r}``), so the same trust does not carry over.
+    - The client would not show a message even if one were sent:
+      ``makePost`` reads ``data.errors[].message``, but the refusal puts its
+      list under ``data.refusal.errors``; ``OperationDialog`` shows one banner
+      and does no per-field marking, and its own check covers only ``required``.
+
+    *Options.*
+
+    a. **Reason codes with a message catalog.** The contract stays as it is:
+       the provider raises a refusal with a code and a field id from a
+       declared vocabulary. The words live in a catalog keyed by code, in the
+       descriptors, translated like other UI strings (``ui_catalogs.json``),
+       with parameters limited to field labels. Nothing a provider writes is
+       sent as text, so it is secret-free by construction. A gate can require
+       that every code a compiler can raise has a catalog entry. The client
+       reads ``data.refusal.errors``, shows the message and marks the field.
+       Cost: each refusal site needs a code; uncoded sites stay generic, so
+       it migrates one engine and one family of operations at a time.
+    b. **Declarative pre-checks in the validate phase.** Rules the descriptor
+       can state (a reference has a given shape, a confirmation equals the
+       target's name, a field is never carried in a plan) are evaluated where
+       messages already flow, and can run in the browser before Preview. No
+       contract change. Limited to what a rule can express, and the compiler
+       stays authoritative, so some logic exists twice. Covers the cases seen
+       so far.
+    c. **Vouched messages.** A new exception type carries a static sentence
+       written for the user, never a value; the response adds ``message``
+       (bounded, printable) for vouched entries only and stays code-only for
+       every existing raise site. Fastest to cover many sites, and consistent
+       in spirit with the 2026-11-11 rule. Depends on discipline: a gate can
+       check that the argument is a string literal, but cannot check that the
+       sentence is safe or translated, and it changes what the contract test
+       pins.
+    d. **A support reference.** The refusal carries a correlation id; the
+       full reason is logged server-side under it; the dialog says "Reference:
+       ..., ask an administrator", and an administrator may see the logged
+       reason. Smallest change and the only option that covers every
+       uncoded site, but it gives the user no reason.
+    e. **Return the provider's message as is.** Not offered: messages can
+       interpolate user values and native tool output, and the contract test
+       exists to keep exactly that out of a refusal.
+
+    *Default if not ruled.* Adopt (a) as the general mechanism, with (b) for
+    the cases a rule can state and (d) for whatever stays uncoded. Not (c)
+    until the owner decides that server-authored explanatory text is
+    acceptable in a pre-dispatch refusal. Order: the client and the contract
+    first (read ``data.refusal.errors``, per-field message), then a first
+    vocabulary for the PostgreSQL refusals users hit (privileges, role and
+    database lifecycle, maintenance), then the other engines on the same
+    schema. Extend the refusal contract test so a canary in a catalog
+    parameter or a field id cannot appear in a response.
+
+    *Needs a ruling.* (1) Does the secret-free rule forbid any explanatory
+    text in a pre-dispatch refusal, or only drafts and values? (This decides
+    whether (c) is possible at all.) (2) One shared catalog for all engines
+    with per-engine overrides, or a catalog per engine? (3) Is a change to
+    ``refusals.py`` acceptable given that the MySQL group 9 qualification
+    hashes it, or must that record be re-run first? (4) May an administrator
+    see a logged reason (option d), and under which permission?

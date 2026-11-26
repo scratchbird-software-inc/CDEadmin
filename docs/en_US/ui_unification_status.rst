@@ -1949,7 +1949,9 @@ Gaps found, not closed:
 * Gaps recorded, not closed: a native refusal reaches the user only as the generic
   "refused before dispatch" text with no field named (the refusal contract is bounded and
   secret-free by design, and the UI does not map its codes), so the reason (for instance a
-  missing database choice) is not shown; ``Reassign owned objects`` was opened but not run.
+  missing database choice) is not shown. The options are written up as Decision 22 in
+  ``ui_unified_design.rst`` and are not yet ruled; ``Reassign owned objects`` was opened but
+  not run.
   The 13 failures in the live-gated ``test_ui_descriptor_operations_postgresql.py`` run
   are identical with and without these changes. The revoke prefill for a default-ACL
   ``(owner)`` row is unchanged.
