@@ -2060,6 +2060,24 @@ class EndpointService:
         runtime.verification_evidence_reference = None
         runtime.verified_at = None
 
+    def connect_postgresql_database(self, server, database_oid):
+        """Connect one database of a preserved PostgreSQL server (the provider tree browses a database
+        through the inherited connection manager, so one other than the server's own needs its own
+        session). Raises ``EndpointRegistrationError`` when the server itself is not connected and
+        ``RuntimeError`` carrying the driver's message when the database refuses the connection."""
+        from pgadmin.utils.driver.registry import DriverRegistry
+        manager = DriverRegistry.get('psycopg3').connection_manager(server.id)
+        if not manager.connection().connected():
+            raise EndpointRegistrationError(
+                'Connect the server before connecting a database.')
+        connection = manager.connection(did=database_oid, auto_reconnect=True)
+        already_connected = connection.connected()
+        if not already_connected:
+            status, message = connection.connect()
+            if not status:
+                raise RuntimeError(str(message))
+        return {'connected': True, 'already_connected': already_connected}
+
     def _postgresql_workspace(self, server, endpoint, database_target_id=Ellipsis):
         """Bridge a connected preserved PostgreSQL server to shared studios."""
         from pgadmin.cdeadmin.providers.postgresql.provider import (

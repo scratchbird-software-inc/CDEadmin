@@ -166,9 +166,15 @@ class WiringTests(unittest.TestCase):
         self.assertIn("'cde_database_connect': [{'post': 'cde_database_connect'}]", text)
         route = text.split('    def cde_database_connect(self, gid, sid)')[1].split('\n    def ')[0]
         for needle in ('_is_non_owner(server)', '_is_preserved_postgresql(server)',
-                       'database_oid(data.get(', 'manager.connection(did=did',
-                       'conn.connect()', 'status=409'):
+                       'database_oid(data.get(', 'connect_postgresql_database(', 'status=409'):
             self.assertIn(needle, route)
+        # the driver is reached through the endpoint service, not the global driver of this module
+        self.assertNotIn('get_driver(', route)
+        service = (WEB / 'pgadmin' / 'cdeadmin' / 'endpoints' / 'service.py').read_text(encoding='utf-8')
+        connect = service.split('def connect_postgresql_database(')[1].split('    def _postgresql_workspace(')[0]
+        for needle in ('manager.connection(did=database_oid', 'connection.connect()',
+                       'Connect the server before connecting a database.'):
+            self.assertIn(needle, connect)
         menu = (WEB / 'pgadmin' / 'browser' / 'static' / 'js' / 'ProviderContextMenu.js'
                 ).read_text(encoding='utf-8')
         branch = menu.split("case 'verify_endpoint':")[1].split("case 'disconnect_endpoint'")[0]

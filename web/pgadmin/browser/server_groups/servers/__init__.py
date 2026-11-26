@@ -1515,20 +1515,15 @@ class ServerNode(PGChildNodeView):
             return bad_request(str(exc))
         if did is None:
             return bad_request(gettext('A database target is required.'))
-        manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(sid)
-        if not manager.connection().connected():
-            return make_json_response(
-                status=409, success=0, errormsg=gettext(
-                    'Connect the server before connecting a database.'))
-        conn = manager.connection(did=did, auto_reconnect=True)
-        already_connected = conn.connected()
-        if not already_connected:
-            status, errmsg = conn.connect()
-            if not status:
-                return internal_server_error(errormsg=errmsg)
+        try:
+            result = endpoint_service_for_app(current_app).connect_postgresql_database(
+                server, did)
+        except EndpointRegistrationError as exc:
+            return make_json_response(status=409, success=0, errormsg=str(exc))
+        except RuntimeError as exc:
+            return internal_server_error(errormsg=str(exc))
         return make_json_response(
-            success=1, info=gettext('Database connected.'),
-            data={'connected': True, 'already_connected': already_connected})
+            success=1, info=gettext('Database connected.'), data=result)
 
     def update_connection_parameter(self, data, server, sharedserver=None):
         """

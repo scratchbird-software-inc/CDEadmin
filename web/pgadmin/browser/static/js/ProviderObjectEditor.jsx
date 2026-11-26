@@ -509,9 +509,9 @@ export function familyEditorContextActions(itemData, item) {
       ? ['domain', 'sequence', 'procedure', 'function', 'package', 'exception']
       : [itemData.cde_resource_kind]
   ) : itemData._type === 'cde_resource' && itemData.cde_resource_kind === 'schema' ?
-      Object.values(bundle.kinds).filter((kind) =>
-        kind.tier1.includes('create') && SCHEMA_CHILD_KINDS.has(kind.resource_kind)
-      ).map((kind) => kind.resource_kind) :
+    Object.values(bundle.kinds).filter((kind) =>
+      kind.tier1.includes('create') && SCHEMA_CHILD_KINDS.has(kind.resource_kind)
+    ).map((kind) => kind.resource_kind) :
     itemData._type === 'cde_database_target' ?
       [...new Set([...Object.values(bundle.kinds).filter((kind) =>
         kind.tier1.includes('create') &&

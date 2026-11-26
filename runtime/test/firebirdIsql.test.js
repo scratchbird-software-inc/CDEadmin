@@ -85,14 +85,14 @@ test('embedded same-host context validates containment, boot_id, inode and Engin
     // Different host boot_id is rejected before staging.
     await assert.rejects(
       prepareEmbeddedEnvironment(embeddedConn, fakeIsql, {PATH: '/bin'}, {bootId: '00000000-0000-0000-0000-000000000000', stageParent: tmp}),
-      /same host/
+      /same host/,
     );
 
     // Same host succeeds and stages Engine13-only firebird.conf without ISC_PASSWORD.
     const prepared = await prepareEmbeddedEnvironment(
       embeddedConn, fakeIsql,
       {PATH: '/bin', ISC_PASSWORD: 'stale'},
-      {stageParent: tmp}
+      {stageParent: tmp},
     );
     assert.equal(prepared.env.ISC_PASSWORD, undefined);
     const fbConf = await readFile(path.join(prepared.stagedConfigDir, 'firebird.conf'), 'utf8');
@@ -109,7 +109,7 @@ test('embedded same-host context validates containment, boot_id, inode and Engin
       if (String(newSt.ino) !== String(st.ino)) {
         await assert.rejects(
           prepareEmbeddedEnvironment(embeddedConn, fakeIsql, {PATH: '/bin'}, {stageParent: tmp}),
-          /changed since the server issued/
+          /changed since the server issued/,
         );
       }
     }

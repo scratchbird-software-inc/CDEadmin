@@ -607,7 +607,7 @@ ipcMain.handle('desktop-vault:unlock', async (_e, credentials) => {
         password: credentials?.password || '',
         database_key: credentials?.databaseKey || credentials?.database_key || '',
       },
-      {validateStatus: () => true}
+      {validateStatus: () => true},
     );
     if (resp.status === 200 && resp.data?.success && resp.data?.data?.ticket) {
       const ticket = encodeURIComponent(resp.data.data.ticket);
