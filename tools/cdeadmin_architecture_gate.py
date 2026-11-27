@@ -88,13 +88,17 @@ def statement_scope(
 
 
 def occurrence_fingerprint(
-    statement: ast.stmt, parents: dict[ast.AST, ast.AST]
+    statement: ast.stmt, parents: dict[ast.AST, ast.AST], source: str
 ) -> str:
+    # Hash the statement's normalised source text, not ``ast.dump``: the dump
+    # differs between Python versions, so the frozen fingerprints would
+    # otherwise depend on which interpreter runs the gate.
+    text = " ".join((ast.get_source_segment(source, statement) or "").split())
     payload = "|".join(
         (
             statement_scope(statement, parents),
             statement.__class__.__name__,
-            ast.dump(statement, include_attributes=False),
+            text,
         )
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
@@ -136,7 +140,8 @@ def file_occurrence_fingerprints(path: Path, token: str) -> list[str]:
                 node.end_col_offset - node.col_offset,
             ),
         )
-        fingerprints.append(occurrence_fingerprint(statement, parents))
+        fingerprints.append(
+            occurrence_fingerprint(statement, parents, source))
     return sorted(fingerprints)
 
 
@@ -350,6 +355,21 @@ def is_test_path(path: Path, policy: dict) -> bool:
     return bool(markers.intersection(path.parts))
 
 
+def cross_provider_allowed(policy: dict, owner: str, imported: str) -> bool:
+    """Admitted sharing between provider code.
+
+    ``provider_families`` lists provider packages that deliberately build on
+    another provider's package (wire-compatible families). A module that sits
+    directly in a provider root, not in a provider package, is shared backend
+    code for the providers it serves, so it may import provider packages when
+    ``provider_root_modules_may_import_providers`` is set.
+    """
+    if (policy.get("provider_root_modules_may_import_providers")
+            and Path(owner).suffix):
+        return True
+    return imported in policy.get("provider_families", {}).get(owner, [])
+
+
 def scan_common_and_providers(source: Path, policy: dict) -> list[dict]:
     common_roots = configured_roots(source, policy, "common_roots")
     provider_roots = configured_roots(source, policy, "provider_roots")
@@ -422,7 +442,9 @@ def scan_common_and_providers(source: Path, policy: dict) -> list[dict]:
                     imported = target.split(".providers.", 1)[1].split(
                         ".", 1
                     )[0]
-                    if imported in provider_names and imported != owner:
+                    if (imported in provider_names and imported != owner
+                            and not cross_provider_allowed(
+                                policy, owner, imported)):
                         violations.append(
                             violation(
                                 "cross-provider-import-boundary",
@@ -436,7 +458,8 @@ def scan_common_and_providers(source: Path, policy: dict) -> list[dict]:
                 )
                 if owner and relative_provider_import:
                     imported = target.split(".", 1)[0]
-                    if imported != owner:
+                    if (imported != owner and not cross_provider_allowed(
+                            policy, owner, imported)):
                         violations.append(
                             violation(
                                 "cross-provider-import-boundary",
@@ -467,7 +490,9 @@ def scan_common_and_providers(source: Path, policy: dict) -> list[dict]:
                         item for item in candidates if item in provider_names
                     )
                     imported = next(provider_candidates, None)
-                    if imported and imported != owner:
+                    if (imported and imported != owner
+                            and not cross_provider_allowed(
+                                policy, owner, imported)):
                         violations.append(
                             violation(
                                 "cross-provider-import-boundary",

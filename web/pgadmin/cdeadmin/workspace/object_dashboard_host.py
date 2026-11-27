@@ -459,9 +459,8 @@ class ObjectDashboardHost:
         if not server_id:
             return None, False
         try:
-            from config import PG_DEFAULT_DRIVER
-            from pgadmin.utils.driver import get_driver
-            manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(int(server_id))
+            from pgadmin.utils.driver.registry import DriverRegistry
+            manager = DriverRegistry.get('psycopg3').connection_manager(int(server_id))
             conn = (
                 manager.connection(did=int(did))
                 if did and str(did).isdigit()

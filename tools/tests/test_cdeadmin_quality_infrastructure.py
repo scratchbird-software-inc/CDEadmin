@@ -459,6 +459,26 @@ class QualityGateTests(unittest.TestCase):
                 [item['rule'] for item in findings],
             )
 
+    def test_source_maps_are_not_counted_as_shipped_bundle(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)
+            output = source / 'generated'
+            output.mkdir()
+            (output / 'bundle.js').write_bytes(b'x' * 100)
+            (output / 'bundle.js.map').write_bytes(b'x' * 1000)
+            policy = {'built_bundle': {
+                'roots': ['generated'],
+                'excluded_suffixes': ['.map'],
+                'baseline_bytes': 100,
+                'maximum_bytes': 110,
+            }}
+            measurement, findings = quality_gate.bundle_measurement(
+                source, policy, require_bundle=True
+            )
+            self.assertEqual(100, measurement['bytes'])
+            self.assertEqual(1, measurement['file_count'])
+            self.assertEqual([], findings)
+
 
 if __name__ == '__main__':
     unittest.main()

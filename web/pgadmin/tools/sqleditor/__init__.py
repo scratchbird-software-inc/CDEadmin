@@ -51,6 +51,7 @@ from pgadmin.utils.ajax import make_json_response, bad_request, \
     success_return, internal_server_error, service_unavailable, gone, \
     make_response as ajax_response
 from pgadmin.utils.driver import get_driver
+from pgadmin.utils.driver.registry import DriverRegistry
 from pgadmin.utils.crypto import encrypt
 from pgadmin.utils.master_password import get_crypt_key
 from pgadmin.utils.exception import ConnectionLost, SSHTunnelConnectionLost, \
@@ -823,7 +824,7 @@ def browse_data_sql(sid, did, obj_id):
         did: Database Id
         obj_id: pg_class OID of the selected relation
     """
-    driver = get_driver(PG_DEFAULT_DRIVER)
+    driver = DriverRegistry.get('psycopg3')
     conn = driver.connection_manager(sid).connection(did=did)
     if not conn.connected():
         return internal_server_error(errormsg=SERVER_CONNECTION_CLOSED)

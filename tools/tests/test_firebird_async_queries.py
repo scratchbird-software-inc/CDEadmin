@@ -29,6 +29,9 @@ from pgadmin.cdeadmin.sdk.relational import (  # noqa: E402
 )
 
 
+from pgadmin.cdeadmin.providers.firebird import error_diagnostics
+
+
 @pytest.fixture
 def rig():
     entered, finish = threading.Event(), threading.Event()
@@ -37,7 +40,10 @@ def rig():
     client = FirebirdQueryClient(RelationalClientConfig(
         PROFILE, 'owned-driver', 'SELECT 1 FROM RDB$DATABASE',
         lambda route: {}, lambda handle, request: [],
-        query_parameter_normalizer=normalize_parameters), module=module)
+        query_parameter_normalizer=normalize_parameters,
+        error_identity=error_diagnostics.execution_identity,
+        error_status_codes=error_diagnostics.status_codes,
+        error_status_label='Firebird status codes'), module=module)
     handle = Mock()
     cursor = handle.cursor.return_value
     cursor.description = [('V', int)]

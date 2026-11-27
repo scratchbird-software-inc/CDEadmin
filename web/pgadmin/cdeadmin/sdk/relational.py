@@ -109,6 +109,14 @@ class RelationalClientConfig:
     database_initializer: Callable[
         [object, Mapping[str, Any]], Mapping[str, Any]
     ] | None = field(default=None, repr=False, compare=False)
+    # Native error diagnostics, owned by the provider: bounded identity
+    # fields (e.g. ``errno=..``), bounded status codes, and the label used
+    # when the codes are reported.
+    error_identity: Callable[[BaseException], Sequence[str]] | None = field(
+        default=None, repr=False, compare=False)
+    error_status_codes: Callable[[BaseException], Sequence[int]] | None = field(
+        default=None, repr=False, compare=False)
+    error_status_label: str = 'Native status codes'
     database_create_arguments: Callable[
         [Mapping[str, Any], str, Mapping[str, Any]], Mapping[str, Any]
     ] | None = field(default=None, repr=False, compare=False)
@@ -428,12 +436,12 @@ class RelationalDBAPIClient:
         """Keep only bounded native codes, never driver message arguments."""
         message += f' ({type(exception).__name__})'
         codes = ()
-        if self.config.profile.engine_id == 'firebird':
-            from ..providers.firebird.error_diagnostics import status_codes
-            codes = status_codes(exception)
+        if self.config.error_status_codes is not None:
+            codes = self.config.error_status_codes(exception)
             if codes:
-                message += '; Firebird status codes: ' + ', '.join(
-                    str(code) for code in codes)
+                message += (
+                    f'; {self.config.error_status_label}: ' + ', '.join(
+                        str(code) for code in codes))
         error = RelationalClientError(message)
         error.gds_codes = codes
         return error
@@ -1122,11 +1130,8 @@ class RelationalDBAPIClient:
             if cursor is not None and cursor is not handle:
                 self._close_failed_query_cursor(handle, cursor, exc)
             native_identity = []
-            if self.config.profile.engine_id == 'firebird':
-                from ..providers.firebird.error_diagnostics import (
-                    execution_identity,
-                )
-                native_identity = execution_identity(exc)
+            if self.config.error_identity is not None:
+                native_identity = list(self.config.error_identity(exc))
             else:
                 for attribute in ('errno', 'sqlstate'):
                     value = getattr(exc, attribute, None)
@@ -1137,12 +1142,12 @@ class RelationalDBAPIClient:
                 if native_identity else ''
             )
             codes = ()
-            if self.config.profile.engine_id == 'firebird':
-                from ..providers.firebird.error_diagnostics import status_codes
-                codes = status_codes(exc)
+            if self.config.error_status_codes is not None:
+                codes = self.config.error_status_codes(exc)
                 if codes:
-                    detail += '; Firebird status codes: ' + ', '.join(
-                        str(code) for code in codes)
+                    detail += (
+                        f'; {self.config.error_status_label}: ' + ', '.join(
+                            str(code) for code in codes))
             error = RelationalClientError(
                 f'relational execution failed ({type(exc).__name__}'
                 f'{detail})'

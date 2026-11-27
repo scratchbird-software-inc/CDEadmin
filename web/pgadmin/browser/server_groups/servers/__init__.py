@@ -33,6 +33,7 @@ import config
 from config import PG_DEFAULT_DRIVER
 from pgadmin.model import db, Server, ServerGroup, User, SharedServer
 from pgadmin.utils.driver import get_driver
+from pgadmin.utils.driver.registry import DriverRegistry
 from pgadmin.utils.master_password import get_crypt_key
 from pgadmin.cdeadmin.providers.postgresql.connection_target import (
     initial_database,
@@ -986,7 +987,7 @@ class ServerModule(sg.ServerGroupPluginModule):
         servers = get_user_server_query().filter(
             Server.servergroup_id == gid, Server.is_adhoc == 0)
 
-        driver = get_driver(PG_DEFAULT_DRIVER)
+        driver = DriverRegistry.get('psycopg3')
         servers = self.get_servers(servers, hide_shared_server, gid)
 
         for server in servers:
@@ -1427,7 +1428,7 @@ class ServerNode(PGChildNodeView):
         )
         if _is_non_owner(server):
             return None
-        manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(sid)
+        manager = DriverRegistry.get('psycopg3').connection_manager(sid)
         if not manager.connection().connected():
             return None
         try:
@@ -3696,7 +3697,7 @@ class ServerNode(PGChildNodeView):
                     with removal:
                         payload = endpoint_service_for_app(current_app).validate_endpoint_removal(server,data.get('request') or {})
                         server_name = server.name
-                        get_driver(PG_DEFAULT_DRIVER).delete_manager(server.id)
+                        DriverRegistry.get('psycopg3').delete_manager(server.id)
                         db.session.delete(server)
                         db.session.commit()
                         self.delete_shared_server(gid,sid)

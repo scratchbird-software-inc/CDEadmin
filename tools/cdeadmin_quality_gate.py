@@ -189,10 +189,14 @@ def source_budget_violations(measurements, policy):
 
 def bundle_measurement(source: Path, policy, require_bundle):
     paths = []
+    # Debug-only artifacts (source maps) are not shipped assets.
+    excluded = set(policy['built_bundle'].get('excluded_suffixes', []))
     for relative in policy['built_bundle']['roots']:
         root = source / relative
         if root.exists():
-            paths.extend(path for path in root.rglob('*') if path.is_file())
+            paths.extend(
+                path for path in root.rglob('*')
+                if path.is_file() and path.suffix not in excluded)
     result = {
         'status': 'measured' if paths else 'not_built',
         'file_count': len(paths),

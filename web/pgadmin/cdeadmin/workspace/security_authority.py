@@ -944,9 +944,8 @@ class SecurityAuthorityHost:
             raise PermissionError('Only the server owner may apply security changes')
 
         if info['workflow'] == 'legacy_pg':
-            from config import PG_DEFAULT_DRIVER
-            from pgadmin.utils.driver import get_driver
-            manager = get_driver(PG_DEFAULT_DRIVER).connection_manager(info['sid'])
+            from pgadmin.utils.driver.registry import DriverRegistry
+            manager = DriverRegistry.get('psycopg3').connection_manager(info['sid'])
             did = None
             if norm_target:
                 if norm_target.startswith('postgresql-database:'):

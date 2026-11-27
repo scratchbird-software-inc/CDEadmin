@@ -35,7 +35,7 @@ def route(monkeypatch):
         managers.setdefault(sid, Mock(connection=Mock(return_value=conn)))
         return managers[sid]
 
-    monkeypatch.setattr(editor, 'get_driver', lambda _name: SimpleNamespace(
+    monkeypatch.setattr(editor.DriverRegistry, 'get', lambda _name: SimpleNamespace(
         connection_manager=connection_manager, qtIdent=Driver.qtIdent))
     # The message is translated in the app; the bare Flask app has no Babel.
     monkeypatch.setattr(editor, 'gettext', lambda text: text)

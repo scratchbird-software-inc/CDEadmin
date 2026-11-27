@@ -110,6 +110,38 @@ class ArchitectureGateTestCase(unittest.TestCase):
         )
         self.assertIn("cross-provider-import-boundary", self.rules())
 
+    def _cross_import_fixture(self):
+        self.write(
+            "web/pgadmin/cdeadmin/providers/alpha/service.py",
+            "from pgadmin.cdeadmin.providers.beta import Adapter\n",
+        )
+        self.write(
+            "web/pgadmin/cdeadmin/providers/beta/service.py",
+            "class Adapter:\n    pass\n",
+        )
+
+    def test_declared_provider_family_may_share_a_package(self):
+        self._cross_import_fixture()
+        self.policy["provider_families"] = {"alpha": ["beta"]}
+        self.assertNotIn("cross-provider-import-boundary", self.rules())
+        # The admission is directional and names exactly one provider.
+        self.policy["provider_families"] = {"beta": ["alpha"]}
+        self.assertIn("cross-provider-import-boundary", self.rules())
+
+    def test_provider_root_module_may_import_provider_packages_when_admitted(
+            self):
+        self.write(
+            "web/pgadmin/cdeadmin/providers/beta/service.py",
+            "class Adapter:\n    pass\n",
+        )
+        self.write(
+            "web/pgadmin/cdeadmin/providers/shared_admin.py",
+            "from pgadmin.cdeadmin.providers.beta import Adapter\n",
+        )
+        self.assertIn("cross-provider-import-boundary", self.rules())
+        self.policy["provider_root_modules_may_import_providers"] = True
+        self.assertNotIn("cross-provider-import-boundary", self.rules())
+
     def test_provider_may_import_shared_module_below_provider_root(self):
         self.write(
             "web/pgadmin/cdeadmin/providers/alpha/service.py",

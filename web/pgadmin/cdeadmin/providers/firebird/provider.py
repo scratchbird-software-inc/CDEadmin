@@ -45,6 +45,7 @@ from .authentication import validate_authentication_plugins
 from .decfloat_traps import requested_traps
 from .parallel_workers import requested_workers
 from .failed_session import discard_failed_session
+from . import error_diagnostics
 from .error_diagnostics import status_codes
 from .restore_policy import physical_restore_policy
 from .physical_io import normalize_physical_io
@@ -4435,6 +4436,9 @@ def _create_client(permissions, *, attachment_mode=None, profile=PROFILE,
         transaction_observer=observe_transaction,
         session_releaser=release_session,
         security_reader=_security,
+        error_identity=error_diagnostics.execution_identity,
+        error_status_codes=error_diagnostics.status_codes,
+        error_status_label='Firebird status codes',
         credential_argument='password',
         secret_acquirer=permissions.acquire_secret,
         connection_initializer=lambda connection, route: (

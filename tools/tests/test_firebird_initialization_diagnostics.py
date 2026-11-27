@@ -5,6 +5,8 @@ from unittest.mock import Mock
 
 import pytest
 
+from pgadmin.cdeadmin.providers.firebird import error_diagnostics
+
 from tools.cdeadmin_firebird_admin_mapping_gate import ADMINISTRATION  # noqa
 from pgadmin.cdeadmin.sdk.relational import (
     RelationalClientError, RelationalDBAPIClient,
@@ -31,6 +33,11 @@ def test_initialization_diagnostics_preserve_cleanup_and_redaction(
     client.config = SimpleNamespace(
         profile=SimpleNamespace(engine_id=engine, engine_name=engine),
         server_route=None,
+        error_identity=(error_diagnostics.execution_identity
+                        if engine == 'firebird' else None),
+        error_status_codes=(error_diagnostics.status_codes
+                            if engine == 'firebird' else None),
+        error_status_label='Firebird status codes',
         connection_initializer=Mock(side_effect=error)
         if stage == 'connection' else None,
         session_initializer=Mock(side_effect=error)

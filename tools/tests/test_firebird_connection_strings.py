@@ -5,6 +5,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from pgadmin.cdeadmin.providers.firebird import error_diagnostics
+
 from tools.cdeadmin_firebird_admin_mapping_gate import ADMINISTRATION
 from pgadmin.cdeadmin.providers.firebird.connection_strings import (
     database_dsn, server_host, service_dsn, target_path,
@@ -185,7 +187,9 @@ def test_connection_failure_keeps_only_bounded_native_codes(codes, expected):
     client.config = SimpleNamespace(
         profile=SimpleNamespace(engine_id='firebird', engine_name='Firebird'),
         connect_positional=lambda _route: (),
-        connect_arguments=lambda _route: {})
+        connect_arguments=lambda _route: {},
+        error_status_codes=error_diagnostics.status_codes,
+        error_status_label='Firebird status codes')
     error = RuntimeError('private password and native arguments')
     error.gds_codes = codes
     connector = Mock(side_effect=error)

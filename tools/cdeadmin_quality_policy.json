@@ -30,6 +30,7 @@
       "web/pgadmin/static/js/generated",
       "web/pgadmin/static/css/generated"
     ],
+    "excluded_suffixes": [".map"],
     "baseline_bytes": 67498313,
     "maximum_bytes": 77623060
   },
