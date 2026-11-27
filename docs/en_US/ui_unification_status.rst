@@ -2078,6 +2078,28 @@ its harness found the cause: its fixture call to ``verify_endpoint`` is answered
 permission the route requires under the current authentication setup. That is the same before and
 after these changes and was not fixed; the record stays "re-hashed, not re-qualified".
 
+Qualification re-run, 2026-11-27 (supersedes the three "re-hashed, not re-qualified" notes above).
+The earlier diagnoses were wrong: the failure was not a 403 and did not predate the change by
+accident. Two causes, both environmental and both now fixed:
+
+* ``verify_endpoint`` answered with an error body because the encrypted user-configuration login
+  (``USER_CONFIG_LOGIN_REQUIRED``, added with the three-field login) logs out a test session user.
+  The shared ``setup_application`` helper in ``cdeadmin_mysql_dump_verification_qualification.py``
+  now turns that login off for the harness, which authenticates through the session.
+* The native MySQL grammar library (``mysql_9.7.so`` inside MySQL Shell) had gone from
+  ``tools/reference_engine_demos/runtime/mysql``, so grammar validation reported
+  ``provider_unavailable``. It was restored from the local ``mysql:9.7.0`` image with
+  ``bootstrap.extract_mysql_shell()`` (no download).
+
+The qualification then completed twice against MySQL 9.7.0: authenticated-API pass only
+(``--application-only``) and the full run, both ``{"complete": true}``. Evidence:
+``temp-workarea/qualification/group9-app-1127-0009`` and ``group9-full-1127-0009`` (summary.json
+records the hashed sources). The hashed files are now ``refusals.py`` ``5ef823d1e5ab0d7f``,
+``visual_admin/provider.py`` ``5c9b1f1cc02d8019``-adjacent entries as listed in the summary,
+``providers/mysql_family/provider.py`` ``960fbdcbf42def67`` and ``servers/__init__.py``
+``b43918739b2f17d8``. This is qualified against the unmodified server behaviour that the
+qualification asserts; it does not cover MariaDB, Dolt, TiDB or Vitess refusal reasons.
+
 Not covered: the other error classes MySQL raises on surfaces that do not use the plan funnel;
 MariaDB, Dolt, TiDB and Vitess (no ``describe_refusal`` yet); the rewording of the 204 kept messages
 beyond a capital and a full stop; any browser click-through of MySQL refusal sentences (none done).

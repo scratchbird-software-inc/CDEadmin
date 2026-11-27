@@ -174,6 +174,8 @@ def setup_application(output):
     from pgadmin import create_app
     app = create_app('ScratchRobin-native-mysql-dump-acceptance')
     app.PGADMIN_RUNTIME = False; app.PGADMIN_INT_KEY = ''; app.run_before_app_start()
+    # The harness authenticates through the session, not the encrypted user-configuration login.
+    app.config['USER_CONFIG_LOGIN_REQUIRED'] = False
     return app
 
 
