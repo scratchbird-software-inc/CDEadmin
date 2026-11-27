@@ -27,6 +27,9 @@ SWAPPED = ('config', 'pgadmin.utils', 'pgadmin.misc', 'pgadmin.model',
            'pgadmin.preferences')
 
 
+_MISSING = object()
+
+
 def _swapped(name):
     return any(name == prefix or name.startswith(prefix + '.')
                for prefix in SWAPPED)
@@ -38,6 +41,15 @@ def real():
              if _swapped(name)}
     for name in saved:
         del sys.modules[name]
+    # Importing the real submodules rebinds attributes (pgadmin.utils, ...) on
+    # the parent package; later tests resolve dotted names through them.
+    parent = sys.modules.get('pgadmin')
+    attributes = {}
+    if parent is not None:
+        for name in SWAPPED:
+            if name.startswith('pgadmin.'):
+                child = name.split('.', 1)[1]
+                attributes[child] = parent.__dict__.get(child, _MISSING)
     try:
         import config  # noqa: F401
         from pgadmin.misc import MiscModule, appearance_presets
@@ -48,6 +60,13 @@ def real():
         for name in [name for name in sys.modules if _swapped(name)]:
             del sys.modules[name]
         sys.modules.update(saved)
+        parent = sys.modules.get('pgadmin')
+        if parent is not None:
+            for child, value in attributes.items():
+                if value is _MISSING:
+                    parent.__dict__.pop(child, None)
+                else:
+                    setattr(parent, child, value)
 
 
 PRESENTATION = ROOT / 'web/pgadmin/static/js/cdeadmin_ui/foundations/presentation.js'

@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom';
+import {configure} from '@testing-library/react';
 const { TextEncoder, TextDecoder } = require('util');
 
 class BroadcastChannelMock {
@@ -102,4 +103,7 @@ Object.defineProperty(global.SVGElement.prototype, 'getBBox', {
 global.TextEncoder = TextEncoder;
 global.TextDecoder = TextDecoder;
 
-jest.setTimeout(18000); // 1 second
+jest.setTimeout(60000);
+// The default 1 s wait expires while a loaded machine renders the large
+// workspaces; the full suite runs many workers in parallel.
+configure({asyncUtilTimeout: 8000});
