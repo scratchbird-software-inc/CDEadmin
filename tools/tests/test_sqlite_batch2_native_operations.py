@@ -65,6 +65,8 @@ def _sqlite_flask_app(tmp_path_factory):
     app = create_app('ScratchRobin SQLite Batch 2 Test')
     app.PGADMIN_RUNTIME = False
     app.PGADMIN_INT_KEY = ''
+    # The tests authenticate through the session, not the encrypted user-configuration login.
+    app.config['USER_CONFIG_LOGIN_REQUIRED'] = False
     app.run_before_app_start()
     return app
 

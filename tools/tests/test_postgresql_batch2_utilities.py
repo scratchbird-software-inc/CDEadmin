@@ -545,6 +545,8 @@ def test_authenticated_http_host_tools_catalog_and_initdb(host_env, tmp_path):
     app = create_app('ScratchRobin-pg-batch2-http')
     app.PGADMIN_RUNTIME = False
     app.PGADMIN_INT_KEY = ''
+    # The tests authenticate through the session, not the encrypted user-configuration login.
+    app.config['USER_CONFIG_LOGIN_REQUIRED'] = False
     app.run_before_app_start()
 
     with app.test_request_context('/'):

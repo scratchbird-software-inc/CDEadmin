@@ -158,6 +158,14 @@ def test_sqlite_partial_native_metadata_keeps_healthy_symbols_and_caller_work(tm
 
 
 def test_sqlite_keyword_binding_observation_never_executes_overridden_functions_or_pending_work(tmp_path):
+    from pgadmin.cdeadmin.providers.sqlite.identifier_keywords import native_keywords
+    try:
+        native_keywords()
+    except (OSError, AttributeError, ValueError):
+        # An interpreter that links SQLite statically without exporting it (for
+        # example a standalone CPython build) has no keyword API to observe;
+        # the provider then reports the observation as incomplete by design.
+        pytest.skip('this interpreter does not expose the SQLite keyword API')
     connection=sqlite3.connect(tmp_path/'native-keywords.sqlite');calls=[]
     try:
         connection.execute('CREATE TABLE "key"(key INTEGER,current_date TEXT)')

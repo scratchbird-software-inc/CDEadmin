@@ -704,6 +704,8 @@ def test_authenticated_http_field01_and_config01_host_lifecycle(pg18_cluster, tm
     app = create_app('ScratchRobin-pg-batch1-http')
     app.PGADMIN_RUNTIME = False
     app.PGADMIN_INT_KEY = ''
+    # The tests authenticate through the session, not the encrypted user-configuration login.
+    app.config['USER_CONFIG_LOGIN_REQUIRED'] = False
     app.run_before_app_start()
 
     manifest_file = tmp_path / 'host_grants.json'

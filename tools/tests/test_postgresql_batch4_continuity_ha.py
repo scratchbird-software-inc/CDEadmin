@@ -131,6 +131,8 @@ def flask_env(tmp_path_factory):
     app = create_app('ScratchRobin-pg-batch4-http')
     app.PGADMIN_RUNTIME = False
     app.PGADMIN_INT_KEY = ''
+    # The tests authenticate through the session, not the encrypted user-configuration login.
+    app.config['USER_CONFIG_LOGIN_REQUIRED'] = False
     app.run_before_app_start()
 
     grant_root = base / 'granted_roots'

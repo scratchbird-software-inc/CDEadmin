@@ -127,6 +127,8 @@ def parity_env(tmp_path_factory):
         app = create_app('ScratchRobin-pg-gui-parity')
         app.PGADMIN_RUNTIME = False
         app.PGADMIN_INT_KEY = ''
+        # The tests authenticate through the session, not the encrypted user-configuration login.
+        app.config['USER_CONFIG_LOGIN_REQUIRED'] = False
         app.run_before_app_start()
         app.config['CDEADMIN_POSTGRESQL_CONTINUITY_BINARY_PATH'] = str(PG18_BIN)
         app.config['CDEADMIN_POSTGRESQL_HOST_BINARY_PATH'] = str(PG18_BIN)
