@@ -2095,9 +2095,9 @@ The qualification then completed twice against MySQL 9.7.0: authenticated-API pa
 (``--application-only``) and the full run, both ``{"complete": true}``. Evidence:
 ``temp-workarea/qualification/group9-app-1127-0009`` and ``group9-full-1127-0009`` (summary.json
 records the hashed sources). The hashed files are now ``refusals.py`` ``5ef823d1e5ab0d7f``,
-``visual_admin/provider.py`` ``5c9b1f1cc02d8019``-adjacent entries as listed in the summary,
+``visual_admin/provider.py`` ``92e2f68af70aa75b``,
 ``providers/mysql_family/provider.py`` ``960fbdcbf42def67`` and ``servers/__init__.py``
-``b43918739b2f17d8``. This is qualified against the unmodified server behaviour that the
+``b43918739b2f17d8`` (the full list is in each summary.json). This is qualified against the unmodified server behaviour that the
 qualification asserts; it does not cover MariaDB, Dolt, TiDB or Vitess refusal reasons.
 
 Not covered: the other error classes MySQL raises on surfaces that do not use the plan funnel;
