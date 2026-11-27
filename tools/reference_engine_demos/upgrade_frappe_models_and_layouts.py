@@ -69,8 +69,8 @@ from pgadmin.cdeadmin.design_store.robin_scene_engine import (  # noqa: E402
 )
 
 
-DEFAULT_CONFIG_DB = Path("/home/dcalford/.cdeadmin/cdeadmin.db")
-DEFAULT_DESIGNS_DB = Path("/home/dcalford/.cdeadmin/designs.db")
+DEFAULT_CONFIG_DB = Path.home() / ".cdeadmin" / "cdeadmin.db"
+DEFAULT_DESIGNS_DB = Path.home() / ".cdeadmin" / "designs.db"
 MAX_UNIFIED_ERD_TABLES = 140
 
 FOUNDATION_TABLES = [

@@ -28,7 +28,7 @@ def make_host(tmp_path, monkeypatch):
             raise PermissionError('Not owned')
         return server
 
-    def admit(owner, sid, target, dedicated):
+    def admit(owner, sid, target, dedicated, kerberos_delegation=None):
         owned(owner, sid)
         return {'endpoint_id': 'endpoint', 'generation': 'one',
                 'configuration': host._configuration(server),

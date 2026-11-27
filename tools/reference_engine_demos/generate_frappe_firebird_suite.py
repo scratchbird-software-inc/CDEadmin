@@ -3,7 +3,7 @@
 """Clean-room Firebird 5.0 enterprise schema & sample-data generator.
 
 Analyzes the donor project collection in
-``/home/dcalford/Sandbox/donor_release_acquisition/frappe`` (Frappe DocType
+``$CDEADMIN_FRAPPE_DONOR_ROOT`` (default ``~/Sandbox/donor_release_acquisition/frappe``) (Frappe DocType
 definitions, Custom Field extensions, Frappe Books schemas, Datum ClickHouse
 migrations, Cargo telemetry queries, Stalwart SQL directory/store schemas, Boat
 VM persistence models, Mobile Accounting SQL tables, and PyWall SQL tables),
@@ -35,7 +35,9 @@ import uuid
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parents[1]
-DEFAULT_DONOR_ROOT = Path("/home/dcalford/Sandbox/donor_release_acquisition/frappe")
+DEFAULT_DONOR_ROOT = Path(os.environ.get(
+    "CDEADMIN_FRAPPE_DONOR_ROOT",
+    Path.home() / "Sandbox" / "donor_release_acquisition" / "frappe"))
 DEFAULT_DIALECT_JSON = (
     REPO_ROOT
     / "web/pgadmin/cdeadmin/providers/firebird/firebird_dialect_5_0_4.json"

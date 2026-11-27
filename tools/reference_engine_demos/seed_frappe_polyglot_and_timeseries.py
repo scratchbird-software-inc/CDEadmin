@@ -46,7 +46,9 @@ REPO_ROOT = SCRIPT_DIR.parents[1]
 WEB_DIR = REPO_ROOT / "web"
 DATA_DIR = SCRIPT_DIR / "data"
 
-DEFAULT_DONOR_ROOT = Path("/home/dcalford/Sandbox/donor_release_acquisition/frappe")
+DEFAULT_DONOR_ROOT = Path(os.environ.get(
+    "CDEADMIN_FRAPPE_DONOR_ROOT",
+    Path.home() / "Sandbox" / "donor_release_acquisition" / "frappe"))
 DEFAULT_FB_HOST = "127.0.0.1"
 DEFAULT_FB_PORT = 53050
 DEFAULT_FB_DB = "/var/lib/firebird/data/frappe_suite.fdb"

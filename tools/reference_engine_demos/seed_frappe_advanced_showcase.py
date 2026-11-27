@@ -32,6 +32,7 @@ from datetime import datetime, timezone
 import glob
 import hashlib
 import json
+import os
 from pathlib import Path
 import sqlite3
 import sys
@@ -71,9 +72,11 @@ from pgadmin.cdeadmin.workspace.assets import (  # noqa: E402
 )
 
 
-DEFAULT_DONOR_ROOT = Path("/home/dcalford/Sandbox/donor_release_acquisition/frappe")
-DEFAULT_CDEADMIN_DB = Path("/home/dcalford/.cdeadmin/cdeadmin.db")
-DEFAULT_DESIGNS_DB = Path("/home/dcalford/.cdeadmin/designs.db")
+DEFAULT_DONOR_ROOT = Path(os.environ.get(
+    "CDEADMIN_FRAPPE_DONOR_ROOT",
+    Path.home() / "Sandbox" / "donor_release_acquisition" / "frappe"))
+DEFAULT_CDEADMIN_DB = Path.home() / ".cdeadmin" / "cdeadmin.db"
+DEFAULT_DESIGNS_DB = Path.home() / ".cdeadmin" / "designs.db"
 
 
 def _sha256(text: str) -> str:
